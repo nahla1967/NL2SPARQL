@@ -1,0 +1,49 @@
+{
+  "properties": {
+    "departure city": "hasOriginCity",
+    "ville de départ": "hasOriginCity",
+    "مدينة المغادرة": "hasOriginCity",
+
+    "arrival city": "hasDestinationCity",
+    "ville d'arrivée": "hasDestinationCity",
+    "مدينة الوصول": "hasDestinationCity",
+
+    "route": "followsRoute",
+    "itinéraire": "followsRoute",
+    "المسار": "followsRoute",
+
+    "flight number": "flightNumber",
+    "numéro de vol": "flightNumber",
+    "رقم الرحلة": "flightNumber",
+
+    "airline": "hasAirline",
+    "compagnie aérienne": "hasAirline",
+    "شركة الطيران": "hasAirline",
+
+    "pilot": "hasPilot",
+    "pilote": "hasPilot",
+    "الطيار": "hasPilot",
+    
+
+    "gate": "hasGate",
+    "porte": "hasGate",
+    "البوابة": "hasGate",
+
+    "runway": "hasRunway",
+    "piste": "hasRunway",
+    "المدرج": "hasRunway",
+
+    "aircraft": "hasAircraft",
+    "avion": "hasAircraft",
+    "الطائرة": "hasAircraft",
+
+    "weather": "hasWeatherCondition",
+    "météo": "hasWeatherCondition",
+    "الطقس": "hasWeatherCondition",
+
+    "arrival time": "eta",
+    "heure d'arrivée": "eta",
+    "وقت الوصول": "eta"
+  }
+  
+}
