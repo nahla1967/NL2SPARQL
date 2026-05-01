@@ -28,12 +28,17 @@ def execute_sparql(sparql_query):
         "format": "application/sparql-results+json"
     }).encode()
     req = urllib.request.Request(url, data=data)
-    with urllib.request.urlopen(req) as response:
-        result = json.loads(response.read())
-        bindings = result["results"]["bindings"]
-        if bindings:
-            first_key = list(bindings[0].keys())[0]
-            return clean_uri(bindings[0][first_key]["value"])
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read())
+            bindings = result["results"]["bindings"]
+            if bindings:
+                first_key = list(bindings[0].keys())[0]
+                return clean_uri(bindings[0][first_key]["value"])
+    except urllib.error.URLError as e:
+        print(f"[execute_sparql] Fuseki unreachable: {e}")
+    except Exception as e:
+        print(f"[execute_sparql] Unexpected error: {e}")
     return None
 
 def format_answer(question, raw_value, lang):
