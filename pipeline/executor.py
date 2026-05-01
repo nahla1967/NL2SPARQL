@@ -16,6 +16,10 @@ def validate_sparql(query):
         return True
     except Exception:
         return False
+def clean_uri(value):
+    if value.startswith("http"):
+        return value.split("/")[-1].replace("_", " ")
+    return value
 
 def execute_sparql(sparql_query):
     url = "http://localhost:3030/flights/sparql"
@@ -29,7 +33,7 @@ def execute_sparql(sparql_query):
         bindings = result["results"]["bindings"]
         if bindings:
             first_key = list(bindings[0].keys())[0]
-            return bindings[0][first_key]["value"]
+            return clean_uri(bindings[0][first_key]["value"])
     return None
 
 def format_answer(question, raw_value, lang):

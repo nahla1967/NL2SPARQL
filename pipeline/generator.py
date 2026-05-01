@@ -1,6 +1,11 @@
 import ollama
 
 BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
+def extract_sparql(text):
+    start = text.find("SELECT")
+    if start != -1:
+        return text[start:].strip()
+    return text.strip()
 
 def inject_and_generate(flight_uri, property_short, user_question, strategy="zero-shot"):
     property_uri = BASE + property_short
@@ -69,4 +74,4 @@ Do not add explanation. Do not add markdown."""
         model="llama3",
         messages=[{"role": "user", "content": prompt}]
     )
-    return response["message"]["content"].strip()
+    return extract_sparql(response["message"]["content"])
