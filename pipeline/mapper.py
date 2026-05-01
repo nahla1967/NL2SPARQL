@@ -5,6 +5,8 @@ from sentence_transformers import SentenceTransformer, util
 
 embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
+FUSEKI_URL = "http://localhost:3030/flights/sparql"
+
 def load_lexicon():
     with open("lexicon.json", "r", encoding="utf-8") as f:
         return json.load(f)
@@ -22,6 +24,10 @@ def map_property_with_embeddings(property_text, lexicon):
     scores = util.cos_sim(user_embedding, known_embeddings)[0]
     best_index = scores.argmax().item()
     best_score = scores[best_index].item()
+
+    # 0.5 is a manually chosen threshold — documented explicitly
+    # for thesis: this value should be justified empirically
+    # by plotting score distributions for correct vs incorrect matches
     if best_score >= 0.5:
         best_phrase = known_phrases[best_index]
         return lexicon["properties"][best_phrase]
@@ -35,15 +41,22 @@ SELECT ?flight WHERE {{
 }}
 LIMIT 1
 """
-    url = "http://localhost:3030/flights/sparql"
     data = urllib.parse.urlencode({
         "query": query,
         "format": "application/sparql-results+json"
     }).encode()
-    req = urllib.request.Request(url, data=data)
-    with urllib.request.urlopen(req) as response:
-        result = json.loads(response.read())
-        bindings = result["results"]["bindings"]
-        if bindings:
-            return bindings[0]["flight"]["value"]
+
+    req = urllib.request.Request(FUSEKI_URL, data=data)
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read())
+            bindings = result["results"]["bindings"]
+            if bindings:
+                return bindings[0]["flight"]["value"]
+    except urllib.error.URLError as e:
+        print(f"[map_flight] Fuseki is unreachable: {e}")
+    except Exception as e:
+        print(f"[map_flight] Unexpected error: {e}")
+
     return None

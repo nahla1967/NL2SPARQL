@@ -2,9 +2,20 @@ import json
 import urllib.parse
 import urllib.request
 import ollama
+from rdflib.plugins.sparql import prepareQuery  # real SPARQL parser
 
 def validate_sparql(query):
-    return "SELECT" in query and "WHERE" in query
+    """
+    Validates SPARQL syntax using rdflib's parser.
+    Returns True only if the query is syntactically correct.
+    The previous implementation only checked for keyword presence,
+    which is not sufficient for a valid evaluation metric.
+    """
+    try:
+        prepareQuery(query)
+        return True
+    except Exception:
+        return False
 
 def execute_sparql(sparql_query):
     url = "http://localhost:3030/flights/sparql"

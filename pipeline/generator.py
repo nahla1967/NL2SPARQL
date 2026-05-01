@@ -1,8 +1,9 @@
 import ollama
 
+BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
+
 def inject_and_generate(flight_uri, property_short, user_question, strategy="zero-shot"):
-    base = "http://www.semanticweb.org/ontologies/flight_ontology#"
-    property_uri = base + property_short
+    property_uri = BASE + property_short
 
     if strategy == "zero-shot":
         prompt = f"""Return ONLY this SPARQL query, exactly as written:
@@ -18,18 +19,26 @@ Do not change anything. Do not add anything."""
         prompt = f"""You generate SPARQL queries for a flight knowledge graph.
 
 Examples:
-Question: Where does OS235 depart from?
-SPARQL:
-SELECT ?value
-WHERE {{
-  <http://www.semanticweb.org/ontologies/flight_ontology#Flight/flight_3a33107d> <http://www.semanticweb.org/ontologies/flight_ontology#hasOriginCity> ?value .
-}}
 
 Question: What airline operates BR62?
 SPARQL:
 SELECT ?value
 WHERE {{
-  <http://www.semanticweb.org/ontologies/flight_ontology#Flight/flight_example> <http://www.semanticweb.org/ontologies/flight_ontology#hasAirline> ?value .
+  <{BASE}Flight/flight_3a28bc61> <{BASE}hasAirline> ?value .
+}}
+
+Question: What is the departure city of AF1739?
+SPARQL:
+SELECT ?value
+WHERE {{
+  <{BASE}Flight/flight_3a3a6d0c> <{BASE}hasOriginCity> ?value .
+}}
+
+Question: What aircraft is used for flight 7L280?
+SPARQL:
+SELECT ?value
+WHERE {{
+  <{BASE}Flight/flight_3a363e0e> <{BASE}hasAircraft> ?value .
 }}
 
 Now generate ONLY the SPARQL query for this:

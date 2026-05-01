@@ -38,8 +38,10 @@ aircraft, weather, flight number, arrival time, route
 Examples:
 - "Where does OS235 depart from?" → {{"entity": "OS235", "property": "departure city"}}
 - "What airline operates TK1887?" → {{"entity": "TK1887", "property": "airline"}}
-- "Who is the pilot of BR62?" → {{"entity": "BR62", "property": "pilot"}}
-- "What gate is FR12 at?" → {{"entity": "FR12", "property": "gate"}}
+- "Quelle compagnie opère le vol AF1739?" → {{"entity": "AF1739", "property": "airline"}}
+- "Quel est l'aéroport de départ du vol 7L280?" → {{"entity": "7L280", "property": "departure city"}}
+- "ما هي شركة الطيران التي تشغّل الرحلة BR62؟" → {{"entity": "BR62", "property": "airline"}}
+- "من هو طيار الرحلة AI180؟" → {{"entity": "AI180", "property": "pilot"}}
 
 Return ONLY a JSON object. No explanation. No extra text.
 
