@@ -23,7 +23,7 @@ from pipeline.executor import (
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
 question = "What is the route of flight BR62?"
-condition = "zero-shot"  # options: "zero-shot", "few-shot", "cot"
+condition = "few-shot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
 # Why: the system must support 3 languages → behavior depends on language
