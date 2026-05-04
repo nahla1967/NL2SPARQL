@@ -86,7 +86,7 @@ def resolve_entity(uri):
         name_props = ["orig_city"]
     elif "/Airline/" in uri:
         name_props = ["operating_as"]
-        elif "Aircraft/" in uri:
+        print(f"[debug] resolving airline URI: {uri}")
     elif "/Aircraft/" in uri:
         name_props = ["type"]
     elif "/Route/" in uri:
@@ -111,11 +111,12 @@ LIMIT 1
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read())
                 bindings = result["results"]["bindings"]
+                print(f"[debug] bindings returned: {bindings}")
                 if bindings:
                     first_key = list(bindings[0].keys())[0]
                     return bindings[0][first_key]["value"]
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[debug] resolve_entity inner query failed: {e}")
 
     return clean_uri(uri)
 

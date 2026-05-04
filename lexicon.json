@@ -7,6 +7,9 @@
     "arrival city":        "hasDestinationCity",
     "ville d'arrivée":     "hasDestinationCity",
     "مدينة الوصول":        "hasDestinationCity",
+    "headed":          "hasDestinationCity",
+"headed to":       "hasDestinationCity",
+"where is headed": "hasDestinationCity",
 
     "route":               "hasRoute",
     "itinéraire":          "hasRoute",
