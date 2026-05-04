@@ -30,11 +30,13 @@ def resolve_entity(uri):
     url = "http://localhost:3030/flights/sparql"
 
     if "/City/" in uri:
-        name_props = ["orig_city", "dest_city"]
+        name_props = ["orig_city"]
     elif "/Airline/" in uri:
         name_props = ["operating_as"]
     elif "/Aircraft/" in uri:
         name_props = ["type"]
+    elif "/Route/" in uri:            
+        route_name = uri.split("/Route/")[-1]
     else:
         return clean_uri(uri)
 

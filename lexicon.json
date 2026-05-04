@@ -1,49 +1,49 @@
 {
   "properties": {
-    "departure city": "hasOriginCity",
-    "ville de départ": "hasOriginCity",
-    "مدينة المغادرة": "hasOriginCity",
+    "departure city":      "hasOriginCity",
+    "ville de départ":     "hasOriginCity",
+    "مدينة المغادرة":      "hasOriginCity",
 
-    "arrival city": "hasDestinationCity",
-    "ville d'arrivée": "hasDestinationCity",
-    "مدينة الوصول": "hasDestinationCity",
+    "arrival city":        "hasDestinationCity",
+    "ville d'arrivée":     "hasDestinationCity",
+    "مدينة الوصول":        "hasDestinationCity",
 
-    "route": "hasRoute",
-    "itinéraire": "hasRoute",
-    "المسار": "hasRoute",
+    "route":               "hasRoute",
+    "itinéraire":          "hasRoute",
+    "المسار":              "hasRoute",
 
-    "flight number": "flightNumber",
-    "numéro de vol": "flightNumber",
-    "رقم الرحلة": "flightNumber",
+    "flight number":       "flightNumber",
+    "numéro de vol":       "flightNumber",
+    "رقم الرحلة":          "flightNumber",
 
-    "airline": "hasAirline",
-    "compagnie aérienne": "hasAirline",
-    "شركة الطيران": "hasAirline",
+    "airline":             "hasAirline",
+    "compagnie aérienne":  "hasAirline",
+    "شركة الطيران":         "hasAirline",
 
-    "pilot": "hasPilot",
-    "pilote": "hasPilot",
-    "الطيار": "hasPilot",
-    
+    "pilot":               "hasPilot",
+    "pilote":              "hasPilot",
+    "الطيار":              "hasPilot",
 
-    "gate": "hasGate",
-    "porte": "hasGate",
-    "البوابة": "hasGate",
+    "gate":                "hasGate",
+    "porte":               "hasGate",
+    "البوابة":             "hasGate",
 
-    "runway": "hasRunway",
-    "piste": "hasRunway",
-    "المدرج": "hasRunway",
+    "runway":              "hasRunway",
+    "piste":               "hasRunway",
+    "المدرج":              "hasRunway",
 
-    "aircraft": "hasAircraft",
-    "avion": "hasAircraft",
-    "الطائرة": "hasAircraft",
+    "aircraft":            "hasAircraft",
+    "avion":               "hasAircraft",
+    "الطائرة":             "hasAircraft",
 
-    "weather": "hasWeatherCondition",
-    "météo": "hasWeatherCondition",
-    "الطقس": "hasWeatherCondition",
+    "weather":             "hasWeatherCondition",
+    "météo":               "hasWeatherCondition",
+    "الطقس":               "hasWeatherCondition",
 
-    "arrival time": "eta",
-    "heure d'arrivée": "eta",
-    "وقت الوصول": "eta"
-  }
-  
+    "arrival time":        "eta",
+    "heure d'arrivée":     "eta",
+    "وقت الوصول":          "eta"
+  },
+
+  "_note": "Keys are raw surface expressions in English, French, and Arabic. All three are now reachable because the extractor returns the property in the user's language. Values are short property names injected into the SPARQL generator."
 }

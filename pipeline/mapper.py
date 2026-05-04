@@ -3,21 +3,6 @@ import urllib.parse
 import urllib.request
 from sentence_transformers import SentenceTransformer, util
 
-# Problem 3 — Lazy initialization of the embedding model.
-#
-# Previously, this line ran at import time:
-#   embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-#
-# That caused the ~400MB model to be loaded into memory every time mapper.py
-# was imported — even when lexicon lookup succeeded and embeddings were never needed.
-#
-# The fix: initialize the variable as None and load the model only on first use,
-# inside map_property_with_embeddings(). This is the standard Python pattern
-# called "lazy initialization" or "lazy loading."
-#
-# Practical benefit for thesis evaluation: if all your test questions match
-# the lexicon (exact match), the startup time drops from ~10s to near zero,
-# and your evaluation loop runs significantly faster.
 _embedding_model = None
 
 def _get_embedding_model():
@@ -38,13 +23,38 @@ def load_lexicon():
         return json.load(f)
 
 def map_property(property_text, lexicon):
+    # This function is unchanged in logic, but it is now architecturally active
+    # for all three languages.
+    #
+    # Previously, the extractor forced all property output to English, so this
+    # function only ever received strings like "departure city" and the French/
+    # Arabic keys in the lexicon were never matched.
+    #
+    # Now that the extractor returns raw surface text in the user's language,
+    # this function will correctly match:
+    #   "departure city"     → hasOriginCity   (English)
+    #   "ville de départ"    → hasOriginCity   (French)
+    #   "مدينة المغادرة"     → hasOriginCity   (Arabic)
+    #
+    # The .lower().strip() normalization is safe for all three languages:
+    #   - English and French have case, so lowercasing is necessary.
+    #   - Arabic has no case distinction, so lowercasing is a no-op.
     property_text = property_text.lower().strip()
     if property_text in lexicon["properties"]:
         return lexicon["properties"][property_text]
     return None
 
 def map_property_with_embeddings(property_text, lexicon):
-    # The model is loaded here, not at import time.
+    # This function is also unchanged in logic.
+    #
+    # It uses paraphrase-multilingual-MiniLM-L12-v2, which was specifically
+    # chosen because it produces comparable embedding spaces across languages.
+    # This means that the Arabic phrase "شركة الطيران" and the English phrase
+    # "airline" will have high cosine similarity, even if the exact Arabic
+    # string is not in the lexicon.
+    #
+    # This fallback is now genuinely useful: it handles paraphrases, typos,
+    # and surface forms not covered by the lexicon — across all three languages.
     model = _get_embedding_model()
 
     known_phrases = list(lexicon["properties"].keys())
@@ -54,9 +64,8 @@ def map_property_with_embeddings(property_text, lexicon):
     best_index = scores.argmax().item()
     best_score = scores[best_index].item()
 
-    # 0.5 is a manually chosen threshold — documented explicitly
-    # for thesis: this value should be justified empirically
-    # by plotting score distributions for correct vs incorrect matches
+    # Threshold of 0.5 — to be justified empirically in thesis evaluation.
+    # See Issue #7 for the full discussion of this value.
     if best_score >= 0.5:
         best_phrase = known_phrases[best_index]
         return lexicon["properties"][best_phrase]
@@ -64,7 +73,7 @@ def map_property_with_embeddings(property_text, lexicon):
 
 def map_flight(flight_number):
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
-    flight_number = flight_number.strip().upper() 
+    flight_number = flight_number.strip().upper()
     query = f"""
 SELECT ?flight WHERE {{
   ?flight <{base}flightNumber> "{flight_number}" .
