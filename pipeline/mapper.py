@@ -66,7 +66,7 @@ def map_property_with_embeddings(property_text, lexicon):
 
     # Threshold of 0.5 — to be justified empirically in thesis evaluation.
     # See Issue #7 for the full discussion of this value.
-    if best_score >= 0.5:
+    if best_score >= 0.65:
         best_phrase = known_phrases[best_index]
         return lexicon["properties"][best_phrase]
     return None

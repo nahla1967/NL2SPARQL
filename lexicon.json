@@ -11,6 +11,12 @@
     "route":               "hasRoute",
     "itinéraire":          "hasRoute",
     "المسار":              "hasRoute",
+    "path":                "hasRoute",
+    "trajectory":          "hasRoute",
+    "itinerary":           "hasRoute",
+    "trajet":             "hasRoute",
+    "chemin":             "hasRoute",
+    "مسار الرحلة":       "hasRoute",
 
     "flight number":       "flightNumber",
     "numéro de vol":       "flightNumber",
