@@ -10,7 +10,9 @@ VALID_PROPERTIES = {
 KNOWN_FLIGHT_PREFIXES = [
     "OS", "FR", "TK", "BR", "BA", "AF",
     "KE", "LO", "BT", "PC", "7L", "XQ",
-    "DE", "EN", "EW", "AI", "AY", "BE"
+    "DE", "EN", "EW", "AI", "AY",
+    "LG", "LX", "MAE", "OU", "PE",        # added
+    "SM", "SN", "TO", "VF", "W"  
 ]
 
 def safe_json_parse(text):

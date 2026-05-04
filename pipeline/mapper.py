@@ -64,6 +64,7 @@ def map_property_with_embeddings(property_text, lexicon):
 
 def map_flight(flight_number):
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
+    flight_number = flight_number.strip().upper() 
     query = f"""
 SELECT ?flight WHERE {{
   ?flight <{base}flightNumber> "{flight_number}" .
