@@ -35,8 +35,10 @@ def resolve_entity(uri):
         name_props = ["operating_as"]
     elif "/Aircraft/" in uri:
         name_props = ["type"]
-    elif "/Route/" in uri:            
-        route_name = uri.split("/Route/")[-1]
+    elif "/Route/" in uri:
+       import urllib.parse
+       route_name = uri.split("/Route/")[-1]
+       return urllib.parse.unquote(route_name).replace("_", " ")
     else:
         return clean_uri(uri)
 

@@ -9,8 +9,8 @@ def extract_sparql(text):
         open_braces = query.count("{")
         close_braces = query.count("}")
         deficit = open_braces - close_braces
-    if deficit > 0:
-        query += "\n}" * deficit
+        if deficit > 0:      # ← INSIDE the if block
+            query += "\n}" * deficit
         return query
     return text.strip()
 

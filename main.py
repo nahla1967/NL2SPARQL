@@ -22,7 +22,7 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question = "من أين تغادر الرحلة OS235؟"
+question = "What is the route of flight BR62?"
 condition = "zero-shot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
