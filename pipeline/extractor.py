@@ -55,7 +55,7 @@ Question: {question}
     result = safe_json_parse(raw)
     if result:
         return result
-    return {"entity": None, "property": None}
+    return {"entity": None, "property": None , "reason": f"parse_failed: {raw[:200]}"}
 
 def validate_extraction(entities):
     if not entities.get("entity"):

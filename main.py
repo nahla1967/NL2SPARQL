@@ -15,11 +15,19 @@ entities = extract_entities(question, lang)
 # Step 1 — validate extraction
 if not validate_extraction(entities) or not is_flight_question(entities):
     print("Out of scope or extraction failed.")
+
+    # Problem 1 — We now capture the "reason" field returned by extract_entities
+    # when JSON parsing fails. This gives you three levels of diagnostic information
+    # in your log: (1) what the question was, (2) what the LLM returned, and
+    # (3) exactly why the extraction step did not produce a usable result.
+    # This is essential for your thesis: without it, failed test cases appear
+    # identical in logs.jsonl regardless of their actual cause.
     log = {
         "condition": condition,
         "language": lang,
         "question": question,
         "entities": entities,
+        "extraction_failure_reason": entities.get("reason", "validation_failed"),
         "final_answer": "out_of_scope"
     }
     with open("logs.jsonl", "a", encoding="utf-8") as f:

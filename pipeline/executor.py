@@ -2,7 +2,7 @@ import json
 import urllib.parse
 import urllib.request
 import ollama
-from rdflib.plugins.sparql import prepareQuery  # real SPARQL parser
+from rdflib.plugins.sparql import prepareQuery
 
 def validate_sparql(query):
     """
@@ -16,6 +16,7 @@ def validate_sparql(query):
         return True
     except Exception:
         return False
+
 def clean_uri(value):
     if value.startswith("http"):
         return value.split("/")[-1].replace("_", " ")
@@ -28,7 +29,6 @@ def resolve_entity(uri):
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
     url = "http://localhost:3030/flights/sparql"
 
-    # Choose the right property based on the URI type
     if "/City/" in uri:
         name_props = ["orig_city", "dest_city"]
     elif "/Airline/" in uri:
@@ -83,6 +83,7 @@ def execute_sparql(sparql_query):
     except Exception as e:
         print(f"[execute_sparql] Unexpected error: {e}")
     return None
+
 def format_answer(question, raw_value, lang):
     lang_map = {
         "en": "English",
@@ -101,8 +102,27 @@ You MUST write the answer in {language_name} only.
 Do not translate. Do not switch language.
 Return only the sentence."""
 
-    response = ollama.chat(
-        model="llama3",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response["message"]["content"].strip()
+    # Problem 4 — The previous implementation had no error handling here.
+    # This is the last step of the pipeline, which means a crash here would
+    # discard all previous work (entity extraction, URI mapping, SPARQL execution)
+    # and produce no log entry for that test case.
+    #
+    # The fix wraps the Ollama call in a try/except block. If the LLM service
+    # is unavailable or returns an unexpected response, the function returns a
+    # structured fallback string instead of raising an exception.
+    #
+    # The fallback includes the raw KG value so the run is still partially useful
+    # for evaluation: you can still score Execution Accuracy and SPARQL Validity,
+    # even if the natural language formatting step failed.
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["message"]["content"].strip()
+    except Exception as e:
+        print(f"[format_answer] Ollama error: {e}")
+        # Return the raw value so the log entry is still informative.
+        # The prefix makes it easy to identify formatting failures
+        # when reviewing logs.jsonl during evaluation.
+        return f"[format_error] {raw_value}"

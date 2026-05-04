@@ -3,7 +3,33 @@ import urllib.parse
 import urllib.request
 from sentence_transformers import SentenceTransformer, util
 
-embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+# Problem 3 — Lazy initialization of the embedding model.
+#
+# Previously, this line ran at import time:
+#   embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+#
+# That caused the ~400MB model to be loaded into memory every time mapper.py
+# was imported — even when lexicon lookup succeeded and embeddings were never needed.
+#
+# The fix: initialize the variable as None and load the model only on first use,
+# inside map_property_with_embeddings(). This is the standard Python pattern
+# called "lazy initialization" or "lazy loading."
+#
+# Practical benefit for thesis evaluation: if all your test questions match
+# the lexicon (exact match), the startup time drops from ~10s to near zero,
+# and your evaluation loop runs significantly faster.
+_embedding_model = None
+
+def _get_embedding_model():
+    """
+    Returns the embedding model, loading it on first call only.
+    All subsequent calls reuse the already-loaded instance.
+    """
+    global _embedding_model
+    if _embedding_model is None:
+        print("[mapper] Loading embedding model (first use)...")
+        _embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    return _embedding_model
 
 FUSEKI_URL = "http://localhost:3030/flights/sparql"
 
@@ -18,9 +44,12 @@ def map_property(property_text, lexicon):
     return None
 
 def map_property_with_embeddings(property_text, lexicon):
+    # The model is loaded here, not at import time.
+    model = _get_embedding_model()
+
     known_phrases = list(lexicon["properties"].keys())
-    user_embedding = embedding_model.encode(property_text)
-    known_embeddings = embedding_model.encode(known_phrases)
+    user_embedding = model.encode(property_text)
+    known_embeddings = model.encode(known_phrases)
     scores = util.cos_sim(user_embedding, known_embeddings)[0]
     best_index = scores.argmax().item()
     best_score = scores[best_index].item()
