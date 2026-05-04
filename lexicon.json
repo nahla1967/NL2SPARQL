@@ -48,7 +48,34 @@
 
     "arrival time":        "eta",
     "heure d'arrivée":     "eta",
-    "وقت الوصول":          "eta"
+    "وقت الوصول":          "eta",
+
+    "terminal":               "hasTerminal",
+    "terminal de départ":     "hasTerminal",
+    "الصالة":                 "hasTerminal",
+
+    "flight attendant":       "hasFlightAttendant",
+    "hôtesse de l'air":       "hasFlightAttendant",
+    "المضيف":                 "hasFlightAttendant",
+
+    "departure country":      "hasOriginCountry",
+    "pays de départ":         "hasOriginCountry",
+    "بلد المغادرة":           "hasOriginCountry",
+
+    "arrival country":        "hasDestinationCountry",
+    "pays d'arrivée":         "hasDestinationCountry",
+    "بلد الوصول":             "hasDestinationCountry",
+
+    "callsign":               "hasCallsign",
+    "indicatif":              "hasCallsign",
+    "الرمز":                  "hasCallsign",
+    "origin":              "hasOriginCity",
+    "destination":         "hasDestinationCity",
+    "origin city":     "hasOriginCity",
+    "where is it headed":  "hasDestinationCity",
+    "where is it going":   "hasDestinationCity"
+
+   
   },
 
   "_note": "Keys are raw surface expressions in English, French, and Arabic. All three are now reachable because the extractor returns the property in the user's language. Values are short property names injected into the SPARQL generator."
