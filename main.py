@@ -6,7 +6,7 @@ from pipeline.generator import inject_and_generate
 from pipeline.executor import validate_sparql, execute_sparql, format_answer
 
 # ── TEST ─────────────────────────────────────────────────
-question = "Where does flight OS235 depart from?"
+question = "من أين تغادر الرحلة OS235؟"
 condition = "zero-shot"  # change to: "few-shot" or "cot"
 
 lang = detect_language(question)
