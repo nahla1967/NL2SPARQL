@@ -8,9 +8,9 @@
     "ville d'arrivée": "hasDestinationCity",
     "مدينة الوصول": "hasDestinationCity",
 
-    "route": "followsRoute",
-    "itinéraire": "followsRoute",
-    "المسار": "followsRoute",
+    "route": "hasRoute",
+    "itinéraire": "hasRoute",
+    "المسار": "hasRoute",
 
     "flight number": "flightNumber",
     "numéro de vol": "flightNumber",

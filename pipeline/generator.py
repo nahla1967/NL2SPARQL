@@ -79,7 +79,7 @@ Use full URIs with angle brackets. Do not use PREFIX declarations.
 Return only the SPARQL query. No explanation. No markdown."""
 
     response = ollama.chat(
-        model="mistral",
+        model="llama3",
         messages=[{"role": "user", "content": prompt}]
     )
     return extract_sparql(response["message"]["content"])

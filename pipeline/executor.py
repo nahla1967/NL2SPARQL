@@ -22,15 +22,23 @@ def clean_uri(value):
     return value
 
 def resolve_entity(uri):
-    # If plain text already — return directly
     if not uri.startswith("http"):
         return uri
 
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
     url = "http://localhost:3030/flights/sparql"
 
-    # Try each known name property one by one
-    for name_prop in ["operating_as", "dest_city", "orig_city", "type"]:
+    # Choose the right property based on the URI type
+    if "/City/" in uri:
+        name_props = ["orig_city", "dest_city"]
+    elif "/Airline/" in uri:
+        name_props = ["operating_as"]
+    elif "/Aircraft/" in uri:
+        name_props = ["type"]
+    else:
+        return clean_uri(uri)
+
+    for name_prop in name_props:
         query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}{name_prop}> ?value .
@@ -52,7 +60,6 @@ LIMIT 1
         except Exception:
             pass
 
-    # If no name property found — extract readable part from URI
     return clean_uri(uri)
 
 def execute_sparql(sparql_query):
