@@ -17,3 +17,6 @@ venv/
 *.bin
 *.pt
 *.onnx
+
+lexicon_phrases.json
+lexicon_embeddings.npy
