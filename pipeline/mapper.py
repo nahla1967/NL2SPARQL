@@ -1,146 +1,176 @@
+# pipeline/mapper.py
+
 import json
-import urllib.parse
 import re
+import urllib.parse
 import urllib.request
+import numpy as np
 from sentence_transformers import SentenceTransformer, util
+from rapidfuzz import process, fuzz
 
-# ── EMBEDDING MODEL ───────────────────────────────────────────────────────────
-# Lazy initialization — the model is only loaded on first use.
-# This avoids loading ~400MB into memory when the lexicon handles all matches,
-# keeping startup time fast for the majority of test conditions.
+# ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
-_embedding_model = None
+FUSEKI_URL      = "http://localhost:3030/flights/sparql"
+CACHE_EMBEDDINGS = "lexicon_embeddings.npy"   # pre-computed phrase vectors
+CACHE_PHRASES    = "lexicon_phrases.json"     # phrase list aligned to the matrix
 
-def _get_embedding_model():
-    """
-    Returns the multilingual embedding model, loading it on first call only.
-    All subsequent calls reuse the already-loaded instance.
-
-    Model:paraphrase-multilingual-mpnet-base-v2 
-    Chosen because it produces comparable vector spaces across languages,
-    meaning Arabic, French, and English paraphrases of the same concept
-    will have high cosine similarity to each other.
-    """
-    global _embedding_model
-    if _embedding_model is None:
-        print("[mapper] Loading embedding model (first use)...")
-        _embedding_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-    return _embedding_model
+FUZZY_THRESHOLD    = 87   # rapidfuzz WRatio score out of 100
+SEMANTIC_THRESHOLD = 0.75 # cosine similarity
 
 
-# ── CONFIGURATION ─────────────────────────────────────────────────────────────
+# ── TEXT NORMALISATION ────────────────────────────────────────────────────────
+# Moved here as a standalone utility so both tiers can reuse it.
+# Arabic normalisation removes diacritics, unifies alef variants, teh marbuta,
+# and ya variants — all of which are stylistic, not semantic distinctions.
 
-FUSEKI_URL = "http://localhost:3030/flights/sparql"
+def _normalise(text: str) -> str:
+    text = re.sub(r'[\u064B-\u0652]', '', text)   # diacritics
+    text = re.sub(r'[إأآا]', 'ا', text)
+    text = re.sub(r'ة', 'ه', text)
+    text = re.sub(r'[يى]', 'ي', text)
+    text = re.sub(r'ـ', '', text)
+    text = re.sub(r'[^\w\s]', '', text)
+    return text.strip().lower()
 
 
 # ── LEXICON ───────────────────────────────────────────────────────────────────
 
 def load_lexicon():
-    """
-    Loads the multilingual lexicon from lexicon.json.
-    The lexicon maps surface expressions in English, French, and Arabic
-    to short Knowledge Graph property names (e.g. "hasOriginCity").
-    """
     with open("lexicon.json", "r", encoding="utf-8") as f:
         return json.load(f)
 
+def _get_phrases(lexicon: dict) -> list[str]:
+    """Returns only valid property expressions — excludes _section_* metadata keys."""
+    return [k for k in lexicon["properties"] if not k.startswith("_")]
 
-# ── PROPERTY MAPPING ──────────────────────────────────────────────────────────
 
-def map_property(property_text, lexicon):
-    """
-    Attempts an exact match between the extracted property text and
-    the lexicon keys.
+# ── TIER 1 — EXACT MATCH ──────────────────────────────────────────────────────
 
-    Returns the corresponding KG property name if found, None otherwise.
+def map_property(property_text: str, lexicon: dict) -> str | None:
+    key = _normalise(property_text)
+    properties = {
+        _normalise(k): v
+        for k, v in lexicon["properties"].items()
+        if not k.startswith("_")
+    }
+    return properties.get(key)
 
-    Why filter keys starting with '_':
-    The lexicon uses _section_* keys as human-readable section separators
-    (e.g. "_section_origin"). These are metadata — not valid property expressions.
-    Including them in the lookup would risk matching a user query against a
-    separator string and returning a garbage value like "── DEPARTURE CITY ──".
-    Filtering on the '_' prefix excludes all metadata keys safely.
 
-    Why .lower().strip():
-    English and French have case distinctions, so lowercasing is necessary
-    for reliable matching. Arabic has no case, so lowercasing is a no-op.
-    Stripping removes leading/trailing whitespace that the LLM extractor
-    may occasionally introduce.
-    """
-    property_text = property_text.lower().strip()
+# ── TIER 2 — FUZZY MATCH (rapidfuzz) ─────────────────────────────────────────
+# rapidfuzz is a lightweight C-extension — no model, no GPU, loads instantly.
+# WRatio is a composite scorer that handles partial matches, transpositions,
+# and reorderings, making it robust to minor wording variations without
+# needing vector representations at all.
+# This tier catches failures that exact match misses:
+#   "departure town"  → "departure city"
+#   "aéroport d'arrivée" → "ville d'arrivée"  (conceptual overlap)
+#   "مدينة الانطلاق"  → "مدينة المغادرة"      (synonym)
 
-    # Exclude metadata keys before lookup
-    properties = {k: v for k, v in lexicon["properties"].items()
-                  if not k.startswith("_")}
+def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
+    phrases  = _get_phrases(lexicon)
+    norm_in  = _normalise(property_text)
+    norm_phrases = [_normalise(p) for p in phrases]
 
-    if property_text in properties:
-        return properties[property_text]
+    result = process.extractOne(norm_in, norm_phrases, scorer=fuzz.WRatio)
+    if result is None:
+        return None
+
+    matched_phrase, score, index = result
+    print(f"[fuzzy] input='{property_text}' → match='{phrases[index]}' score={score}")
+
+    if score >= FUZZY_THRESHOLD:
+        return lexicon["properties"][phrases[index]]
     return None
 
-def normalize_arabic(text):
-    text = re.sub(r'[\u064B-\u0652]', '', text)  # diacritics
-    text = re.sub(r'[إأآا]', 'ا', text)
-    text = re.sub(r'ة', 'ه', text)
-    text = re.sub(r'[يى]', 'ي', text)
-    text = re.sub(r'ـ', '', text)
 
-    # remove punctuation (important)
-    text = re.sub(r'[^\w\s]', '', text)
+# ── TIER 3 — SEMANTIC EMBEDDINGS (pre-computed, cached) ──────────────────────
+# The single biggest change from your original code.
+#
+# The problem with the original: model.encode(all_phrases) ran on EVERY call.
+# The lexicon never changes, so those vectors are identical every time.
+# This is equivalent to re-computing a multiplication table from scratch
+# before every arithmetic problem.
+#
+# The solution: compute the matrix once, persist it to disk with numpy.
+# Subsequent calls load ~400KB instead of running ~100 forward passes.
+# First run: slow (one-time setup). Every run after: instant.
 
-    return text.strip().lower()
+_embedding_model  = None   # lazy-loaded on first use
+_cached_embeddings = None  # numpy matrix (n_phrases × 768)
+_cached_phrases    = None  # list aligned to the matrix rows
 
-def map_property_with_embeddings(property_text, lexicon):
+
+def _get_model():
+    global _embedding_model
+    if _embedding_model is None:
+        print("[mapper] Loading embedding model (first time)...")
+        _embedding_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+    return _embedding_model
+
+
+def _load_or_build_cache(lexicon: dict):
     """
-    Semantic fallback using multilingual embeddings.
+    Returns (phrases, embedding_matrix).
+    Loads from disk if the cache exists, builds and saves it otherwise.
+    
+    Why numpy .npy?  It is the standard serialisation format for dense
+    numerical arrays in Python — fast to write, fast to load, no
+    dependencies beyond numpy itself.
     """
+    global _cached_embeddings, _cached_phrases
+    if _cached_embeddings is not None:
+        return _cached_phrases, _cached_embeddings
 
-    model = _get_embedding_model()
+    import os
+    if os.path.exists(CACHE_EMBEDDINGS) and os.path.exists(CACHE_PHRASES):
+        print("[mapper] Loading pre-computed lexicon embeddings from cache...")
+        with open(CACHE_PHRASES, "r", encoding="utf-8") as f:
+            _cached_phrases = json.load(f)
+        _cached_embeddings = np.load(CACHE_EMBEDDINGS)
+        return _cached_phrases, _cached_embeddings
 
-    # Normalize input (important for Arabic)
-    property_text_norm = normalize_arabic(property_text)
+    # First run: build the cache
+    print("[mapper] Building embedding cache (one-time setup)...")
+    model   = _get_model()
+    phrases = _get_phrases(lexicon)
+    norm_phrases = [_normalise(p) for p in phrases]
 
-    # Extract valid phrases
-    known_phrases = [
-        k for k in lexicon["properties"].keys()
-        if not k.startswith("_")
-    ]
+    embeddings = model.encode(norm_phrases, show_progress_bar=True)
 
-    # Normalize lexicon phrases
-    normalized_phrases = [normalize_arabic(p) for p in known_phrases]
+    np.save(CACHE_EMBEDDINGS, embeddings)
+    with open(CACHE_PHRASES, "w", encoding="utf-8") as f:
+        json.dump(phrases, f, ensure_ascii=False)
 
-    # Encode
-    user_embedding = model.encode(property_text_norm)
-    known_embeddings = model.encode(normalized_phrases)
+    _cached_phrases    = phrases
+    _cached_embeddings = embeddings
+    return phrases, embeddings
 
-    # Similarity
-    scores = util.cos_sim(user_embedding, known_embeddings)[0]
 
+def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | None:
+    """
+    Semantic fallback. Only called when tiers 1 and 2 both fail.
+    Encodes only the user's query (one forward pass), then computes cosine
+    similarity against the pre-loaded phrase matrix.
+    """
+    model             = _get_model()
+    phrases, matrix   = _load_or_build_cache(lexicon)
+    norm_in           = _normalise(property_text)
+
+    query_vec  = model.encode(norm_in)
+    scores     = util.cos_sim(query_vec, matrix)[0]
     best_index = scores.argmax().item()
     best_score = scores[best_index].item()
 
-    # Debug (keep this for experiments)
-    print(f"[embedding] input='{property_text}' → match='{known_phrases[best_index]}' score={best_score:.3f}")
+    print(f"[semantic] input='{property_text}' → match='{phrases[best_index]}' score={best_score:.3f}")
 
-    # Threshold (raise it)
-    if best_score >= 0.75:
-        return lexicon["properties"][known_phrases[best_index]]
-
+    if best_score >= SEMANTIC_THRESHOLD:
+        return lexicon["properties"][phrases[best_index]]
     return None
 
 
 # ── FLIGHT MAPPING ────────────────────────────────────────────────────────────
 
-def map_flight(flight_number):
-    """
-    Resolves a flight number string (e.g. "TK1887") to its full KG URI
-    by querying the Fuseki endpoint.
-
-    Why normalise with .strip().upper():
-    The LLM extractor may return lowercase or mixed-case flight numbers,
-    or include leading/trailing whitespace. SPARQL string matching is
-    case-sensitive, so both issues would cause a silent lookup failure.
-    Normalising to uppercase before querying prevents this.
-    """
+def map_flight(flight_number: str) -> str | None:
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
     flight_number = flight_number.strip().upper()
 
@@ -154,18 +184,15 @@ LIMIT 1
         "query": query,
         "format": "application/sparql-results+json"
     }).encode()
-
     req = urllib.request.Request(FUSEKI_URL, data=data)
-
     try:
         with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read())
+            result   = json.loads(response.read())
             bindings = result["results"]["bindings"]
             if bindings:
                 return bindings[0]["flight"]["value"]
     except urllib.error.URLError as e:
-        print(f"[map_flight] Fuseki is unreachable: {e}")
+        print(f"[map_flight] Fuseki unreachable: {e}")
     except Exception as e:
         print(f"[map_flight] Unexpected error: {e}")
-
     return None

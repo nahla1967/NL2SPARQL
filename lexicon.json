@@ -228,7 +228,9 @@
     "quand arrive":         "hasTimeInstant",
     "وقت الوصول":           "hasTimeInstant",
     "وقت الهبوط":           "hasTimeInstant",
-    "متى تصل":              "hasTimeInstant"
+    "متى تصل":              "hasTimeInstant",
+    "من يتولى قيادة":    "hasPilot",
+    "من يتولى القيادة":  "hasPilot"
 
   }
 }

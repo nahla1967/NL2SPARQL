@@ -11,7 +11,8 @@ from pipeline.mapper import (
     load_lexicon,
     map_property,
     map_property_with_embeddings,
-    map_flight
+    map_flight,
+    map_property_fuzzy
 )
 from pipeline.generator import inject_and_generate
 from pipeline.executor import (
@@ -45,6 +46,7 @@ if not validate_extraction(entities) or not is_flight_question(entities):
         "language": lang,
         "question": question,
         "entities": entities,
+        "mapping_layer": None,     
         "failure_type": "extraction_failure",
         "extraction_failure_reason": entities.get("reason", "validation_failed"),
         "final_answer": "out_of_scope"
@@ -62,13 +64,22 @@ if not validate_extraction(entities) or not is_flight_question(entities):
 lexicon = load_lexicon()
 
 # First attempt: exact match (high precision)
-property_uri = map_property(entities["property"], lexicon)
+property_uri   = None
+mapping_layer  = None
 
-# Fallback: embeddings (semantic match)
+property_uri = map_property(entities["property"], lexicon)
+if property_uri:
+    mapping_layer = "exact"
+
 if property_uri is None:
-    property_uri = map_property_with_embeddings(
-        entities["property"], lexicon
-    )
+    property_uri = map_property_fuzzy(entities["property"], lexicon)
+    if property_uri:
+        mapping_layer = "fuzzy"
+
+if property_uri is None:
+    property_uri = map_property_with_embeddings(entities["property"], lexicon)
+    if property_uri:
+        mapping_layer = "semantic"
 
 # Flight mapping via KG lookup
 flight_uri = map_flight(entities["entity"])
@@ -81,6 +92,7 @@ log = {
     "entities": entities,
     "flight_uri": flight_uri,
     "property_uri": property_uri,
+    "mapping_layer": mapping_layer, 
     "sparql": None,
     "sparql_valid": False,
     "raw_answer": None,

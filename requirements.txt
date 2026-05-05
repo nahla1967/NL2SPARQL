@@ -2,3 +2,4 @@ langdetect==1.0.9
 ollama==0.2.1
 sentence-transformers==2.7.0
 rdflib==7.0.0
+rapidfuzz==3.9.0
