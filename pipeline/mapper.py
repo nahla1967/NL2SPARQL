@@ -1,5 +1,6 @@
 import json
 import urllib.parse
+import re
 import urllib.request
 from sentence_transformers import SentenceTransformer, util
 
@@ -76,44 +77,53 @@ def map_property(property_text, lexicon):
         return properties[property_text]
     return None
 
+def normalize_arabic(text):
+    text = re.sub(r'[\u064B-\u0652]', '', text)  # diacritics
+    text = re.sub(r'[إأآا]', 'ا', text)
+    text = re.sub(r'ة', 'ه', text)
+    text = re.sub(r'[يى]', 'ي', text)
+    text = re.sub(r'ـ', '', text)
+
+    # remove punctuation (important)
+    text = re.sub(r'[^\w\s]', '', text)
+
+    return text.strip().lower()
 
 def map_property_with_embeddings(property_text, lexicon):
     """
-    Semantic fallback used when exact lexicon lookup fails.
-
-    Encodes the extracted property text and all lexicon keys into a shared
-    multilingual vector space, then returns the KG property name whose
-    lexicon key has the highest cosine similarity to the input.
-
-    Why filter keys starting with '_':
-    Same reason as in map_property — section separator keys must not be
-    included as candidate phrases for embedding matching.
-
-    Threshold: 0.65
-    Below this score, the match is considered too uncertain to use.
-    The run is then logged as a mapping_failure, which is an informative
-    evaluation outcome rather than a silent wrong answer.
-    The value 0.65 was chosen empirically — scores below this were observed
-    to produce incorrect property matches (e.g. "route" → "runway").
+    Semantic fallback using multilingual embeddings.
     """
+
     model = _get_embedding_model()
 
-    # Exclude metadata keys from candidate phrases
-    known_phrases = [k for k in lexicon["properties"].keys()
-                     if not k.startswith("_")]
+    # Normalize input (important for Arabic)
+    property_text_norm = normalize_arabic(property_text)
 
-    user_embedding = model.encode(property_text)
-    known_embeddings = model.encode(known_phrases)
+    # Extract valid phrases
+    known_phrases = [
+        k for k in lexicon["properties"].keys()
+        if not k.startswith("_")
+    ]
+
+    # Normalize lexicon phrases
+    normalized_phrases = [normalize_arabic(p) for p in known_phrases]
+
+    # Encode
+    user_embedding = model.encode(property_text_norm)
+    known_embeddings = model.encode(normalized_phrases)
+
+    # Similarity
     scores = util.cos_sim(user_embedding, known_embeddings)[0]
 
     best_index = scores.argmax().item()
     best_score = scores[best_index].item()
 
-    if best_score >= 0.65:
-        best_phrase = known_phrases[best_index]
+    # Debug (keep this for experiments)
+    print(f"[embedding] input='{property_text}' → match='{known_phrases[best_index]}' score={best_score:.3f}")
 
-        return lexicon["properties"][best_phrase]
-    print(f"[embedding] input='{property_text}' best_match='{known_phrases[best_index]}' score={best_score:.3f}")
+    # Threshold (raise it)
+    if best_score >= 0.75:
+        return lexicon["properties"][known_phrases[best_index]]
 
     return None
 
