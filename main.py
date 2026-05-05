@@ -22,7 +22,7 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question = "What carrier operates flight TK1887?"
+question =  "من هو طيار الرحلة BR62؟"
 condition = "cot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
@@ -111,7 +111,7 @@ sparql_query = inject_and_generate(
 )
 
 log["sparql"] = sparql_query
-print("Entities:", entities)
+
 print("\nGenerated SPARQL:")
 print(sparql_query)
 

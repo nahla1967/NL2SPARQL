@@ -69,27 +69,19 @@ def clean_uri(value):
 
 
 def resolve_entity(uri):
-    """
-    Resolves a KG URI to a human-readable value by querying Fuseki
-    for a label property, depending on the entity type.
-
-    Handles: City, Airline, Aircraft, Route.
-    Falls back to clean_uri for unrecognised entity types.
-    """
     if not uri.startswith("http"):
         return uri
 
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
     url = "http://localhost:3030/flights/sparql"
 
-    if "/City/" in uri:
+    if "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
-    elif "/Airline/" in uri:
+    elif "/Airline/" in uri or "#Airline/" in uri:
         name_props = ["operating_as"]
-        print(f"[debug] resolving airline URI: {uri}")
-    elif "/Aircraft/" in uri:
+    elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
-    elif "/Route/" in uri:
+    elif "/Route/" in uri or "#Route/" in uri:
         route_name = uri.split("/Route/")[-1]
         return urllib.parse.unquote(route_name).replace("_", " ")
     else:
@@ -111,7 +103,7 @@ LIMIT 1
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read())
                 bindings = result["results"]["bindings"]
-                print(f"[debug] bindings returned: {bindings}")
+                #print(f"[debug] bindings returned: {bindings}")
                 if bindings:
                     first_key = list(bindings[0].keys())[0]
                     return bindings[0][first_key]["value"]
@@ -119,7 +111,6 @@ LIMIT 1
             print(f"[debug] resolve_entity inner query failed: {e}")
 
     return clean_uri(uri)
-
 
 def execute_sparql(sparql_query):
     """
@@ -141,6 +132,7 @@ def execute_sparql(sparql_query):
             bindings = result["results"]["bindings"]
             if bindings:
                 first_key = list(bindings[0].keys())[0]
+                #print(f"[debug] raw binding value: {bindings[0][first_key]['value']}")
                 raw_value = resolve_entity(bindings[0][first_key]["value"])
 
                 # Resolve 2-letter ISO country codes to full country names.
