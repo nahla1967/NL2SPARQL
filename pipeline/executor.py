@@ -93,6 +93,13 @@ def validate_sparql(query):
 
 # ── URI AND VALUE RESOLUTION ──────────────────────────────────────────────────
 
+# In-memory cache: KG URI (str) → resolved human-readable value (str)
+# The KG is static — the same URI always resolves to the same label.
+# Caching prevents repeated Fuseki calls for identical URIs across
+# the 12 evaluation conditions (same flights, different languages/strategies).
+_entity_cache: dict[str, str] = {}
+
+
 def clean_uri(value):
     """
     Converts a raw URI or encoded literal into a readable string.
@@ -107,12 +114,16 @@ def resolve_entity(uri):
     """
     Resolves a KG URI to a human-readable value.
 
+    Results are cached in _entity_cache — the KG is static, so the same
+    URI always produces the same label. This avoids repeated Fuseki calls
+    when the same flight property is queried across multiple conditions.
+
     Branch order matters here.
     Route is handled first with pure string parsing — no HTTP call needed —
-    because Route URIs encode their label directly in the fragment
-    (e.g. .../Route/Vienna to Bangkok). Attempting an HTTP lookup on a URI
-    that contains a literal space would cause urllib to raise a ValueError,
-    so we extract the label before any network code runs.
+    because Route URIs encode their label directly in the fragment.
+    Attempting an HTTP lookup on a URI that contains a literal space would
+    cause urllib to raise a ValueError, so we extract the label before any
+    network code runs.
 
     The remaining branches follow in specificity order:
     - TimeInstant → two-hop SPARQL query (Flight → TimeInstant → eta)
@@ -124,26 +135,24 @@ def resolve_entity(uri):
     if not uri.startswith("http"):
         return uri
 
-    base = "http://www.semanticweb.org/ontologies/flight_ontology#"
-    url = "http://localhost:3030/flights/sparql"
+    # Return immediately if already resolved in this session
+    if uri in _entity_cache:
+        cached = _entity_cache[uri]
+        print(f"[resolve_entity] cache hit → '{cached}'")
+        return cached
+
+    base   = "http://www.semanticweb.org/ontologies/flight_ontology#"
+    url    = "http://localhost:3030/flights/sparql"
+    result = None
 
     # ── Route: pure string extraction, no HTTP ────────────────────────────────
-    # Route URIs store the human-readable label directly after /Route/.
-    # The label may contain spaces or special characters that are NOT
-    # percent-encoded in this KG (e.g. "Vienna to Bangkok" not "Vienna%20to%20Bangkok").
-    # urllib would fail on such a URI, so we extract the label with a plain
-    # string split before any network call is attempted.
     if "/Route/" in uri or "#Route/" in uri:
-       separator = "#Route/" if "#Route/" in uri else "/Route/"
-       fragment = uri.split(separator, 1)[-1]
-       return urllib.parse.unquote(fragment).replace("_", " ").strip()
+        separator = "#Route/" if "#Route/" in uri else "/Route/"
+        fragment  = uri.split(separator, 1)[-1]
+        result    = urllib.parse.unquote(fragment).replace("_", " ").strip()
 
     # ── TimeInstant: two-hop SPARQL ───────────────────────────────────────────
-    # Arrival time is stored as:
-    #   Flight → hasTimeInstant → TimeInstant → eta → datetime string
-    # The generator retrieves the TimeInstant URI in one hop.
-    # This branch performs the second hop to get the actual datetime value.
-    if "/TimeInstant/" in uri or "#TimeInstant/" in uri:
+    elif "/TimeInstant/" in uri or "#TimeInstant/" in uri:
         query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}eta> ?value .
@@ -157,20 +166,20 @@ LIMIT 1
         req = urllib.request.Request(url, data=data)
         try:
             with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read())
-                bindings = result["results"]["bindings"]
+                res      = json.loads(response.read())
+                bindings = res["results"]["bindings"]
                 if bindings:
                     raw_time = bindings[0][list(bindings[0].keys())[0]]["value"]
-                    dt = datetime.strptime(raw_time, "%Y-%m-%dT%H:%M:%SZ")
-                    return dt.strftime("%d %B %Y at %H:%M UTC")
-        except Exception:
-            pass
-        return clean_uri(uri)
+                    dt       = datetime.strptime(raw_time, "%Y-%m-%dT%H:%M:%SZ")
+                    result   = dt.strftime("%d %B %Y at %H:%M UTC")
+        except Exception as e:
+            print(f"[resolve_entity] TimeInstant query failed for {uri}: {e}")
+        if result is None:
+            print(f"[resolve_entity] TimeInstant fallback triggered for {uri}")
+            result = clean_uri(uri)
 
     # ── Airline: ICAO code lookup + expansion ─────────────────────────────────
-    # Airlines store an ICAO code in operating_as, not a readable name.
-    # We retrieve the code then expand it via AIRLINE_CODES.
-    if "/Airline/" in uri or "#Airline/" in uri:
+    elif "/Airline/" in uri or "#Airline/" in uri:
         query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}operating_as> ?value .
@@ -184,48 +193,58 @@ LIMIT 1
         req = urllib.request.Request(url, data=data)
         try:
             with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read())
-                bindings = result["results"]["bindings"]
+                res      = json.loads(response.read())
+                bindings = res["results"]["bindings"]
                 if bindings:
-                    code = bindings[0][list(bindings[0].keys())[0]]["value"]
-                    return AIRLINE_CODES.get(code, code)
-        except Exception:
-            pass
-        return clean_uri(uri)
+                    code   = bindings[0][list(bindings[0].keys())[0]]["value"]
+                    result = AIRLINE_CODES.get(code, code)
+        except Exception as e:
+            print(f"[resolve_entity] Airline query failed for {uri}: {e}")
+        if result is None:
+            print(f"[resolve_entity] Airline fallback triggered for {uri}")
+            result = clean_uri(uri)
 
     # ── City and Aircraft: generic label lookup ───────────────────────────────
-    
-    if "/City/" in uri or "#City/" in uri:
+    elif "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
     elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
-   
     else:
-        return clean_uri(uri)
+        print(f"[resolve_entity] No branch matched — falling back to clean_uri for {uri}")
+        result = clean_uri(uri)
 
-    for name_prop in name_props:
-        query = f"""
+    # City / Aircraft share the same label-lookup loop
+    if result is None:
+        for name_prop in name_props:
+            query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}{name_prop}> ?value .
 }}
 LIMIT 1
 """
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
-        try:
-            with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read())
-                bindings = result["results"]["bindings"]
-                if bindings:
-                    first_key = list(bindings[0].keys())[0]
-                    return bindings[0][first_key]["value"]
-        except Exception as e:
-            print(f"[resolve_entity] Inner query failed: {e}")
+            data = urllib.parse.urlencode({
+                "query": query,
+                "format": "application/sparql-results+json"
+            }).encode()
+            req = urllib.request.Request(url, data=data)
+            try:
+                with urllib.request.urlopen(req) as response:
+                    res      = json.loads(response.read())
+                    bindings = res["results"]["bindings"]
+                    if bindings:
+                        first_key = list(bindings[0].keys())[0]
+                        result    = bindings[0][first_key]["value"]
+                        break
+            except Exception as e:
+                print(f"[resolve_entity] {name_prop} query failed for {uri}: {e}")
 
-    return clean_uri(uri)
+        if result is None:
+            print(f"[resolve_entity] City/Aircraft label lookup exhausted — falling back to clean_uri for {uri}")
+            result = clean_uri(uri)
+
+    # Store resolved value before returning
+    _entity_cache[uri] = result
+    return result
 
 
 # ── SPARQL EXECUTION ──────────────────────────────────────────────────────────
@@ -237,7 +256,7 @@ def execute_sparql(sparql_query):
     any 2-letter ISO country code to its full country name.
     Returns None if the query fails or returns no results.
     """
-    url = "http://localhost:3030/flights/sparql"
+    url  = "http://localhost:3030/flights/sparql"
     data = urllib.parse.urlencode({
         "query": sparql_query,
         "format": "application/sparql-results+json"
@@ -250,8 +269,8 @@ def execute_sparql(sparql_query):
                 return None
             bindings = result["results"]["bindings"]
             if bindings:
-                first_key = list(bindings[0].keys())[0]
-                raw_value = resolve_entity(bindings[0][first_key]["value"])
+                first_key  = list(bindings[0].keys())[0]
+                raw_value  = resolve_entity(bindings[0][first_key]["value"])
 
                 # Expand ISO country codes to full names.
                 # Prevents the LLM formatter from hallucinating wrong expansions.

@@ -10,7 +10,7 @@ from rapidfuzz import process, fuzz
 
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
-FUSEKI_URL      = "http://localhost:3030/flights/sparql"
+FUSEKI_URL       = "http://localhost:3030/flights/sparql"
 CACHE_EMBEDDINGS = "lexicon_embeddings.npy"   # pre-computed phrase vectors
 CACHE_PHRASES    = "lexicon_phrases.json"     # phrase list aligned to the matrix
 
@@ -19,7 +19,6 @@ SEMANTIC_THRESHOLD = 0.75 # cosine similarity
 
 
 # ── TEXT NORMALISATION ────────────────────────────────────────────────────────
-# Moved here as a standalone utility so both tiers can reuse it.
 # Arabic normalisation removes diacritics, unifies alef variants, teh marbuta,
 # and ya variants — all of which are stylistic, not semantic distinctions.
 
@@ -40,35 +39,37 @@ def load_lexicon():
         return json.load(f)
 
 def _get_phrases(lexicon: dict) -> list[str]:
-    """Returns only valid property expressions — excludes _section_* metadata keys."""
-    return [k for k in lexicon["properties"] if not k.startswith("_")]
+    """
+    Returns all property expression keys from the lexicon.
+    No filter needed — the cleaned lexicon stores only real expressions
+    inside 'properties'. Metadata lives separately under '_sections'.
+    """
+    return list(lexicon["properties"].keys())
 
 
 # ── TIER 1 — EXACT MATCH ──────────────────────────────────────────────────────
 
 def map_property(property_text: str, lexicon: dict) -> str | None:
     key = _normalise(property_text)
-    properties = {
+    normalised_properties = {
         _normalise(k): v
         for k, v in lexicon["properties"].items()
-        if not k.startswith("_")
     }
-    return properties.get(key)
+    return normalised_properties.get(key)
 
 
 # ── TIER 2 — FUZZY MATCH (rapidfuzz) ─────────────────────────────────────────
-# rapidfuzz is a lightweight C-extension — no model, no GPU, loads instantly.
 # WRatio is a composite scorer that handles partial matches, transpositions,
-# and reorderings, making it robust to minor wording variations without
-# needing vector representations at all.
-# This tier catches failures that exact match misses:
-#   "departure town"  → "departure city"
-#   "aéroport d'arrivée" → "ville d'arrivée"  (conceptual overlap)
-#   "مدينة الانطلاق"  → "مدينة المغادرة"      (synonym)
+# and reorderings — robust to minor wording variations without needing
+# vector representations at all.
+# Example failures it catches that exact match misses:
+#   "departure town"     → "departure city"
+#   "aéroport d'arrivée" → "ville d'arrivée"
+#   "مدينة الانطلاق"    → "مدينة المغادرة"
 
 def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
-    phrases  = _get_phrases(lexicon)
-    norm_in  = _normalise(property_text)
+    phrases      = _get_phrases(lexicon)
+    norm_in      = _normalise(property_text)
     norm_phrases = [_normalise(p) for p in phrases]
 
     result = process.extractOne(norm_in, norm_phrases, scorer=fuzz.WRatio)
@@ -84,20 +85,13 @@ def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
 
 
 # ── TIER 3 — SEMANTIC EMBEDDINGS (pre-computed, cached) ──────────────────────
-# The single biggest change from your original code.
-#
-# The problem with the original: model.encode(all_phrases) ran on EVERY call.
-# The lexicon never changes, so those vectors are identical every time.
-# This is equivalent to re-computing a multiplication table from scratch
-# before every arithmetic problem.
-#
-# The solution: compute the matrix once, persist it to disk with numpy.
-# Subsequent calls load ~400KB instead of running ~100 forward passes.
-# First run: slow (one-time setup). Every run after: instant.
+# The lexicon never changes between runs, so recomputing embeddings every time
+# is wasteful. We compute the phrase matrix once, persist it to disk, and load
+# it on subsequent runs. Only the user's query needs a fresh forward pass.
 
-_embedding_model  = None   # lazy-loaded on first use
-_cached_embeddings = None  # numpy matrix (n_phrases × 768)
-_cached_phrases    = None  # list aligned to the matrix rows
+_embedding_model   = None   # lazy-loaded on first use
+_cached_embeddings = None   # numpy matrix (n_phrases × 768)
+_cached_phrases    = None   # list aligned to the matrix rows
 
 
 def _get_model():
@@ -111,11 +105,7 @@ def _get_model():
 def _load_or_build_cache(lexicon: dict):
     """
     Returns (phrases, embedding_matrix).
-    Loads from disk if the cache exists, builds and saves it otherwise.
-    
-    Why numpy .npy?  It is the standard serialisation format for dense
-    numerical arrays in Python — fast to write, fast to load, no
-    dependencies beyond numpy itself.
+    Loads from disk if the cache exists; builds and saves it on first run.
     """
     global _cached_embeddings, _cached_phrases
     if _cached_embeddings is not None:
@@ -129,13 +119,11 @@ def _load_or_build_cache(lexicon: dict):
         _cached_embeddings = np.load(CACHE_EMBEDDINGS)
         return _cached_phrases, _cached_embeddings
 
-    # First run: build the cache
     print("[mapper] Building embedding cache (one-time setup)...")
-    model   = _get_model()
-    phrases = _get_phrases(lexicon)
+    model        = _get_model()
+    phrases      = _get_phrases(lexicon)
     norm_phrases = [_normalise(p) for p in phrases]
-
-    embeddings = model.encode(norm_phrases, show_progress_bar=True)
+    embeddings   = model.encode(norm_phrases, show_progress_bar=True)
 
     np.save(CACHE_EMBEDDINGS, embeddings)
     with open(CACHE_PHRASES, "w", encoding="utf-8") as f:
@@ -152,9 +140,9 @@ def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | Non
     Encodes only the user's query (one forward pass), then computes cosine
     similarity against the pre-loaded phrase matrix.
     """
-    model             = _get_model()
-    phrases, matrix   = _load_or_build_cache(lexicon)
-    norm_in           = _normalise(property_text)
+    model           = _get_model()
+    phrases, matrix = _load_or_build_cache(lexicon)
+    norm_in         = _normalise(property_text)
 
     query_vec  = model.encode(norm_in)
     scores     = util.cos_sim(query_vec, matrix)[0]
@@ -170,9 +158,22 @@ def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | Non
 
 # ── FLIGHT MAPPING ────────────────────────────────────────────────────────────
 
+# In-memory cache: flight_number (str) → KG URI (str)
+# The KG is static — a flight number always resolves to the same URI.
+# Caching avoids a redundant Fuseki HTTP call on every repeated lookup,
+# which matters during evaluation where the same flights appear across
+# multiple conditions and languages.
+_flight_uri_cache: dict[str, str] = {}
+
+
 def map_flight(flight_number: str) -> str | None:
-    base = "http://www.semanticweb.org/ontologies/flight_ontology#"
+    base          = "http://www.semanticweb.org/ontologies/flight_ontology#"
     flight_number = flight_number.strip().upper()
+
+    # Return immediately if already resolved in this session
+    if flight_number in _flight_uri_cache:
+        print(f"[map_flight] cache hit → {flight_number}")
+        return _flight_uri_cache[flight_number]
 
     query = f"""
 SELECT ?flight WHERE {{
@@ -190,7 +191,9 @@ LIMIT 1
             result   = json.loads(response.read())
             bindings = result["results"]["bindings"]
             if bindings:
-                return bindings[0]["flight"]["value"]
+                uri = bindings[0]["flight"]["value"]
+                _flight_uri_cache[flight_number] = uri   # store for future calls
+                return uri
     except urllib.error.URLError as e:
         print(f"[map_flight] Fuseki unreachable: {e}")
     except Exception as e:

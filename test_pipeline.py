@@ -157,6 +157,89 @@ TEST_CASES = [
         "expected_tier":     "rejected",
         "language":          "en"
     },
+
+    # ── NON-LEXICON : SEMANTIC STRESS TESTS ───────────────────────────────────
+    # These questions use phrasings that do not exist in the lexicon at all.
+    # The extractor will return the unusual phrase verbatim.
+    # Exact and fuzzy tiers will both miss.
+    # The embedding model must carry the resolution alone.
+    # Purpose: stress-test the semantic tier in isolation across all 3 languages.
+
+    # English
+    {
+        "question":          "What tarmac does flight OS235 use?",
+        "condition":         "zero-shot",
+        "expected_property": "hasRunway",
+        "expected_tier":     "semantic",
+        "language":          "en"
+    },
+    {
+        "question":          "Which firm is operating flight BR62?",
+        "condition":         "few-shot",
+        "expected_property": "hasAirline",
+        "expected_tier":     "semantic",
+        "language":          "en"
+    },
+    {
+        "question":          "What are the sky conditions for flight TK1887?",
+        "condition":         "cot",
+        "expected_property": "hasWeatherCondition",
+        "expected_tier":     "semantic",
+        "language":          "en"
+    },
+    {
+        "question":          "Which concourse is used by flight AF1739?",
+        "condition":         "zero-shot",
+        "expected_property": "hasTerminal",
+        "expected_tier":     "semantic",
+        "language":          "en"
+    },
+
+    # French
+    {
+        "question":          "Quelle est la bande d'atterrissage du vol OS235?",
+        "condition":         "few-shot",
+        "expected_property": "hasRunway",
+        "expected_tier":     "semantic",
+        "language":          "fr"
+    },
+    {
+        "question":          "Vers quel pays se dirige le vol TK1887?",
+        "condition":         "cot",
+        "expected_property": "hasDestinationCountry",
+        "expected_tier":     "semantic",
+        "language":          "fr"
+    },
+    {
+        "question":          "Quel aéronef est utilisé pour le vol BR62?",
+        "condition":         "zero-shot",
+        "expected_property": "hasAircraft",
+        "expected_tier":     "semantic",
+        "language":          "fr"
+    },
+
+    # Arabic
+    {
+        "question":          "من يتولى إدارة رحلة AF1739؟",
+        "condition":         "few-shot",
+        "expected_property": "hasPilot",
+        "expected_tier":     "semantic",
+        "language":          "ar"
+    },
+    {
+        "question":          "ما الطراز المستخدم في رحلة OS235؟",
+        "condition":         "cot",
+        "expected_property": "hasAircraft",
+        "expected_tier":     "semantic",
+        "language":          "ar"
+    },
+    {
+        "question":          "ما هي أحوال الجو خلال رحلة BR62؟",
+        "condition":         "zero-shot",
+        "expected_property": "hasWeatherCondition",
+        "expected_tier":     "semantic",
+        "language":          "ar"
+    },
 ]
 
 print("\n\n══ PART 2 — FULL PIPELINE INTEGRATION TESTS ════════════════════════════")
