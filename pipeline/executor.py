@@ -134,10 +134,9 @@ def resolve_entity(uri):
     # urllib would fail on such a URI, so we extract the label with a plain
     # string split before any network call is attempted.
     if "/Route/" in uri or "#Route/" in uri:
-        # Split on the first occurrence of /Route/ and take everything after it.
-        fragment = uri.split("/Route/", 1)[-1]
-        # Decode any percent-encoded characters that ARE present, then clean up.
-        return urllib.parse.unquote(fragment).replace("_", " ").strip()
+       separator = "#Route/" if "#Route/" in uri else "/Route/"
+       fragment = uri.split(separator, 1)[-1]
+       return urllib.parse.unquote(fragment).replace("_", " ").strip()
 
     # ── TimeInstant: two-hop SPARQL ───────────────────────────────────────────
     # Arrival time is stored as:
@@ -195,10 +194,12 @@ LIMIT 1
         return clean_uri(uri)
 
     # ── City and Aircraft: generic label lookup ───────────────────────────────
+    
     if "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
     elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
+   
     else:
         return clean_uri(uri)
 

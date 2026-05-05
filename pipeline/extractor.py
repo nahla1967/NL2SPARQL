@@ -120,11 +120,9 @@ Question: {question}
 
 
 def validate_extraction(entities):
-    # Validation is intentionally minimal here.
-    # Whether the property is meaningful is determined by the mapper:
-    # if both map_property and map_property_with_embeddings return None,
-    # the system logs a mapping_failure — which is a valid evaluation outcome.
     if not entities.get("entity"):
+        return False
+    if str(entities.get("entity")).strip().lower() == "none":  
         return False
     if not entities.get("property"):
         return False

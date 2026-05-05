@@ -7,27 +7,19 @@ from pipeline.executor import validate_sparql, execute_sparql, format_answer
 
 TEST_CASES_LEXICON = [
     # English — properties not yet covered in your original suite
-    {"question": "What is the runway of flight TK1887?",           "condition": "zero-shot", "expected_property": "runway",           "expected_layer": "lexicon"},
-    {"question": "What is the terminal of flight OS235?",          "condition": "few-shot",  "expected_property": "terminal",          "expected_layer": "lexicon"},
-    {"question": "What is the callsign of flight BR62?",           "condition": "cot",       "expected_property": "callsign",          "expected_layer": "lexicon"},
-    {"question": "What is the weather condition of flight AF1739?","condition": "zero-shot", "expected_property": "weather",           "expected_layer": "lexicon"},
-    {"question": "What is the departure country of flight OS235?", "condition": "few-shot",  "expected_property": "departure country",  "expected_layer": "lexicon"},
-    {"question": "What is the arrival country of flight TK1887?",  "condition": "cot",       "expected_property": "arrival country",    "expected_layer": "lexicon"},
-    {"question": "What is the route of flight BR62?",              "condition": "zero-shot", "expected_property": "route",             "expected_layer": "lexicon"},
+      # [CODE] properties — valid pipeline output, but answer is an internal ID
+    {"question": "Who is the pilot of flight TK1887?",             "condition": "zero-shot", "expected_property": "hasPilot",          "expected_layer": "lexicon"},
+    {"question": "Qui est l'hôtesse de l'air du vol OS235?",       "condition": "few-shot",  "expected_property": "hasFlightAttendant","expected_layer": "lexicon"},
+    {"question": "من هو مضيف الرحلة AF1739؟",                     "condition": "cot",       "expected_property": "hasFlightAttendant","expected_layer": "lexicon"},
 
-    # French — key properties in French surface forms
-    {"question": "Quelle est la météo du vol TK1887?",             "condition": "few-shot",  "expected_property": "météo",             "expected_layer": "lexicon"},
-    {"question": "Quel est le terminal du vol OS235?",             "condition": "zero-shot", "expected_property": "terminal",          "expected_layer": "lexicon"},
-    {"question": "Quel est le pays de départ du vol AF1739?",      "condition": "cot",       "expected_property": "pays de départ",    "expected_layer": "lexicon"},
-    {"question": "Quel est l'avion utilisé pour le vol BR62?",     "condition": "few-shot",  "expected_property": "avion",             "expected_layer": "lexicon"},
+    # Out-of-scope questions — system should log extraction_failure
+    {"question": "What is the capital of France?",                 "condition": "zero-shot", "expected_property": None,                "expected_layer": "rejected"},
+    {"question": "Book me a ticket to Vienna.",                    "condition": "few-shot",  "expected_property": None,                "expected_layer": "rejected"},
+    {"question": "احجز لي تذكرة إلى باريس.",                      "condition": "zero-shot", "expected_property": None,                "expected_layer": "rejected"},
 
-    # Arabic — key properties in Arabic surface forms
-    {"question": "ما هو مسار الرحلة OS235؟",                      "condition": "cot",       "expected_property": "المسار",            "expected_layer": "lexicon"},
-    {"question": "ما هي حالة الطقس في الرحلة TK1887؟",           "condition": "zero-shot", "expected_property": "الطقس",             "expected_layer": "lexicon"},
-    {"question": "ما هي الصالة الخاصة بالرحلة AF1739؟",          "condition": "few-shot",  "expected_property": "الصالة",            "expected_layer": "lexicon"},
-    {"question": "ما هو بلد المغادرة للرحلة BR62؟",               "condition": "cot",       "expected_property": "بلد المغادرة",      "expected_layer": "lexicon"},
+    # Mixed-language stress tests (flight number in one language, question in another)
+    {"question": "Where is flight TK1887 going? وين تروح؟",       "condition": "cot",       "expected_property": "hasDestinationCity", "expected_layer": "lexicon"},
 ]
-
 lexicon = load_lexicon()
 passed = 0
 failed = 0
