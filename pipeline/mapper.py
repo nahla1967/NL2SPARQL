@@ -15,7 +15,7 @@ def _get_embedding_model():
     Returns the multilingual embedding model, loading it on first call only.
     All subsequent calls reuse the already-loaded instance.
 
-    Model: paraphrase-multilingual-MiniLM-L12-v2
+    Model:paraphrase-multilingual-mpnet-base-v2 
     Chosen because it produces comparable vector spaces across languages,
     meaning Arabic, French, and English paraphrases of the same concept
     will have high cosine similarity to each other.
@@ -23,7 +23,7 @@ def _get_embedding_model():
     global _embedding_model
     if _embedding_model is None:
         print("[mapper] Loading embedding model (first use)...")
-        _embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        _embedding_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
     return _embedding_model
 
 
@@ -111,7 +111,9 @@ def map_property_with_embeddings(property_text, lexicon):
 
     if best_score >= 0.65:
         best_phrase = known_phrases[best_index]
+
         return lexicon["properties"][best_phrase]
+    print(f"[embedding] input='{property_text}' best_match='{known_phrases[best_index]}' score={best_score:.3f}")
 
     return None
 

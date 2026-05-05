@@ -63,18 +63,25 @@ def extract_entities(question, lang):
 You are an entity extractor for a flight knowledge graph.
 Extract the flight number and the property being asked about.
 
-For the property, extract the key concept describing what is asked — in the same language as the question.
-Do not translate. Do not normalize to English. Return the property as it appears in the question.
+You MUST return the property using EXACTLY one of these allowed values:
+
+English: departure city, arrival city, airline, pilot, gate, runway,
+aircraft, weather, flight number, arrival time, route
+
+French: ville de départ, ville d'arrivée, compagnie aérienne, pilote,
+porte, piste, avion, météo, numéro de vol, heure d'arrivée, itinéraire
+
+Arabic: مدينة المغادرة, مدينة الوصول, شركة الطيران, الطيار,
+البوابة, المدرج, الطائرة, الطقس, رقم الرحلة, وقت الوصول, المسار
+
+Choose the value from the list that best matches what the question is asking about.
+Use the same language as the question.
 
 Examples:
 - "Where does OS235 depart from?" → {{"entity": "OS235", "property": "departure city"}}
-- "What airline operates TK1887?" → {{"entity": "TK1887", "property": "airline"}}
 - "Quelle compagnie opère le vol AF1739?" → {{"entity": "AF1739", "property": "compagnie aérienne"}}
-- "Quel est l'aéroport de départ du vol 7L280?" → {{"entity": "7L280", "property": "ville de départ"}}
-- "ما هي شركة الطيران التي تشغّل الرحلة BR62؟" → {{"entity": "BR62", "property": "شركة الطيران"}}
+- "ما هو مدرج هبوط الرحلة BR62؟" → {{"entity": "BR62", "property": "المدرج"}}
 - "من هو طيار الرحلة AI180؟" → {{"entity": "AI180", "property": "الطيار"}}
-- "Quel est l'itinéraire du vol LX19?" → {{"entity": "LX19", "property": "itinéraire"}}
-- "What is the arrival time of flight BA456?" → {{"entity": "BA456", "property": "arrival time"}}
 
 Return ONLY a JSON object. No explanation. No extra text.
 
@@ -121,6 +128,7 @@ def is_flight_question(entities):
     entity = entities.get("entity", "")
     if not entity:
         return False
+    entity = entity.strip().upper()
     for prefix in KNOWN_FLIGHT_PREFIXES:
         if entity.startswith(prefix):
             return True
