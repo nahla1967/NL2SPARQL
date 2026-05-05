@@ -2,6 +2,7 @@ import json
 import urllib.parse
 import urllib.request
 import ollama
+from datetime import datetime
 from rdflib.plugins.sparql import prepareQuery
 
 # ── LOOKUP TABLES ─────────────────────────────────────────────────────────────
@@ -106,11 +107,12 @@ def resolve_entity(uri):
     """
     Resolves a KG URI to a human-readable value.
 
-    - City     → queries Fuseki for orig_city label
-    - Airline  → queries Fuseki for operating_as code, expands via AIRLINE_CODES
-    - Aircraft → queries Fuseki for type label
-    - Route    → URL-decodes the URI fragment directly
-    - Other    → falls back to clean_uri
+    - City        → queries Fuseki for orig_city label
+    - TimeInstant → queries Fuseki for eta value, formats as readable datetime
+    - Airline     → queries Fuseki for operating_as code, expands via AIRLINE_CODES
+    - Aircraft    → queries Fuseki for type label
+    - Route       → URL-decodes the URI fragment directly
+    - Other       → falls back to clean_uri
     """
     if not uri.startswith("http"):
         return uri
@@ -120,6 +122,35 @@ def resolve_entity(uri):
 
     if "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
+
+    elif "/TimeInstant/" in uri or "#TimeInstant/" in uri:
+        # Arrival time is stored as a two-hop property:
+        # Flight → hasTimeInstant → TimeInstant → eta → datetime string
+        # The generator retrieves the TimeInstant URI in one hop.
+        # This branch does the second hop to get the actual datetime value
+        # and formats it into a human-readable string.
+        query = f"""
+SELECT ?value WHERE {{
+  <{uri}> <{base}eta> ?value .
+}}
+LIMIT 1
+"""
+        data = urllib.parse.urlencode({
+            "query": query,
+            "format": "application/sparql-results+json"
+        }).encode()
+        req = urllib.request.Request(url, data=data)
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read())
+                bindings = result["results"]["bindings"]
+                if bindings:
+                    raw_time = bindings[0][list(bindings[0].keys())[0]]["value"]
+                    dt = datetime.strptime(raw_time, "%Y-%m-%dT%H:%M:%SZ")
+                    return dt.strftime("%d %B %Y at %H:%M UTC")
+        except Exception:
+            pass
+        return clean_uri(uri)
 
     elif "/Airline/" in uri or "#Airline/" in uri:
         # Airlines store an ICAO code in operating_as, not a readable name.
@@ -157,7 +188,7 @@ LIMIT 1
         return clean_uri(uri)
 
     # Generic label lookup — used for City and Aircraft branches.
-    # Airline and Route return early above so never reach this loop.
+    # TimeInstant, Airline and Route return early above and never reach this loop.
     for name_prop in name_props:
         query = f"""
 SELECT ?value WHERE {{

@@ -10,7 +10,7 @@ TEST_CASES = [
     {"question": "Quel est l'itinéraire du vol AF1739?",          "condition": "few-shot",  "expected_property": "itinéraire"},
     {"question": "ما هي شركة الطيران التي تشغّل الرحلة BR62؟",   "condition": "cot",       "expected_property": "شركة الطيران"},
     {"question": "What is the arrival time of flight OS235?",     "condition": "few-shot",  "expected_property": "arrival time"},
-    {"question": "Quel est le pilote du vol BA456?",              "condition": "zero-shot", "expected_property": "pilote"},
+    {"question": "Quel est le pilote du vol BBR62??",              "condition": "zero-shot", "expected_property": "pilote"},
     {"question": "ما هي بوابة الرحلة BR62؟",                     "condition": "zero-shot", "expected_property": "البوابة"},
 ]
 

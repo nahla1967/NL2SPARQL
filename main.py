@@ -22,8 +22,8 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question =  "Which runway does flight BR62 use?"
-condition = "zero-shot"  # options: "zero-shot", "few-shot", "cot"
+question =  "What is the arrival time of flight OS235?"
+condition = "few-shot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
 # Why: the system must support 3 languages → behavior depends on language
@@ -163,3 +163,5 @@ with open("logs.jsonl", "a", encoding="utf-8") as f:
     f.write(json.dumps(log, ensure_ascii=False) + "\n")
 
 print("\nLogged.")
+# Add this right after entities = extract_entities(question, lang)
+print(f"  → extracted: {entities}")

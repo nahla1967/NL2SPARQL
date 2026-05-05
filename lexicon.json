@@ -216,7 +216,19 @@
     "personnel de cabine":     "hasFlightAttendant",
     "المضيف":                  "hasFlightAttendant",
     "مضيف الطيران":            "hasFlightAttendant",
-    "طاقم الضيافة":            "hasFlightAttendant"
+    "طاقم الضيافة":            "hasFlightAttendant",
+
+    
+    "_section_eta": "── ARRIVAL TIME ────────────────────────────────────────────",
+
+    "arrival time":         "hasTimeInstant",
+    "estimated arrival":    "hasTimeInstant",
+    "when does it arrive":  "hasTimeInstant",
+    "heure d'arrivée":      "hasTimeInstant",
+    "quand arrive":         "hasTimeInstant",
+    "وقت الوصول":           "hasTimeInstant",
+    "وقت الهبوط":           "hasTimeInstant",
+    "متى تصل":              "hasTimeInstant"
 
   }
 }
