@@ -107,12 +107,19 @@ def resolve_entity(uri):
     """
     Resolves a KG URI to a human-readable value.
 
-    - City        → queries Fuseki for orig_city label
-    - TimeInstant → queries Fuseki for eta value, formats as readable datetime
-    - Airline     → queries Fuseki for operating_as code, expands via AIRLINE_CODES
-    - Aircraft    → queries Fuseki for type label
-    - Route       → URL-decodes the URI fragment directly
-    - Other       → falls back to clean_uri
+    Branch order matters here.
+    Route is handled first with pure string parsing — no HTTP call needed —
+    because Route URIs encode their label directly in the fragment
+    (e.g. .../Route/Vienna to Bangkok). Attempting an HTTP lookup on a URI
+    that contains a literal space would cause urllib to raise a ValueError,
+    so we extract the label before any network code runs.
+
+    The remaining branches follow in specificity order:
+    - TimeInstant → two-hop SPARQL query (Flight → TimeInstant → eta)
+    - Airline     → one-hop SPARQL query + AIRLINE_CODES expansion
+    - Aircraft    → one-hop SPARQL query for type label
+    - City        → one-hop SPARQL query for orig_city label
+    - Other       → clean_uri fallback
     """
     if not uri.startswith("http"):
         return uri
@@ -120,15 +127,24 @@ def resolve_entity(uri):
     base = "http://www.semanticweb.org/ontologies/flight_ontology#"
     url = "http://localhost:3030/flights/sparql"
 
-    if "/City/" in uri or "#City/" in uri:
-        name_props = ["orig_city"]
+    # ── Route: pure string extraction, no HTTP ────────────────────────────────
+    # Route URIs store the human-readable label directly after /Route/.
+    # The label may contain spaces or special characters that are NOT
+    # percent-encoded in this KG (e.g. "Vienna to Bangkok" not "Vienna%20to%20Bangkok").
+    # urllib would fail on such a URI, so we extract the label with a plain
+    # string split before any network call is attempted.
+    if "/Route/" in uri or "#Route/" in uri:
+        # Split on the first occurrence of /Route/ and take everything after it.
+        fragment = uri.split("/Route/", 1)[-1]
+        # Decode any percent-encoded characters that ARE present, then clean up.
+        return urllib.parse.unquote(fragment).replace("_", " ").strip()
 
-    elif "/TimeInstant/" in uri or "#TimeInstant/" in uri:
-        # Arrival time is stored as a two-hop property:
-        # Flight → hasTimeInstant → TimeInstant → eta → datetime string
-        # The generator retrieves the TimeInstant URI in one hop.
-        # This branch does the second hop to get the actual datetime value
-        # and formats it into a human-readable string.
+    # ── TimeInstant: two-hop SPARQL ───────────────────────────────────────────
+    # Arrival time is stored as:
+    #   Flight → hasTimeInstant → TimeInstant → eta → datetime string
+    # The generator retrieves the TimeInstant URI in one hop.
+    # This branch performs the second hop to get the actual datetime value.
+    if "/TimeInstant/" in uri or "#TimeInstant/" in uri:
         query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}eta> ?value .
@@ -152,9 +168,10 @@ LIMIT 1
             pass
         return clean_uri(uri)
 
-    elif "/Airline/" in uri or "#Airline/" in uri:
-        # Airlines store an ICAO code in operating_as, not a readable name.
-        # We retrieve the code then expand it via AIRLINE_CODES.
+    # ── Airline: ICAO code lookup + expansion ─────────────────────────────────
+    # Airlines store an ICAO code in operating_as, not a readable name.
+    # We retrieve the code then expand it via AIRLINE_CODES.
+    if "/Airline/" in uri or "#Airline/" in uri:
         query = f"""
 SELECT ?value WHERE {{
   <{uri}> <{base}operating_as> ?value .
@@ -177,18 +194,14 @@ LIMIT 1
             pass
         return clean_uri(uri)
 
+    # ── City and Aircraft: generic label lookup ───────────────────────────────
+    if "/City/" in uri or "#City/" in uri:
+        name_props = ["orig_city"]
     elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
-
-    elif "/Route/" in uri or "#Route/" in uri:
-        route_name = uri.split("/Route/")[-1]
-        return urllib.parse.unquote(route_name).replace("_", " ")
-
     else:
         return clean_uri(uri)
 
-    # Generic label lookup — used for City and Aircraft branches.
-    # TimeInstant, Airline and Route return early above and never reach this loop.
     for name_prop in name_props:
         query = f"""
 SELECT ?value WHERE {{

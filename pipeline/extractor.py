@@ -1,21 +1,9 @@
 import json
 import ollama
 
-# CHANGED — VALID_PROPERTIES removed.
-#
-# Previously, this set was used to validate the extracted property by checking
-# whether it was one of a fixed list of English strings.
-#
-# This was the root cause of the dead-lexicon problem: the extractor prompt
-# forced the LLM to normalize all property names to English before the mapper
-# ever saw them. As a result, the French and Arabic keys in lexicon.json
-# were never reachable.
-#
-# Validation is now delegated to the mapping step: a property is considered
-# valid if and only if map_property or map_property_with_embeddings can resolve
-# it to a known Knowledge Graph URI. This is semantically more correct —
-# the ground truth of validity is the Knowledge Graph, not a hardcoded list.
-
+# KNOWN_FLIGHT_PREFIXES is used by is_flight_question to verify that the
+# extracted entity looks like a real flight number before the pipeline
+# continues. This avoids wasting a SPARQL query on garbage extraction.
 KNOWN_FLIGHT_PREFIXES = [
     "OS", "FR", "TK", "BR", "BA", "AF",
     "KE", "LO", "BT", "PC", "7L", "XQ",
@@ -24,40 +12,33 @@ KNOWN_FLIGHT_PREFIXES = [
     "SM", "SN", "TO", "VF", "W"
 ]
 
+
 def safe_json_parse(text):
     try:
         return json.loads(text)
-    except:
+    except Exception:
         start = text.find("{")
         end = text.rfind("}") + 1
         if start != -1 and end != -1:
             try:
                 return json.loads(text[start:end])
-            except:
+            except Exception:
                 return None
     return None
 
+
 def extract_entities(question, lang):
-    # CHANGED — The prompt no longer contains an "Allowed properties" list.
+    # The allowed-values list is intentionally strict and exhaustive.
+    # The LLM must pick exactly one value — no paraphrasing, no invention.
     #
-    # Before:
-    #   The prompt said "use exactly these words: departure city, arrival city ..."
-    #   This forced the LLM to normalize all output to English, making the
-    #   multilingual lexicon permanently unreachable.
+    # The disambiguation block is the critical addition.
+    # Without it, the LLM collapses similar concepts:
+    #   - "terminal" → "gate"       (both relate to boarding)
+    #   - "callsign" → "flight number" (both are identifiers)
+    #   - "country"  → "city"       (both are geographic)
     #
-    # After:
-    #   The prompt instructs the LLM to return the property as it naturally
-    #   appears in the question. If the user wrote in Arabic, the property
-    #   field will contain Arabic text. If French, French text. If English,
-    #   English text.
-    #
-    #   The examples are updated to reflect this: the expected output for a
-    #   French question now contains a French property name, and the expected
-    #   output for an Arabic question contains an Arabic property name.
-    #
-    #   This makes the extractor a faithful surface-text extractor, and
-    #   delegates all normalization and resolution to the mapper — which is
-    #   where the multilingual lexicon lives.
+    # The examples below train the model on those exact boundaries
+    # so it learns to distinguish them from surface-text cues alone.
 
     prompt = f"""
 You are an entity extractor for a flight knowledge graph.
@@ -66,22 +47,58 @@ Extract the flight number and the property being asked about.
 You MUST return the property using EXACTLY one of these allowed values:
 
 English: departure city, arrival city, airline, pilot, gate, runway,
-aircraft, weather, flight number, arrival time, route
+aircraft, weather, flight number, arrival time, route,
+terminal, callsign, departure country, arrival country, flight attendant
 
 French: ville de départ, ville d'arrivée, compagnie aérienne, pilote,
-porte, piste, avion, météo, numéro de vol, heure d'arrivée, itinéraire
+porte, piste, avion, météo, numéro de vol, heure d'arrivée, itinéraire,
+terminal, indicatif, pays de départ, pays d'arrivée, personnel de cabine
 
 Arabic: مدينة المغادرة, مدينة الوصول, شركة الطيران, الطيار,
-البوابة, المدرج, الطائرة, الطقس, رقم الرحلة, وقت الوصول, المسار
+البوابة, المدرج, الطائرة, الطقس, رقم الرحلة, وقت الوصول, المسار,
+الصالة, الرمز, بلد المغادرة, بلد الوصول, طاقم الضيافة
 
-Choose the value from the list that best matches what the question is asking about.
-Use the same language as the question.
+── DISAMBIGUATION RULES ──────────────────────────────────────────────
+These pairs are easily confused. Read carefully:
 
-Examples:
-- "Where does OS235 depart from?" → {{"entity": "OS235", "property": "departure city"}}
-- "Quelle compagnie opère le vol AF1739?" → {{"entity": "AF1739", "property": "compagnie aérienne"}}
-- "ما هو مدرج هبوط الرحلة BR62؟" → {{"entity": "BR62", "property": "المدرج"}}
-- "من هو طيار الرحلة AI180؟" → {{"entity": "AI180", "property": "الطيار"}}
+gate     = the door/number where passengers board (e.g. "gate", "porte", "البوابة")
+terminal = the building at the airport           (e.g. "terminal", "Terminal", "الصالة")
+→ "Which gate?" and "Which terminal?" are DIFFERENT questions.
+
+callsign     = the radio identifier used by air traffic control (e.g. "callsign", "indicatif", "الرمز")
+flight number = the commercial number printed on a ticket      (e.g. "flight number", "numéro de vol", "رقم الرحلة")
+→ "What is the callsign?" and "What is the flight number?" are DIFFERENT questions.
+
+departure city    = the city the flight departs from   (e.g. "departure city", "ville de départ", "مدينة المغادرة")
+departure country = the country the flight departs from (e.g. "departure country", "pays de départ", "بلد المغادرة")
+arrival city      = the city the flight arrives at     (e.g. "arrival city", "ville d'arrivée", "مدينة الوصول")
+arrival country   = the country the flight arrives at  (e.g. "arrival country", "pays d'arrivée", "بلد الوصول")
+→ City and country are DIFFERENT levels of geography. Never substitute one for the other.
+
+── EXAMPLES ──────────────────────────────────────────────────────────
+
+Standard cases:
+- "Where does OS235 depart from?"              → {{"entity": "OS235",  "property": "departure city"}}
+- "Quelle compagnie opère le vol AF1739?"      → {{"entity": "AF1739", "property": "compagnie aérienne"}}
+- "ما هو مدرج هبوط الرحلة BR62؟"              → {{"entity": "BR62",   "property": "المدرج"}}
+
+Disambiguation cases (study these carefully):
+- "What is the gate of flight OS235?"          → {{"entity": "OS235",  "property": "gate"}}
+- "What is the terminal of flight OS235?"      → {{"entity": "OS235",  "property": "terminal"}}
+- "What is the callsign of flight BR62?"       → {{"entity": "BR62",   "property": "callsign"}}
+- "What is the flight number of flight BR62?"  → {{"entity": "BR62",   "property": "flight number"}}
+- "What is the departure city of flight TK1887?"    → {{"entity": "TK1887", "property": "departure city"}}
+- "What is the departure country of flight TK1887?" → {{"entity": "TK1887", "property": "departure country"}}
+- "What is the arrival city of flight AF1739?"      → {{"entity": "AF1739", "property": "arrival city"}}
+- "What is the arrival country of flight AF1739?"   → {{"entity": "AF1739", "property": "arrival country"}}
+- "Quel est le terminal du vol OS235?"         → {{"entity": "OS235",  "property": "terminal"}}
+- "Quelle est la porte du vol OS235?"          → {{"entity": "OS235",  "property": "porte"}}
+- "Quel est le pays de départ du vol AF1739?"  → {{"entity": "AF1739", "property": "pays de départ"}}
+- "Quelle est la ville de départ du vol AF1739?" → {{"entity": "AF1739", "property": "ville de départ"}}
+- "ما هي الصالة الخاصة بالرحلة AF1739؟"      → {{"entity": "AF1739", "property": "الصالة"}}
+- "ما هي البوابة الخاصة بالرحلة AF1739؟"     → {{"entity": "AF1739", "property": "البوابة"}}
+- "ما هو بلد المغادرة للرحلة BR62؟"           → {{"entity": "BR62",   "property": "بلد المغادرة"}}
+- "ما هي مدينة المغادرة للرحلة BR62؟"         → {{"entity": "BR62",   "property": "مدينة المغادرة"}}
 
 Return ONLY a JSON object. No explanation. No extra text.
 
@@ -98,31 +115,21 @@ Question: {question}
             return result
         return {"entity": None, "property": None, "reason": f"parse_failed: {raw[:200]}"}
 
-    # CHANGED — Added error handling for Ollama connection failures.
-    # Previously, if Ollama was not running, this function raised an uncaught
-    # exception that crashed the program before any log entry was written.
-    # This fix is part of Issue #8 but applied here since we are editing this file.
     except Exception as e:
         return {"entity": None, "property": None, "reason": f"ollama_error: {str(e)}"}
 
+
 def validate_extraction(entities):
-    # CHANGED — Removed the VALID_PROPERTIES check.
-    #
-    # Before:
-    #   if entities.get("property") not in VALID_PROPERTIES: return False
-    #   This rejected any non-English property string, preventing Arabic and
-    #   French surface forms from ever reaching the mapper.
-    #
-    # After:
-    #   We only verify that both fields are non-empty strings.
-    #   Whether the property is meaningful is determined later by map_property
-    #   and map_property_with_embeddings. If both return None, the system
-    #   correctly logs a mapping failure for that test case.
+    # Validation is intentionally minimal here.
+    # Whether the property is meaningful is determined by the mapper:
+    # if both map_property and map_property_with_embeddings return None,
+    # the system logs a mapping_failure — which is a valid evaluation outcome.
     if not entities.get("entity"):
         return False
     if not entities.get("property"):
         return False
     return True
+
 
 def is_flight_question(entities):
     entity = entities.get("entity", "")
