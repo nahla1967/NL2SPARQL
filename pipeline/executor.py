@@ -4,10 +4,48 @@ import urllib.request
 import ollama
 from rdflib.plugins.sparql import prepareQuery
 
-# Country code lookup table.
-# Used to resolve ISO 3166-1 alpha-2 codes returned by the KG
-# into readable country names before passing them to the answer formatter.
-# Without this, the LLM may hallucinate incorrect expansions (e.g. "DE" → "Denmark").
+# ── LOOKUP TABLES ─────────────────────────────────────────────────────────────
+
+# Expands ICAO 3-letter airline codes stored in the KG to full airline names.
+# Without this, the LLM formatter receives raw codes like "THY" and may
+# hallucinate incorrect expansions.
+AIRLINE_CODES = {
+    "AFR": "Air France",
+    "AIC": "Air India",
+    "AUA": "Austrian Airlines",
+    "AZG": "Azerbaijan Airlines",
+    "BEL": "Brussels Airlines",
+    "BRX": "Braathens Regional Airways",
+    "BTI": "Air Baltic",
+    "CFG": "Condor",
+    "CTN": "Croatia Airlines",
+    "DLA": "Air Dolomiti",
+    "EVA": "EVA Air",
+    "EWL": "Eurowings",
+    "FCM": "Air Belgium",
+    "FIN": "Finnair",
+    "FSF": "FLY7 Finland",
+    "KAL": "Korean Air",
+    "LDA": "Lauda Air",
+    "LGL": "Luxair",
+    "LOT": "LOT Polish Airlines",
+    "MAE": "Mali Air",
+    "MAY": "Malta Air",
+    "MSC": "MSC Air Cargo",
+    "OAW": "Helvetic Airways",
+    "PEV": "People's Viennaline",
+    "PGT": "Pegasus Airlines",
+    "RYS": "Ryanair Sun",
+    "SXS": "SunExpress",
+    "THY": "Turkish Airlines",
+    "TKJ": "Turkish Airlines Charter",
+    "TVF": "Transavia France",
+    "WMT": "Wizz Air Malta"
+}
+
+# Expands ISO 3166-1 alpha-2 country codes stored in the KG to full country names.
+# Without this, the LLM formatter receives raw codes like "AT" and may
+# hallucinate incorrect expansions (e.g. "DE" → "Denmark" instead of "Germany").
 COUNTRY_CODES = {
     "AT": "Austria",
     "DE": "Germany",
@@ -38,13 +76,7 @@ COUNTRY_CODES = {
 }
 
 
-def resolve_country_code(value):
-    """
-    Resolves a 2-letter ISO country code to its full name.
-    Returns the original value unchanged if not found in the table.
-    """
-    return COUNTRY_CODES.get(value.strip().upper(), value)
-
+# ── SPARQL VALIDATION ─────────────────────────────────────────────────────────
 
 def validate_sparql(query):
     """
@@ -58,10 +90,12 @@ def validate_sparql(query):
         return False
 
 
+# ── URI AND VALUE RESOLUTION ──────────────────────────────────────────────────
+
 def clean_uri(value):
     """
-    Converts a raw URI into a readable string as a last-resort fallback.
-    Strips the namespace and replaces underscores with spaces.
+    Converts a raw URI or encoded literal into a readable string.
+    Used as a last-resort fallback when no specific resolver applies.
     """
     if value.startswith("http"):
         return value.split("/")[-1].replace("_", " ")
@@ -69,6 +103,15 @@ def clean_uri(value):
 
 
 def resolve_entity(uri):
+    """
+    Resolves a KG URI to a human-readable value.
+
+    - City     → queries Fuseki for orig_city label
+    - Airline  → queries Fuseki for operating_as code, expands via AIRLINE_CODES
+    - Aircraft → queries Fuseki for type label
+    - Route    → URL-decodes the URI fragment directly
+    - Other    → falls back to clean_uri
+    """
     if not uri.startswith("http"):
         return uri
 
@@ -77,16 +120,44 @@ def resolve_entity(uri):
 
     if "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
+
     elif "/Airline/" in uri or "#Airline/" in uri:
-        name_props = ["operating_as"]
+        # Airlines store an ICAO code in operating_as, not a readable name.
+        # We retrieve the code then expand it via AIRLINE_CODES.
+        query = f"""
+SELECT ?value WHERE {{
+  <{uri}> <{base}operating_as> ?value .
+}}
+LIMIT 1
+"""
+        data = urllib.parse.urlencode({
+            "query": query,
+            "format": "application/sparql-results+json"
+        }).encode()
+        req = urllib.request.Request(url, data=data)
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read())
+                bindings = result["results"]["bindings"]
+                if bindings:
+                    code = bindings[0][list(bindings[0].keys())[0]]["value"]
+                    return AIRLINE_CODES.get(code, code)
+        except Exception:
+            pass
+        return clean_uri(uri)
+
     elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
+
     elif "/Route/" in uri or "#Route/" in uri:
         route_name = uri.split("/Route/")[-1]
         return urllib.parse.unquote(route_name).replace("_", " ")
+
     else:
         return clean_uri(uri)
 
+    # Generic label lookup — used for City and Aircraft branches.
+    # Airline and Route return early above so never reach this loop.
     for name_prop in name_props:
         query = f"""
 SELECT ?value WHERE {{
@@ -103,19 +174,22 @@ LIMIT 1
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read())
                 bindings = result["results"]["bindings"]
-                #print(f"[debug] bindings returned: {bindings}")
                 if bindings:
                     first_key = list(bindings[0].keys())[0]
                     return bindings[0][first_key]["value"]
         except Exception as e:
-            print(f"[debug] resolve_entity inner query failed: {e}")
+            print(f"[resolve_entity] Inner query failed: {e}")
 
     return clean_uri(uri)
+
+
+# ── SPARQL EXECUTION ──────────────────────────────────────────────────────────
 
 def execute_sparql(sparql_query):
     """
     Executes a SPARQL SELECT query against the local Fuseki endpoint.
-    Resolves the returned value through resolve_entity and resolve_country_code.
+    Resolves the returned value through resolve_entity, then expands
+    any 2-letter ISO country code to its full country name.
     Returns None if the query fails or returns no results.
     """
     url = "http://localhost:3030/flights/sparql"
@@ -132,13 +206,12 @@ def execute_sparql(sparql_query):
             bindings = result["results"]["bindings"]
             if bindings:
                 first_key = list(bindings[0].keys())[0]
-                #print(f"[debug] raw binding value: {bindings[0][first_key]['value']}")
                 raw_value = resolve_entity(bindings[0][first_key]["value"])
 
-                # Resolve 2-letter ISO country codes to full country names.
-                # Prevents the LLM formatter from hallucinating incorrect expansions.
+                # Expand ISO country codes to full names.
+                # Prevents the LLM formatter from hallucinating wrong expansions.
                 if raw_value and len(raw_value) == 2 and raw_value.isupper():
-                    raw_value = resolve_country_code(raw_value)
+                    raw_value = COUNTRY_CODES.get(raw_value, raw_value)
 
                 return raw_value
 
@@ -150,11 +223,14 @@ def execute_sparql(sparql_query):
     return None
 
 
+# ── ANSWER FORMATTING ─────────────────────────────────────────────────────────
+
 def format_answer(question, raw_value, lang):
     """
     Uses the LLM to reformulate the raw KG answer into a natural language
     sentence in the same language as the user's original question.
-    Falls back to a structured error string if Ollama is unavailable.
+    Falls back to a structured error string if Ollama is unavailable,
+    so the log entry remains useful for evaluation.
     """
     lang_map = {
         "en": "English",
