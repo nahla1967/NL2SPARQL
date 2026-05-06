@@ -1,4 +1,5 @@
 import json
+import re
 import ollama
 
 # KNOWN_FLIGHT_PREFIXES is used by is_flight_question to verify that the
@@ -27,61 +28,63 @@ def safe_json_parse(text):
     return None
 
 
+# ── FLIGHT NUMBER REGEX ───────────────────────────────────────────────────────
+# Matches any airline code (2-3 letters) followed by digits, any case.
+# Covers all prefixes in KNOWN_FLIGHT_PREFIXES and any others present in the KG.
+_FLIGHT_RE = re.compile(r'\b([A-Za-z]{2,3})\d+', re.ASCII)
+
+
+def _extract_flight_number(text: str) -> str | None:
+    """
+    Extracts a flight number directly from the question text using regex.
+    This avoids relying on the LLM to correctly isolate the entity string.
+    Priority: longest prefix wins (e.g. MAE123 beats AE123).
+    """
+    matches = _FLIGHT_RE.findall(text.upper())
+    if not matches:
+        return None
+    return max(matches, key=len)
+
+
+# ── PROPERTY PHRASE EXTRACTION ───────────────────────────────────────────────
+#
+# KEY DESIGN CHANGE: the extractor no longer maps to canonical property names.
+# It extracts the RAW property phrase as the user wrote it — no translation.
+# The cascade (exact → fuzzy → semantic) does the normalisation.
+#
+# Why this is better:
+#   OLD: LLM translates "quand arrive" → "heure d'arrivée"   ← translation step = noise
+#   NEW: LLM echoes "quand arrive"      → cascade resolves it ← pure normalisation
+#
+# Eliminating the translation step means:
+#   - Fewer errors: no canonical mapping to get wrong
+#   - Faster: exact/fuzzy hit rate rises significantly
+#   - Cleaner failure cases: when mapping fails, we know the phrase is genuinely OOV
+
 def extract_entities(question, lang):
-    # Why a strict allowed-values list?
-    # The LLM must return an exact known string so the lexicon lookup
-    # succeeds. Free-form output ("departing airport", "origin") would
-    # require fuzzy matching at this stage, which defeats the purpose of
-    # a controlled mapping layer.
-    #
-    # Why keep only disambiguation examples and drop standard ones?
-    # Standard cases (departure city, airline, aircraft) are already
-    # unambiguous from the allowed-values list. The examples budget is
-    # better spent on the pairs the model genuinely confuses:
-    # gate vs terminal, callsign vs flight number, city vs country.
+    flight = _extract_flight_number(question)
 
-    prompt = f"""You are an entity extractor for a flight knowledge graph.
-Extract the flight number and the property being asked about.
+    prompt = f"""You are a property phrase extractor for a flight knowledge graph.
 
-Return ONLY the property using EXACTLY one of these values:
+TASK: Read the question and extract ONLY the words that describe
+what property of the flight is being asked about.
 
-English : departure city, arrival city, airline, pilot, gate, runway,
-          aircraft, weather, flight number, arrival time, route,
-          terminal, callsign, departure country, arrival country, flight attendant
+RULES:
+- Extract the phrase AS IT APPEARS in the question (do not translate)
+- Return ONLY the extracted phrase — no labels, no canonical forms
+- Strip common question framing (e.g. "What is the", "of flight TK1887")
 
-French  : ville de départ, ville d'arrivée, compagnie aérienne, pilote,
-          porte, piste, avion, météo, numéro de vol, heure d'arrivée, itinéraire,
-          terminal, indicatif, pays de départ, pays d'arrivée, personnel de cabine
+EXAMPLES:
+"What is the gate of flight OS235?"              → "gate"
+"What is the departure city of flight TK1887?"    → "departure city"
+"When does flight AF1739 arrive?"                → "when does it arrive"
+"What is the terminal?"                          → "terminal"
+"Quel est la porte du vol OS235?"                → "porte"
+"Quelle est la ville de départ du vol TK1887?"   → "ville de départ"
+"متى تصل الرحلة OS235؟"                          → "متى تصل"
+"ما هو مطار المغادرة؟"                           → "مطار المغادرة"
 
-Arabic  : مدينة المغادرة, مدينة الوصول, شركة الطيران, الطيار,
-          البوابة, المدرج, الطائرة, الطقس, رقم الرحلة, وقت الوصول, المسار,
-          الصالة, الرمز, بلد المغادرة, بلد الوصول, طاقم الضيافة
-
-── DISAMBIGUATION (easily confused pairs) ────────────────────────────
-gate     = boarding door/number  |  terminal = airport building
-callsign = ATC radio identifier  |  flight number = ticket number
-departure city    ≠ departure country
-arrival city      ≠ arrival country
-
-── EXAMPLES (hard cases only) ────────────────────────────────────────
-"What is the gate of flight OS235?"          → {{"entity": "OS235",  "property": "gate"}}
-"What is the terminal of flight OS235?"      → {{"entity": "OS235",  "property": "terminal"}}
-"What is the callsign of flight BR62?"       → {{"entity": "BR62",   "property": "callsign"}}
-"What is the flight number of flight BR62?"  → {{"entity": "BR62",   "property": "flight number"}}
-"What is the departure city of TK1887?"      → {{"entity": "TK1887", "property": "departure city"}}
-"What is the departure country of TK1887?"   → {{"entity": "TK1887", "property": "departure country"}}
-"What is the arrival city of AF1739?"        → {{"entity": "AF1739", "property": "arrival city"}}
-"What is the arrival country of AF1739?"     → {{"entity": "AF1739", "property": "arrival country"}}
-"Quel est le terminal du vol OS235?"         → {{"entity": "OS235",  "property": "terminal"}}
-"Quelle est la porte du vol OS235?"          → {{"entity": "OS235",  "property": "porte"}}
-"Quel est le pays de départ du vol AF1739?"  → {{"entity": "AF1739", "property": "pays de départ"}}
-"Quelle est la ville de départ du vol AF1739?" → {{"entity": "AF1739", "property": "ville de départ"}}
-"ما هي الصالة الخاصة بالرحلة AF1739؟"      → {{"entity": "AF1739", "property": "الصالة"}}
-"ما هي البوابة الخاصة بالرحلة AF1739؟"     → {{"entity": "AF1739", "property": "البوابة"}}
-"ما هو بلد المغادرة للرحلة BR62؟"           → {{"entity": "BR62",   "property": "بلد المغادرة"}}
-"ما هي مدينة المغادرة للرحلة BR62؟"         → {{"entity": "BR62",   "property": "مدينة المغادرة"}}
-
-Return ONLY a JSON object. No explanation. No extra text.
+Return ONLY a JSON object with key "property". No explanation. No extra text.
 
 Question: {question}
 """
@@ -90,14 +93,24 @@ Question: {question}
             model="llama3",
             messages=[{"role": "user", "content": prompt}]
         )
-        raw    = response["message"]["content"]
-        result = safe_json_parse(raw)
-        if result:
-            return result
-        return {"entity": None, "property": None, "reason": f"parse_failed: {raw[:200]}"}
+        raw  = response["message"]["content"]
+        prop = ""
+        parsed = safe_json_parse(raw)
+        if parsed:
+            prop = parsed.get("property", "")
+        prop = prop.strip().lower() if prop else ""
+
+        return {
+            "entity":   flight,
+            "property": prop,
+        }
 
     except Exception as e:
-        return {"entity": None, "property": None, "reason": f"ollama_error: {str(e)}"}
+        return {
+            "entity":   flight,
+            "property": "",
+            "reason":   f"ollama_error: {str(e)}",
+        }
 
 
 def validate_extraction(entities):

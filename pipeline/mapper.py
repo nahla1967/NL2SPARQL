@@ -14,7 +14,10 @@ FUSEKI_URL       = "http://localhost:3030/flights/sparql"
 CACHE_EMBEDDINGS = "lexicon_embeddings.npy"   # pre-computed phrase vectors
 CACHE_PHRASES    = "lexicon_phrases.json"     # phrase list aligned to the matrix
 
-FUZZY_THRESHOLD    = 87   # rapidfuzz WRatio score out of 100
+FUZZY_THRESHOLD    = 80   # rapidfuzz WRatio score out of 100
+# 80 instead of 87: catches spelling mistakes ("componie" → "compagnie" scores 82)
+# while still rejecting random noise. You can lower to 75 for more coverage.
+
 SEMANTIC_THRESHOLD = 0.75 # cosine similarity
 
 
@@ -45,6 +48,58 @@ def _get_phrases(lexicon: dict) -> list[str]:
     inside 'properties'. Metadata lives separately under '_sections'.
     """
     return list(lexicon["properties"].keys())
+
+
+# ── PRE-NORMALISE STEP ───────────────────────────────────────────────────────
+#
+# Before calling any cascade tier, try a plain normalisation + exact lookup.
+# This is NOT the same as map_property below:
+#   - map_property does  _normalise(input) → lexicon lookup (Tier 1)
+#   - _pre_normalise     does the same but ALSO handles:
+#       * stripping small stopwords ("the", "du", "la", "de", "ال")
+#       * collapsing multiple spaces
+#       * stripping trailing question marks
+#
+# The idea: the LLM extractor now returns a raw phrase like "gate" or
+# "ville de départ" stripped of question framing. The pre-normalise step
+# catches the majority of clean inputs in a single cheap operation,
+# keeping the cascade for genuinely difficult cases only.
+
+
+def _pre_normalise(text: str) -> str:
+    """
+    Lightweight cleanup before lexicon lookup.
+    Strips punctuation, common article words, and extra whitespace.
+    """
+    text = text.strip().lower()
+
+    # Strip trailing question mark (language-agnostic)
+    text = re.sub(r'\?+$', '', text)
+
+    # Collapse internal punctuation to spaces — "ville,d'arrivée" → "ville d'arrivée"
+    text = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', text)
+
+    # Collapse multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
+def _pre_map(text: str, lexicon: dict) -> tuple[str | None, str | None]:
+    """
+    Tries direct normalised lookup before invoking any cascade tier.
+    Returns (property_short_name, None) on success, or (None, None) on failure.
+    This step is fast and cheap — no fuzzy, no embeddings.
+    """
+    norm = _pre_normalise(text)
+    normalised_properties = {
+        _normalise(k): v
+        for k, v in lexicon["properties"].items()
+    }
+    result = normalised_properties.get(norm)
+    if result:
+        print(f"[pre-norm] '{text}' → '{norm}' → exact hit: {result}")
+    return result, None
 
 
 # ── TIER 1 — EXACT MATCH ──────────────────────────────────────────────────────
@@ -84,10 +139,22 @@ def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
     return None
 
 
-# ── TIER 3 — SEMANTIC EMBEDDINGS (pre-computed, cached) ──────────────────────
+# ── TIER 3 — SEMANTIC EMBEDDINGS (language-aware) ─────────────────────────────
 # The lexicon never changes between runs, so recomputing embeddings every time
 # is wasteful. We compute the phrase matrix once, persist it to disk, and load
 # it on subsequent runs. Only the user's query needs a fresh forward pass.
+#
+# IMPORTANT: semantic matching is language-aware.
+# Without language filtering, a French query like "componie" could incorrectly
+# match an Arabic phrase that happens to be vectorially close. To prevent this:
+#   1. Detect the script of the input (Arabic / Latin)
+#   2. Build a sub-matrix of only same-script lexicon entries
+#   3. Search within that sub-matrix first
+#   4. Fall back to full matrix only if no good match found
+#
+# Known limitation: this heuristic splits the lexicon by script (Arabic vs Latin),
+# which means EN/FR share the same semantic space. This is acceptable since they
+# are morphologically close and the multilingual model handles cross-lingual cases.
 
 _embedding_model   = None   # lazy-loaded on first use
 _cached_embeddings = None   # numpy matrix (n_phrases × 768)
@@ -134,26 +201,114 @@ def _load_or_build_cache(lexicon: dict):
     return phrases, embeddings
 
 
+def _detect_script(text: str) -> str:
+    """
+    Heuristic language/script detection for semantic filtering.
+    Returns 'arabic' | 'latin' based on dominant Unicode block.
+    """
+    arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
+    total        = len([c for c in text if c.isalpha()])
+    if total == 0:
+        return "latin"
+    return "arabic" if arabic_chars / total > 0.3 else "latin"
+
+
+_ARABIC_RE  = re.compile(r'^[\u0600-\u06FF\s\?]+$')
+
+
+def _is_arabic_phrase(phrase: str) -> bool:
+    """True if phrase is primarily Arabic script."""
+    return bool(_ARABIC_RE.match(phrase))
+
+
 def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | None:
     """
-    Semantic fallback. Only called when tiers 1 and 2 both fail.
-    Encodes only the user's query (one forward pass), then computes cosine
-    similarity against the pre-loaded phrase matrix.
+    Semantic fallback with language-aware search.
+    See cascade docstring above for the language-filtering strategy.
     """
     model           = _get_model()
     phrases, matrix = _load_or_build_cache(lexicon)
     norm_in         = _normalise(property_text)
+    script          = _detect_script(norm_in)
 
-    query_vec  = model.encode(norm_in)
-    scores     = util.cos_sim(query_vec, matrix)[0]
-    best_index = scores.argmax().item()
-    best_score = scores[best_index].item()
+    query_vec = model.encode(norm_in)
 
-    print(f"[semantic] input='{property_text}' → match='{phrases[best_index]}' score={best_score:.3f}")
+    # Step 1: same-script candidates only
+    same_script_indices = [
+        i for i, ph in enumerate(phrases)
+        if (_is_arabic_phrase(ph) if script == "arabic" else not _is_arabic_phrase(ph))
+    ]
 
-    if best_score >= SEMANTIC_THRESHOLD:
-        return lexicon["properties"][phrases[best_index]]
+    if same_script_indices:
+        sub_matrix      = matrix[same_script_indices]
+        sub_scores      = util.cos_sim(query_vec, sub_matrix)[0]
+        best_sub_idx    = sub_scores.argmax().item()
+        best_sub_score  = sub_scores[best_sub_idx].item()
+        best_index      = same_script_indices[best_sub_idx]
+        best_phrase     = phrases[best_index]
+        best_score      = best_sub_score
+
+        print(f"[semantic] input='{property_text}' [script={script}] "
+              f"→ match='{best_phrase}' score={best_score:.3f} "
+              f"(searched {len(same_script_indices)} same-script candidates)")
+
+        if best_score >= SEMANTIC_THRESHOLD:
+            return lexicon["properties"][best_phrase]
+
+    # Step 2: fallback — search full matrix (cross-script permitted)
+    all_scores     = util.cos_sim(query_vec, matrix)[0]
+    best_full_idx  = all_scores.argmax().item()
+    best_full_score = all_scores[best_full_idx].item()
+    best_full_phrase = phrases[best_full_idx]
+
+    print(f"[semantic] input='{property_text}' [script={script}] "
+          f"→ full-matrix best: match='{best_full_phrase}' score={best_full_score:.3f} "
+          f"(same-script search returned no confident match)")
+
+    # Only return if full-matrix score is notably better AND above threshold
+    # This prevents silently accepting a mediocre cross-script match
+    if best_full_score >= SEMANTIC_THRESHOLD + 0.05:
+        return lexicon["properties"][best_full_phrase]
+
     return None
+
+
+# ── FULL CASCADE (returns URI + tier for evaluation) ──────────────────────────
+
+def map_property_cascade(property_text: str, lexicon: dict) -> tuple[str | None, str | None]:
+    """
+    Full mapping cascade with tier reporting for evaluation.
+
+    Returns (property_short_name, tier_label):
+        tier_label = "pre-norm" | "exact" | "fuzzy" | "semantic" | None
+
+    Evaluation use: logs.jsonl records which tier resolved each query, so you
+    can compute tier-coverage statistics across your full test set.
+    """
+    if not property_text:
+        return None, None
+
+    # Tier 0 — pre-normalise (fast, no LLM/fuzzy needed)
+    uri, _ = _pre_map(property_text, lexicon)
+    if uri:
+        return uri, "pre-norm"
+
+    # Tier 1 — exact (after full normalisation)
+    uri = map_property(property_text, lexicon)
+    if uri:
+        return uri, "exact"
+
+    # Tier 2 — fuzzy
+    uri = map_property_fuzzy(property_text, lexicon)
+    if uri:
+        return uri, "fuzzy"
+
+    # Tier 3 — semantic
+    uri = map_property_with_embeddings(property_text, lexicon)
+    if uri:
+        return uri, "semantic"
+
+    return None, None
 
 
 # ── FLIGHT MAPPING ────────────────────────────────────────────────────────────

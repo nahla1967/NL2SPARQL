@@ -9,10 +9,8 @@ from pipeline.extractor import (
 )
 from pipeline.mapper import (
     load_lexicon,
-    map_property,
-    map_property_with_embeddings,
-    map_flight,
-    map_property_fuzzy
+    map_property_cascade,
+    map_flight
 )
 from pipeline.generator import inject_and_generate
 from pipeline.executor import (
@@ -59,27 +57,16 @@ if not validate_extraction(entities) or not is_flight_question(entities):
     exit()
 
 # ── STEP 2: MAPPING ───────────────────────────────────────
-# Why: LLMs cannot be trusted to guess URIs → must resolve BEFORE generation
+# Why: LLMs cannot be trusted to guess URIs → must resolve BEFORE generation.
+#      map_property_cascade runs the full pre-norm → exact → fuzzy → semantic
+#      chain and returns both the URI and which tier resolved it (for logging).
 
 lexicon = load_lexicon()
 
-# First attempt: exact match (high precision)
-property_uri   = None
-mapping_layer  = None
-
-property_uri = map_property(entities["property"], lexicon)
-if property_uri:
-    mapping_layer = "exact"
-
-if property_uri is None:
-    property_uri = map_property_fuzzy(entities["property"], lexicon)
-    if property_uri:
-        mapping_layer = "fuzzy"
-
-if property_uri is None:
-    property_uri = map_property_with_embeddings(entities["property"], lexicon)
-    if property_uri:
-        mapping_layer = "semantic"
+property_uri, mapping_layer = map_property_cascade(
+    entities["property"],
+    lexicon
+)
 
 # Flight mapping via KG lookup
 flight_uri = map_flight(entities["entity"])

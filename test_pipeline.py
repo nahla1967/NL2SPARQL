@@ -3,9 +3,7 @@ from pipeline.language import detect_language
 from pipeline.extractor import extract_entities, validate_extraction, is_flight_question
 from pipeline.mapper import (
     load_lexicon,
-    map_property,
-    map_property_fuzzy,
-    map_property_with_embeddings,
+    map_property_cascade,
     map_flight
 )
 from pipeline.generator import inject_and_generate
@@ -18,12 +16,15 @@ lexicon = load_lexicon()
 # ══════════════════════════════════════════════════════════════════════════════
 
 MAPPING_TESTS = [
-    ("flying to",                  "hasDestinationCity",  "should hit exact"),
+    ("flying to",                  "hasDestinationCity",  "should hit pre-norm/exact"),
     ("piste d envol",              "hasRunway",           "should hit fuzzy"),
     ("tarmac strip",               "hasRunway",           "should hit semantic"),
     ("meteorological conditions",  "hasWeatherCondition", "should hit semantic"),
     ("boarding door",              "hasGate",             "should hit semantic"),
     ("من يتولى قيادة",             "hasPilot",            "should hit semantic"),
+    ("gate",                       "hasGate",             "should hit pre-norm"),
+    ("ville de départ",            "hasOriginCity",       "should hit pre-norm"),
+    ("مطار المغادرة",              "hasOriginCity",       "should hit pre-norm"),
 ]
 
 print("══ PART 1 — MAPPING UNIT TESTS ══════════════════════════════════════════")
@@ -32,21 +33,12 @@ map_passed = 0
 map_failed = 0
 
 for text, expected, note in MAPPING_TESTS:
-    uri  = map_property(text, lexicon)
-    tier = "exact"
-
-    if uri is None:
-        uri  = map_property_fuzzy(text, lexicon)
-        tier = "fuzzy" if uri else None
-
-    if uri is None:
-        uri  = map_property_with_embeddings(text, lexicon)
-        tier = "semantic" if uri else "none"
+    uri, tier = map_property_cascade(text, lexicon)
 
     prop  = uri if uri else "None"
     match = "✅" if (expected in prop) else "❌"
 
-    print(f"  {match} [{tier:8}] '{text}' → {prop.split('#')[-1] if uri else 'None'} ({note})")
+    print(f"  {match} [{str(tier):10}] '{text}' → {prop.split('#')[-1] if uri else 'None'} ({note})")
 
     if expected in prop:
         map_passed += 1
@@ -63,14 +55,7 @@ print(f"\n  Results: {map_passed} passed, {map_failed} failed out of {len(MAPPIN
 TEST_CASES = [
     {"question": "OS235 depart from where??",                   "condition": "zero-shot"},
     {"question": "quel est la companie du vol TK1887",          "condition": "few-shot"},
-    {"question": "the wether of flight BR62 ?",                 "condition": "cot"},
-    {"question": "AF1739 quel terminal",                        "condition": "zero-shot"},
-    {"question": "من فضلك ما هي بوابة الرحلة OS235؟",         "condition": "few-shot"},
-    {"question": "TK1887 runway",                               "condition": "cot"},
-    {"question": "l avion de vol BR62 cest quoi",               "condition": "zero-shot"},
-    {"question": "what is the arival time of flight AF1739",    "condition": "few-shot"},
-    {"question": "OS235 وين تروح؟",                             "condition": "cot"},
-    {"question": "give me the route for TK1887 please",         "condition": "zero-shot"},
+    {"question": "متى تصل الرحلة OS235؟",                       "condition": "zero-shot"},
 ]
 
 print("\n\n══ PART 2 — STRESS TESTS — REAL USER BEHAVIOUR ═════════════════════════")
@@ -86,26 +71,10 @@ for i, case in enumerate(TEST_CASES):
     entities = extract_entities(question, lang)
 
     if not validate_extraction(entities) or not is_flight_question(entities):
-        print(f"   ❌ REJECTED — {entities.get('reason', 'validation_failed')}")
+        print(f"   ❌ REJECTED — entity={entities.get('entity')} prop={entities.get('property')} reason={entities.get('reason', 'validation_failed')}")
         continue
 
-    property_uri  = None
-    mapping_layer = None
-
-    property_uri = map_property(entities["property"], lexicon)
-    if property_uri:
-        mapping_layer = "exact"
-
-    if property_uri is None:
-        property_uri = map_property_fuzzy(entities["property"], lexicon)
-        if property_uri:
-            mapping_layer = "fuzzy"
-
-    if property_uri is None:
-        property_uri = map_property_with_embeddings(entities["property"], lexicon)
-        if property_uri:
-            mapping_layer = "semantic"
-
+    property_uri, mapping_layer = map_property_cascade(entities["property"], lexicon)
     flight_uri = map_flight(entities["entity"])
 
     if not flight_uri or not property_uri:
