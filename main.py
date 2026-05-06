@@ -21,7 +21,7 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question =  "What is the arrival time of flight OS235?"
+question =  "What is the departure city of flight OS295?"
 condition = "few-shot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────

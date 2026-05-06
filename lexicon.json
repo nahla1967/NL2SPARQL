@@ -74,6 +74,11 @@
     "وجهة الرحلة":                "hasDestinationCity",
     "المدينة المقصودة":           "hasDestinationCity",
     "أين تهبط":                   "hasDestinationCity",
+    "وين تروح":                   "hasDestinationCity",
+    "وين رايح":                   "hasDestinationCity",
+    "وين ماشي":                   "hasDestinationCity",
+    "إلى وين":                    "hasDestinationCity",
+    "وين واقف":                   "hasDestinationCity",
 
     "airline":                    "hasAirline",
     "carrier":                    "hasAirline",

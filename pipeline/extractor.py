@@ -31,7 +31,7 @@ def safe_json_parse(text):
 # ── FLIGHT NUMBER REGEX ───────────────────────────────────────────────────────
 # Matches any airline code (2-3 letters) followed by digits, any case.
 # Covers all prefixes in KNOWN_FLIGHT_PREFIXES and any others present in the KG.
-_FLIGHT_RE = re.compile(r'\b([A-Za-z]{2,3})\d+', re.ASCII)
+_FLIGHT_RE = re.compile(r'\b([A-Za-z]{2,3}\d+)', re.ASCII)
 
 
 def _extract_flight_number(text: str) -> str | None:
@@ -75,13 +75,13 @@ RULES:
 - Strip common question framing (e.g. "What is the", "of flight TK1887")
 
 EXAMPLES:
-"What is the gate of flight OS235?"              → "gate"
-"What is the departure city of flight TK1887?"    → "departure city"
-"When does flight AF1739 arrive?"                → "when does it arrive"
+"What is the gate of flight OS529?"              → "gate"
+"What is the departure city of flight OS295?"     → "departure city"
+"When does flight BR62 arrive?"                  → "when does it arrive"
 "What is the terminal?"                          → "terminal"
-"Quel est la porte du vol OS235?"                → "porte"
-"Quelle est la ville de départ du vol TK1887?"   → "ville de départ"
-"متى تصل الرحلة OS235؟"                          → "متى تصل"
+"Quel est la porte du vol OS529?"                → "porte"
+"Quelle est la ville de départ du vol OS295?"    → "ville de départ"
+"متى تصل الرحلة BR62؟"                           → "متى تصل"
 "ما هو مطار المغادرة؟"                           → "مطار المغادرة"
 
 Return ONLY a JSON object with key "property". No explanation. No extra text.
