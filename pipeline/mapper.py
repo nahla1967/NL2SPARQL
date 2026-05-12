@@ -226,12 +226,12 @@ def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | Non
     Semantic fallback with language-aware search.
     See cascade docstring above for the language-filtering strategy.
     """
-    model           = _get_model()
-    phrases, matrix = _load_or_build_cache(lexicon)
+    model           = _get_model()#the AI that converts phrases to vectors
+    phrases, matrix = _load_or_build_cache(lexicon)#a pre-computed table of vectors for every phrase in your lexicon
     norm_in         = _normalise(property_text)
     script          = _detect_script(norm_in)
 
-    query_vec = model.encode(norm_in)
+    query_vec = model.encode(norm_in)# Convert user input to vector
 
     # Step 1: same-script candidates only
     same_script_indices = [
@@ -354,3 +354,5 @@ LIMIT 1
     except Exception as e:
         print(f"[map_flight] Unexpected error: {e}")
     return None
+
+#why didnt we put the flights in the lexicon ? because the flights are dynamic so we need to query fuseki because "too many , random uris" + faster , propertes in lexicon because they are fixed + knwown in advance + instant

@@ -37,7 +37,7 @@ TEST_CASES = [
     },
     {
         "id": 3,
-        "question":   "What is the arrival time of flight BR62?",
+        "question":   "What is the arrival time of flight OS295?",
         "condition":  "cot",
         "expected":   "success",
         "note":       "EN clean — arrival time, two-hop resolve in executor"

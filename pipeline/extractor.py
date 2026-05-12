@@ -12,7 +12,7 @@ KNOWN_FLIGHT_PREFIXES = [
     "LG", "LX", "MAE", "OU", "PE",
     "SM", "SN", "TO", "VF", "W"
 ]
-
+# kima  OS529 
 
 def safe_json_parse(text):
     try:
@@ -31,7 +31,7 @@ def safe_json_parse(text):
 # ── FLIGHT NUMBER REGEX ───────────────────────────────────────────────────────
 # Matches any airline code (2-3 letters) followed by digits, any case.
 # Covers all prefixes in KNOWN_FLIGHT_PREFIXES and any others present in the KG.
-_FLIGHT_RE = re.compile(r'\b([A-Za-z]{2,3}\d+)', re.ASCII)
+_FLIGHT_RE = re.compile(r'\b([A-Za-z]{2,3}\d+)', re.ASCII)  #structure mta3 flight tabda 2 wlle 3 letters ba3ed digits ,we use regex instead of llm to avoid hallucination
 
 
 def _extract_flight_number(text: str) -> str | None:
@@ -71,7 +71,7 @@ what property of the flight is being asked about.
 
 RULES:
 - Extract the phrase AS IT APPEARS in the question (do not translate)
-- Return ONLY the extracted phrase — no labels, no canonical forms
+- Return ONLY the extracted phrase : no labels, no canonical forms
 - Strip common question framing (e.g. "What is the", "of flight TK1887")
 
 EXAMPLES:

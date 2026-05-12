@@ -21,7 +21,7 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question =  "What is the departure city of flight OS295?"
+question =  "Who s the hotesse de l'air of flight OS295?"
 condition = "few-shot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
@@ -33,11 +33,12 @@ lang = detect_language(question)
 # - the flight (entity)
 # - what is being asked (property)
 entities = extract_entities(question, lang)
-
+#print(f"DEBUG entities: {entities}") 
 # ── VALIDATION: EXTRACTION ────────────────────────────────
-# Why: prevent garbage from propagating into the pipeline
+
 if not validate_extraction(entities) or not is_flight_question(entities):
-    print("Out of scope or extraction failed.")
+    print("Out of scope or extraction failed.")#If no flight number or no property found → stop immediately and log the failure.
+#Why stop? Because continuing with missing data would produce garbage results.
 
     log = {
         "condition": condition,
@@ -129,7 +130,7 @@ if "PREFIX" in sparql_query:
     is_valid = False
 
 # 4. CRITICAL: enforce correct property usage
-# Why: proves knowledge injection is respected
+# Why: proves knowledge injection is respected ( important for thesis claims)
 if property_uri not in sparql_query:
     is_valid = False
 

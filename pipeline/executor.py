@@ -76,7 +76,7 @@ COUNTRY_CODES = {
     "AL": "Albania"
 }
 
-
+#kg stores codes like "AT" for austria , so we need to expand them to avoid llm hallucination
 # ── SPARQL VALIDATION ─────────────────────────────────────────────────────────
 
 def validate_sparql(query):
@@ -100,7 +100,7 @@ def validate_sparql(query):
 _entity_cache: dict[str, str] = {}
 
 
-def clean_uri(value):
+def clean_uri(value):#Converts ugly URIs into readable text :
     """
     Converts a raw URI or encoded literal into a readable string.
     Used as a last-resort fallback when no specific resolver applies.
@@ -110,7 +110,7 @@ def clean_uri(value):
     return urllib.parse.unquote(value).replace("_", " ")
 
 
-def resolve_entity(uri):
+def resolve_entity(uri):# the function checks what type of URI it received, then handles it correctly , 5 branches : route , time instant , airline , city , aircraft  
     """
     Resolves a KG URI to a human-readable value.
 
@@ -245,7 +245,7 @@ LIMIT 1
     # Store resolved value before returning
     _entity_cache[uri] = result
     return result
-
+                         #
 
 # ── SPARQL EXECUTION ──────────────────────────────────────────────────────────
 
