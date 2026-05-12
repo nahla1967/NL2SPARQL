@@ -321,7 +321,7 @@ def map_property_cascade(property_text: str, lexicon: dict) -> tuple[str | None,
 _flight_uri_cache: dict[str, str] = {}
 
 
-def map_flight(flight_number: str) -> str | None:
+def map_flight(flight_number: str) -> str | None: #this is 1 hop just finding the flight uri , one step not multi hop
     base          = "http://www.semanticweb.org/ontologies/flight_ontology#"
     flight_number = flight_number.strip().upper()
 

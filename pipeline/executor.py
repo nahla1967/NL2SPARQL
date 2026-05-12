@@ -110,7 +110,7 @@ def clean_uri(value):#Converts ugly URIs into readable text :
     return urllib.parse.unquote(value).replace("_", " ")
 
 
-def resolve_entity(uri):# the function checks what type of URI it received, then handles it correctly , 5 branches : route , time instant , airline , city , aircraft  
+def resolve_entity(uri):# the function checks what type of URI it received, then handles it correctly ,  branches : route , time instant , airline , city , aircraft  
     """
     Resolves a KG URI to a human-readable value.
 
@@ -145,17 +145,18 @@ def resolve_entity(uri):# the function checks what type of URI it received, then
     url    = "http://localhost:3030/flights/sparql"
     result = None
 
-    # ── Route: pure string extraction, no HTTP ────────────────────────────────
+    # ── Route ────────────────────────────────────────────────────────────────
     if "/Route/" in uri or "#Route/" in uri:
         separator = "#Route/" if "#Route/" in uri else "/Route/"
         fragment  = uri.split(separator, 1)[-1]
         result    = urllib.parse.unquote(fragment).replace("_", " ").strip()
 
-    # ── TimeInstant: two-hop SPARQL ───────────────────────────────────────────
+    # ── TimeInstant ───────────────────────────────────────────────────────────
     elif "/TimeInstant/" in uri or "#TimeInstant/" in uri:
         query = f"""
-SELECT ?value WHERE {{
-  <{uri}> <{base}eta> ?value .
+SELECT ?eta ?date WHERE {{
+  OPTIONAL {{ <{uri}> <{base}eta> ?eta . }}
+  OPTIONAL {{ <{uri}> <{base}date> ?date . }}
 }}
 LIMIT 1
 """
@@ -169,16 +170,19 @@ LIMIT 1
                 res      = json.loads(response.read())
                 bindings = res["results"]["bindings"]
                 if bindings:
-                    raw_time = bindings[0][list(bindings[0].keys())[0]]["value"]
-                    dt       = datetime.strptime(raw_time, "%Y-%m-%dT%H:%M:%SZ")
-                    result   = dt.strftime("%d %B %Y at %H:%M UTC")
+                    eta  = bindings[0].get("eta",  {}).get("value", None)
+                    date = bindings[0].get("date", {}).get("value", None)
+                    if eta:
+                        dt     = datetime.strptime(eta, "%Y-%m-%dT%H:%M:%SZ")
+                        result = dt.strftime("%d %B %Y at %H:%M UTC")
+                    elif date:
+                        result = date
         except Exception as e:
             print(f"[resolve_entity] TimeInstant query failed for {uri}: {e}")
         if result is None:
-            print(f"[resolve_entity] TimeInstant fallback triggered for {uri}")
             result = clean_uri(uri)
 
-    # ── Airline: ICAO code lookup + expansion ─────────────────────────────────
+    # ── Airline ───────────────────────────────────────────────────────────────
     elif "/Airline/" in uri or "#Airline/" in uri:
         query = f"""
 SELECT ?value WHERE {{
@@ -201,19 +205,108 @@ LIMIT 1
         except Exception as e:
             print(f"[resolve_entity] Airline query failed for {uri}: {e}")
         if result is None:
-            print(f"[resolve_entity] Airline fallback triggered for {uri}")
             result = clean_uri(uri)
 
-    # ── City and Aircraft: generic label lookup ───────────────────────────────
+    # ── Location ──────────────────────────────────────────────────────────────
+    elif "/Location/" in uri or "#Location/" in uri:
+        query = f"""
+SELECT ?lat ?long ?alt WHERE {{
+  <{uri}> <{base}lat> ?lat .
+  <{uri}> <{base}long> ?long .
+  <{uri}> <{base}alt> ?alt .
+}}
+LIMIT 1
+"""
+        data = urllib.parse.urlencode({
+            "query": query,
+            "format": "application/sparql-results+json"
+        }).encode()
+        req = urllib.request.Request(url, data=data)
+        try:
+            with urllib.request.urlopen(req) as response:
+                res      = json.loads(response.read())
+                bindings = res["results"]["bindings"]
+                if bindings:
+                    lat  = bindings[0].get("lat",  {}).get("value", "?")
+                    long = bindings[0].get("long", {}).get("value", "?")
+                    alt  = bindings[0].get("alt",  {}).get("value", "?")
+                    result = f"lat: {lat}, long: {long}, alt: {alt}"
+        except Exception as e:
+            print(f"[resolve_entity] Location query failed for {uri}: {e}")
+        if result is None:
+            result = clean_uri(uri)
+
+    # ── FlightEvent ───────────────────────────────────────────────────────────
+    elif "/FlightEvent/" in uri or "#FlightEvent/" in uri:
+        query = f"""
+SELECT ?gspeed ?vspeed WHERE {{
+  <{uri}> <{base}gspeed> ?gspeed .
+  <{uri}> <{base}vspeed> ?vspeed .
+}}
+LIMIT 1
+"""
+        data = urllib.parse.urlencode({
+            "query": query,
+            "format": "application/sparql-results+json"
+        }).encode()
+        req = urllib.request.Request(url, data=data)
+        try:
+            with urllib.request.urlopen(req) as response:
+                res      = json.loads(response.read())
+                bindings = res["results"]["bindings"]
+                if bindings:
+                    gspeed = bindings[0].get("gspeed", {}).get("value", "?")
+                    vspeed = bindings[0].get("vspeed", {}).get("value", "?")
+                    result = f"ground speed: {gspeed} kt, vertical speed: {vspeed} ft/min"
+        except Exception as e:
+            print(f"[resolve_entity] FlightEvent query failed for {uri}: {e}")
+        if result is None:
+            result = clean_uri(uri)
+
+    # ── Airport ───────────────────────────────────────────────────────────────
+    elif "/Airport/" in uri or "#Airport/" in uri:
+        query = f"""
+SELECT ?orig_iata ?dest_iata ?orig_icao ?dest_icao WHERE {{
+  OPTIONAL {{ <{uri}> <{base}orig_iata> ?orig_iata . }}
+  OPTIONAL {{ <{uri}> <{base}dest_iata> ?dest_iata . }}
+  OPTIONAL {{ <{uri}> <{base}orig_icao> ?orig_icao . }}
+  OPTIONAL {{ <{uri}> <{base}dest_icao> ?dest_icao . }}
+}}
+LIMIT 1
+"""
+        data = urllib.parse.urlencode({
+            "query": query,
+            "format": "application/sparql-results+json"
+        }).encode()
+        req = urllib.request.Request(url, data=data)
+        try:
+            with urllib.request.urlopen(req) as response:
+                res      = json.loads(response.read())
+                bindings = res["results"]["bindings"]
+                if bindings:
+                    orig_iata = bindings[0].get("orig_iata", {}).get("value", "?")
+                    dest_iata = bindings[0].get("dest_iata", {}).get("value", "?")
+                    orig_icao = bindings[0].get("orig_icao", {}).get("value", "?")
+                    dest_icao = bindings[0].get("dest_icao", {}).get("value", "?")
+                    result = f"origin: {orig_iata} ({orig_icao}), destination: {dest_iata} ({dest_icao})"
+        except Exception as e:
+            print(f"[resolve_entity] Airport query failed for {uri}: {e}")
+        if result is None:
+            result = clean_uri(uri)
+
+    # ── City ──────────────────────────────────────────────────────────────────
     elif "/City/" in uri or "#City/" in uri:
         name_props = ["orig_city"]
+
+    # ── Aircraft ──────────────────────────────────────────────────────────────
     elif "/Aircraft/" in uri or "#Aircraft/" in uri:
         name_props = ["type"]
+
     else:
         print(f"[resolve_entity] No branch matched — falling back to clean_uri for {uri}")
         result = clean_uri(uri)
 
-    # City / Aircraft share the same label-lookup loop
+    # City / Aircraft shared loop
     if result is None:
         for name_prop in name_props:
             query = f"""
@@ -237,15 +330,11 @@ LIMIT 1
                         break
             except Exception as e:
                 print(f"[resolve_entity] {name_prop} query failed for {uri}: {e}")
-
         if result is None:
-            print(f"[resolve_entity] City/Aircraft label lookup exhausted — falling back to clean_uri for {uri}")
             result = clean_uri(uri)
 
-    # Store resolved value before returning
     _entity_cache[uri] = result
-    return result
-                         #
+    return result                         #
 
 # ── SPARQL EXECUTION ──────────────────────────────────────────────────────────
 

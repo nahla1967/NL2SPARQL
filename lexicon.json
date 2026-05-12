@@ -367,6 +367,18 @@
     "معرف الرادار":                    "fr24Id",
     "كود التتبع":                      "fr24Id",
     "رقم التتبع":                      "fr24Id",
-    "معرف فلايت رادار":                "fr24Id"
+    "معرف فلايت رادار":                "fr24Id",
+
+    "airport details":             "hasAirportDetails",
+    "airport information":         "hasAirportDetails",
+    "airport codes":               "hasAirportDetails",
+    "iata code":                   "hasAirportDetails",
+    "icao code":                   "hasAirportDetails",
+    "aéroport détails":            "hasAirportDetails",
+    "codes aéroport":              "hasAirportDetails",
+    "détails aéroport":            "hasAirportDetails",
+    "تفاصيل المطار":               "hasAirportDetails",
+    "رمز المطار":                  "hasAirportDetails",
+    "كود المطار":                  "hasAirportDetails"
   }
 }

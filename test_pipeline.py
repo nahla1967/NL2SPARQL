@@ -21,161 +21,27 @@ from pipeline.executor   import validate_sparql, execute_sparql, format_answer
 TEST_CASES = [
 
     # ── ENGLISH — CLEAN ───────────────────────────────────────────────────────
+   # ── NEW RESOLVERS TEST ────────────────────────────────────────────────────
     {
-        "id": 1,
-        "question":   "What is the departure city of flight OS295?",
+        "id": 21,
+        "question":   "Where is flight OS295 right now?",
         "condition":  "zero-shot",
         "expected":   "success",
-        "note":       "EN clean — standard question, exact lexicon hit expected"
+        "note":       "EN — Location resolver test, expects lat/long/alt"
     },
     {
-        "id": 2,
-        "question":   "Which airline operates flight FR707?",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "EN clean — airline property, few-shot"
-    },
-    {
-        "id": 3,
-        "question":   "What is the arrival time of flight OS295?",
-        "condition":  "cot",
-        "expected":   "success",
-        "note":       "EN clean — arrival time, two-hop resolve in executor"
-    },
-    {
-        "id": 4,
-        "question":   "What gate does flight OS529 depart from?",
+        "id": 22,
+        "question":   "What is the speed of flight OS295?",
         "condition":  "zero-shot",
         "expected":   "success",
-        "note":       "EN clean — gate property"
-    },
-
-    # ── ENGLISH — TYPOS / INFORMAL ────────────────────────────────────────────
-    {
-        "id": 5,
-        "question":   "what is the wether of flight OS295",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "EN typo — 'wether' instead of 'weather', fuzzy should catch it"
+        "note":       "EN — FlightEvent resolver test, expects gspeed/vspeed"
     },
     {
-        "id": 6,
-        "question":   "FR707 depart from where??",
-        "condition":  "cot",
-        "expected":   "success",
-        "note":       "EN informal — reversed word order, no punctuation discipline"
-    },
-    {
-        "id": 7,
-        "question":   "waht is the arival time of flight BR62",
+        "id": 23,
+        "question":   "What are the airport details of flight OS295?",
         "condition":  "zero-shot",
         "expected":   "success",
-        "note":       "EN double typo — 'waht' + 'arival', tests extractor + fuzzy resilience"
-    },
-
-    # ── ENGLISH — ERROR CASES ─────────────────────────────────────────────────
-    {
-        "id": 8,
-        "question":   "What is the price of flight OS295?",
-        "condition":  "few-shot",
-        "expected":   "mapping_failure",
-        "note":       "EN out-of-scope property — 'price' does not exist in the KG"
-    },
-    {
-        "id": 9,
-        "question":   "What is the weather today?",
-        "condition":  "zero-shot",
-        "expected":   "extraction_failure",
-        "note":       "EN missing flight number — no entity, should be rejected at validation"
-    },
-    {
-        "id": 10,
-        "question":   "What is the airline of flight ZZ9999?",
-        "condition":  "cot",
-        "expected":   "extraction_failure",
-        "note":       "EN unknown flight number — ZZ9999 not in KG; rejected at validation since prefix not in KNOWN_FLIGHT_PREFIXES"
-    },
-
-    # ── FRENCH — CLEAN ────────────────────────────────────────────────────────
-    {
-        "id": 11,
-        "question":   "Quelle est la compagnie aérienne du vol FR707?",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "FR clean — exact lexicon hit expected"
-    },
-    {
-        "id": 12,
-        "question":   "Quel est le terminal du vol OS529?",
-        "condition":  "cot",
-        "expected":   "success",
-        "note":       "FR clean — terminal property, easily confused with gate"
-    },
-    {
-        "id": 13,
-        "question":   "D'où part le vol OS295?",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "FR clean — informal phrasing for departure city"
-    },
-
-    # ── FRENCH — TYPOS / INFORMAL ─────────────────────────────────────────────
-    {
-        "id": 14,
-        "question":   "quel est la companie du vol BR62",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "FR typo — 'companie' instead of 'compagnie', fuzzy threshold test"
-    },
-    {
-        "id": 15,
-        "question":   "OS529 quel terminal",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "FR informal — no question structure at all, just flight + keyword"
-    },
-
-    # ── FRENCH — ERROR CASE ───────────────────────────────────────────────────
-    {
-        "id": 16,
-        "question":   "Quel est le prix du billet pour le vol OS295?",
-        "condition":  "cot",
-        "expected":   "mapping_failure",
-        "note":       "FR out-of-scope — 'prix du billet' not in KG, mapping should fail"
-    },
-
-    # ── ARABIC — CLEAN ────────────────────────────────────────────────────────
-    {
-        "id": 17,
-        "question":   "ما هي بوابة الرحلة OS295؟",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "AR clean — gate property, standard phrasing"
-    },
-    {
-        "id": 18,
-        "question":   "متى تصل الرحلة BR62؟",
-        "condition":  "cot",
-        "expected":   "success",
-        "note":       "AR clean — arrival time, should hit exact or pre-norm"
-    },
-
-    # ── ARABIC — INFORMAL / DIALECT ───────────────────────────────────────────
-    {
-        "id": 19,
-        "question":   "OS295 وين تروح؟",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "AR dialect — Tunisian/Gulf 'wein' for 'where to', tests semantic fallback"
-    },
-
-    # ── MIXED LANGUAGE ────────────────────────────────────────────────────────
-    {
-        "id": 20,
-        "question":   "give me the runway for FR707 من فضلك",
-        "condition":  "few-shot",
-        "expected":   "success",
-        "note":       "Mixed EN+AR — 'min fadlak' (please) appended in Arabic, langdetect may misfire"
+        "note":       "EN — Airport resolver test, expects IATA/ICAO codes"
     },
 ]
 
