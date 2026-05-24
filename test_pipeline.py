@@ -20,28 +20,117 @@ from pipeline.executor   import validate_sparql, execute_sparql, format_answer
 
 TEST_CASES = [
 
-    # ── ENGLISH — CLEAN ───────────────────────────────────────────────────────
-   # ── NEW RESOLVERS TEST ────────────────────────────────────────────────────
+    # ── TWO-HOP — ENGLISH ─────────────────────────────────────────────────────
     {
-        "id": 21,
-        "question":   "Where is flight OS295 right now?",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "EN — Location resolver test, expects lat/long/alt"
+        "id": 1,
+        "question":  "What is the aircraft type of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasAircraft → type"
     },
     {
-        "id": 22,
-        "question":   "What is the speed of flight OS295?",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "EN — FlightEvent resolver test, expects gspeed/vspeed"
+        "id": 2,
+        "question":  "What is the aircraft type of flight OS295?",
+        "condition": "few-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop few-shot: hasAircraft → type"
     },
     {
-        "id": 23,
-        "question":   "What are the airport details of flight OS295?",
-        "condition":  "zero-shot",
-        "expected":   "success",
-        "note":       "EN — Airport resolver test, expects IATA/ICAO codes"
+        "id": 3,
+        "question":  "What is the aircraft type of flight OS295?",
+        "condition": "cot",
+        "expected":  "success",
+        "note":      "EN — two-hop CoT: hasAircraft → type"
+    },
+    {
+        "id": 4,
+        "question":  "What is the ground speed of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasFlightEvent → gspeed"
+    },
+    {
+        "id": 5,
+        "question":  "What is the vertical speed of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasFlightEvent → vspeed"
+    },
+    {
+        "id": 6,
+        "question":  "What is the registration of the aircraft of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasAircraft → reg"
+    },
+    {
+        "id": 7,
+        "question":  "What is the transponder code of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasAircraft → TransponderCode"
+    },
+    {
+        "id": 8,
+        "question":  "What livery does the airline of flight OS295 use?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — two-hop: hasAirline → painted_as"
+    },
+
+    # ── TWO-HOP — FRENCH ──────────────────────────────────────────────────────
+    {
+        "id": 9,
+        "question":  "Quel est le type d'appareil du vol OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "FR — two-hop: hasAircraft → type"
+    },
+    {
+        "id": 10,
+        "question":  "Quelle est la vitesse au sol du vol OS295?",
+        "condition": "few-shot",
+        "expected":  "success",
+        "note":      "FR — two-hop: hasFlightEvent → gspeed"
+    },
+
+    # ── TWO-HOP — ARABIC ──────────────────────────────────────────────────────
+    {
+        "id": 11,
+        "question":  "ما نوع طائرة الرحلة OS295؟",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "AR — two-hop: hasAircraft → type"
+    },
+    {
+        "id": 12,
+        "question":  "ما هي سرعة الرحلة OS295؟",
+        "condition": "cot",
+        "expected":  "success",
+        "note":      "AR — two-hop: hasFlightEvent → gspeed"
+    },
+
+    # ── SINGLE-HOP — REGRESSION CHECK ─────────────────────────────────────────
+    {
+        "id": 13,
+        "question":  "What is the departure city of flight OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "EN — single-hop regression: hasOriginCity"
+    },
+    {
+        "id": 14,
+        "question":  "What is the airline of flight OS295?",
+        "condition": "few-shot",
+        "expected":  "success",
+        "note":      "EN — single-hop regression: hasAirline"
+    },
+    {
+        "id": 15,
+        "question":  "Quelle est la ville de départ du vol OS295?",
+        "condition": "zero-shot",
+        "expected":  "success",
+        "note":      "FR — single-hop regression: hasOriginCity"
     },
 ]
 
@@ -88,7 +177,7 @@ def run_test(case, lexicon):
         return result
 
     # ── STEP 2: mapping ────────────────────────────────────────────────────────
-    property_uri, mapping_layer = map_property_cascade(entities["property"], lexicon)
+    property_uri, mapping_layer , property2_uri = map_property_cascade(entities["property"], lexicon)
     flight_uri = map_flight(entities["entity"])
 
     result["property_uri"]  = property_uri
@@ -101,7 +190,7 @@ def run_test(case, lexicon):
         return result
 
     # ── STEP 3: SPARQL generation ──────────────────────────────────────────────
-    sparql = inject_and_generate(flight_uri, property_uri, question, strategy=condition)
+    sparql = inject_and_generate(flight_uri, property_uri, question, strategy=condition , property2_uri=property2_uri)
     result["sparql"] = sparql
 
     # ── STEP 4: validation ─────────────────────────────────────────────────────

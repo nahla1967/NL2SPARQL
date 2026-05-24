@@ -21,8 +21,8 @@ from pipeline.executor import (
 
 # ── TEST CONFIGURATION ────────────────────────────────────
 # You manually change these for experiments
-question =  "Who s the hotesse de l'air of flight OS295?"
-condition = "few-shot"  # options: "zero-shot", "few-shot", "cot"
+question =  "What is the departure city of flight OS295?"
+condition = "cot"  # options: "zero-shot", "few-shot", "cot"
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────
 # Why: the system must support 3 languages → behavior depends on language
@@ -64,7 +64,7 @@ if not validate_extraction(entities) or not is_flight_question(entities):
 
 lexicon = load_lexicon()
 
-property_uri, mapping_layer = map_property_cascade(
+property_uri, mapping_layer, property2_uri = map_property_cascade(
     entities["property"],
     lexicon
 )
@@ -80,6 +80,7 @@ log = {
     "entities": entities,
     "flight_uri": flight_uri,
     "property_uri": property_uri,
+    "property2_uri": property2_uri,
     "mapping_layer": mapping_layer, 
     "sparql": None,
     "sparql_valid": False,
@@ -107,7 +108,8 @@ sparql_query = inject_and_generate(
     flight_uri,
     property_uri,
     question,
-    strategy=condition
+    strategy=condition,
+    property2_uri=property2_uri 
 )
 
 log["sparql"] = sparql_query
@@ -131,9 +133,13 @@ if "PREFIX" in sparql_query:
 
 # 4. CRITICAL: enforce correct property usage
 # Why: proves knowledge injection is respected ( important for thesis claims)
+BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
 if property_uri not in sparql_query:
     is_valid = False
-
+if property2_uri:
+    property2_full = BASE + property2_uri
+    if property2_full not in sparql_query:
+        is_valid = False
 log["sparql_valid"] = is_valid
 
 # ── STEP 5: EXECUTION ─────────────────────────────────────

@@ -275,40 +275,50 @@ def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | Non
 
 # ── FULL CASCADE (returns URI + tier for evaluation) ──────────────────────────
 
-def map_property_cascade(property_text: str, lexicon: dict) -> tuple[str | None, str | None]:
+def map_property_cascade(property_text, lexicon):
     """
-    Full mapping cascade with tier reporting for evaluation.
-
-    Returns (property_short_name, tier_label):
-        tier_label = "pre-norm" | "exact" | "fuzzy" | "semantic" | None
-
-    Evaluation use: logs.jsonl records which tier resolved each query, so you
-    can compute tier-coverage statistics across your full test set.
+    Returns (prop1, tier, prop2):
+    - prop1 : first property URI (or None if no match)
+    - tier  : which tier resolved it
+    - prop2 : second property URI for two-hop, or None for single-hop
     """
     if not property_text:
-        return None, None
+        return None, None, None
 
-    # Tier 0 — pre-normalise (fast, no LLM/fuzzy needed)
+    def _unpack(uri):
+        """
+        If uri is a list → two-hop: return (first, second)
+        If uri is a string → single-hop: return (uri, None)
+        """
+        if isinstance(uri, list):
+            return uri[0], uri[1]
+        return uri, None
+
+    # Tier 0 — pre-norm
     uri, _ = _pre_map(property_text, lexicon)
     if uri:
-        return uri, "pre-norm"
+        prop1, prop2 = _unpack(uri)
+        return prop1, "pre-norm", prop2
 
-    # Tier 1 — exact (after full normalisation)
+    # Tier 1 — exact
     uri = map_property(property_text, lexicon)
     if uri:
-        return uri, "exact"
+        prop1, prop2 = _unpack(uri)
+        return prop1, "exact", prop2
 
     # Tier 2 — fuzzy
     uri = map_property_fuzzy(property_text, lexicon)
     if uri:
-        return uri, "fuzzy"
+        prop1, prop2 = _unpack(uri)
+        return prop1, "fuzzy", prop2
 
     # Tier 3 — semantic
     uri = map_property_with_embeddings(property_text, lexicon)
     if uri:
-        return uri, "semantic"
+        prop1, prop2 = _unpack(uri)
+        return prop1, "semantic", prop2
 
-    return None, None
+    return None, None, None
 
 
 # ── FLIGHT MAPPING ────────────────────────────────────────────────────────────

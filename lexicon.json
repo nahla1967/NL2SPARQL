@@ -379,6 +379,28 @@
     "détails aéroport":            "hasAirportDetails",
     "تفاصيل المطار":               "hasAirportDetails",
     "رمز المطار":                  "hasAirportDetails",
-    "كود المطار":                  "hasAirportDetails"
+    "كود المطار":                  "hasAirportDetails",
+    "type d'appareil":       ["hasAircraft", "type"],
+    "quel type d'appareil":  ["hasAircraft", "type"],
+    "نوع الطائرة":           ["hasAircraft", "type"],
+    "ما نوع الطائرة":        ["hasAircraft", "type"],
+  
+    "aircraft type":          ["hasAircraft", "type"],
+    "type of aircraft":       ["hasAircraft", "type"],
+    "aircraft registration":  ["hasAircraft", "reg"],
+    "registration":           ["hasAircraft", "reg"],
+    "livery":                 ["hasAirline", "painted_as"],
+    "painted as":             ["hasAirline", "painted_as"],
+    "ground speed":           ["hasFlightEvent", "gspeed"],
+    "vertical speed":         ["hasFlightEvent", "vspeed"],
+    "transponder code":       ["hasAircraft", "TransponderCode"],
+    "transponder":            ["hasAircraft", "TransponderCode"]
+ 
+ 
+ 
   }
+
+
+
+
 }
