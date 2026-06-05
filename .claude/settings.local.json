@@ -1,7 +1,11 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(python test_pipeline.py)"
-    ]
+    "allow": ["Bash(python test_pipeline.py)"]
+  },
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://agentrouter.org/",
+    "ANTHROPIC_AUTH_TOKEN": "sk-GyDoRyB58MnHC01v16NimRhMqRfM7bR1yRHQUATeuBzWzRha",
+    "ANTHROPIC_API_KEY": "sk-GyDoRyB58MnHC01v16NimRhMqRfM7bR1yRHQUATeuBzWzRha",
+    "ANTHROPIC_MODEL": "claude-haiku-4-5-20251001"
   }
 }

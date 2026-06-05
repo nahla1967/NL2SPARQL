@@ -1,13 +1,21 @@
 import json
+import urllib.parse
+import urllib.request
 
-with open("lexicon.json", "r", encoding="utf-8") as f:
-    lexicon = json.load(f)
-
-two_hop = {
-    k: v for k, v in lexicon["properties"].items()
-    if isinstance(v, list)
+url = "http://localhost:3030/flights/sparql"
+query = """
+SELECT DISTINCT ?orig_iata ?dest_iata WHERE {
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasAirportDetails> ?airport .
+  OPTIONAL { ?airport <http://www.semanticweb.org/ontologies/flight_ontology#orig_iata> ?orig_iata . }
+  OPTIONAL { ?airport <http://www.semanticweb.org/ontologies/flight_ontology#dest_iata> ?dest_iata . }
 }
-
-print(f"Two-hop entries found: {len(two_hop)}")
-for phrase, chain in two_hop.items():
-    print(f"  '{phrase}' → {chain}")
+"""
+data = urllib.parse.urlencode({
+    "query": query,
+    "format": "application/sparql-results+json"
+}).encode()
+req = urllib.request.Request(url, data=data)
+with urllib.request.urlopen(req) as response:
+    result = json.loads(response.read())
+    for b in result["results"]["bindings"]:
+        print(b)
