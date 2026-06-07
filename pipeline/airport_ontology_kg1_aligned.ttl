@@ -1,0 +1,2588 @@
+@prefix ao: <http://www.semanticweb.org/ontologies/airport_ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://www.semanticweb.org/ontologies/airport_ontology> a owl:Ontology ;
+    rdfs:label "KG2 — Airport Knowledge Graph" ;
+    rdfs:comment "Exactly 58 airports that appear as origin or destination in KG1 flights. Every airport in this graph is linked to at least one real flight. Source: OurAirports open data." .
+
+ao:airportName a owl:DatatypeProperty ;
+    rdfs:comment "Full official name" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:string .
+
+ao:airportType a owl:DatatypeProperty ;
+    rdfs:comment "large_airport or medium_airport" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:string .
+
+ao:belongsToAirport a owl:ObjectProperty ;
+    rdfs:comment "Inverse of hasRunway." ;
+    rdfs:domain ao:Runway ;
+    rdfs:range ao:Airport ;
+    owl:inverseOf ao:hasRunway .
+
+ao:closed a owl:DatatypeProperty ;
+    rdfs:comment "True if runway is permanently closed" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:boolean .
+
+ao:continent a owl:DatatypeProperty ;
+    rdfs:comment "Two-letter continent code" ;
+    rdfs:domain ao:Country ;
+    rdfs:range xsd:string .
+
+ao:countryName a owl:DatatypeProperty ;
+    rdfs:comment "Full country name in English" ;
+    rdfs:domain ao:Country ;
+    rdfs:range xsd:string .
+
+ao:elevationFt a owl:DatatypeProperty ;
+    rdfs:comment "Elevation above sea level in feet" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:integer .
+
+ao:iataCode a owl:DatatypeProperty ;
+    rdfs:comment "IATA 3-letter code" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:string .
+
+ao:icaoCode a owl:DatatypeProperty ;
+    rdfs:comment "ICAO 4-letter code" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:string .
+
+ao:isoCode a owl:DatatypeProperty ;
+    rdfs:comment "ISO 3166-1 alpha-2 country code" ;
+    rdfs:domain ao:Country ;
+    rdfs:range xsd:string .
+
+ao:latitude a owl:DatatypeProperty ;
+    rdfs:comment "Latitude in decimal degrees WGS84" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:decimal .
+
+ao:lengthFt a owl:DatatypeProperty ;
+    rdfs:comment "Runway length in feet" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:integer .
+
+ao:lighted a owl:DatatypeProperty ;
+    rdfs:comment "True if runway has lighting" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:boolean .
+
+ao:locatedInCountry a owl:ObjectProperty ;
+    rdfs:comment "Links an Airport to its Country." ;
+    rdfs:domain ao:Airport ;
+    rdfs:range ao:Country .
+
+ao:locatedInRegion a owl:ObjectProperty ;
+    rdfs:comment "Links an Airport to its Region." ;
+    rdfs:domain ao:Airport ;
+    rdfs:range ao:Region .
+
+ao:longitude a owl:DatatypeProperty ;
+    rdfs:comment "Longitude in decimal degrees WGS84" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:decimal .
+
+ao:municipality a owl:DatatypeProperty ;
+    rdfs:comment "City served by this airport" ;
+    rdfs:domain ao:Airport ;
+    rdfs:range xsd:string .
+
+ao:regionCode a owl:DatatypeProperty ;
+    rdfs:comment "ISO 3166-2 region code" ;
+    rdfs:domain ao:Region ;
+    rdfs:range xsd:string .
+
+ao:regionName a owl:DatatypeProperty ;
+    rdfs:comment "Full region or state name" ;
+    rdfs:domain ao:Region ;
+    rdfs:range xsd:string .
+
+ao:runwayIdent a owl:DatatypeProperty ;
+    rdfs:comment "Runway heading identifier e.g. 07L" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:string .
+
+ao:surface a owl:DatatypeProperty ;
+    rdfs:comment "Surface material ASP CON GRS" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:string .
+
+ao:widthFt a owl:DatatypeProperty ;
+    rdfs:comment "Runway width in feet" ;
+    rdfs:domain ao:Runway ;
+    rdfs:range xsd:integer .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BLQ> a ao:Airport ;
+    ao:airportName "Bologna Guglielmo Marconi Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 123 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPE_12> ;
+    ao:iataCode "BLQ"^^xsd:string ;
+    ao:icaoCode "LIPE"^^xsd:string ;
+    ao:latitude 44.5354 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-45> ;
+    ao:longitude 11.2887 ;
+    ao:municipality "Bologna"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/CHQ> a ao:Airport ;
+    ao:airportName "Chania International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 490 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LGSA_11> ;
+    ao:iataCode "CHQ"^^xsd:string ;
+    ao:icaoCode "LGSA"^^xsd:string ;
+    ao:latitude 35.531207 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/GR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/GR-M> ;
+    ao:longitude 24.150673 ;
+    ao:municipality "Souda"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/CTA> a ao:Airport ;
+    ao:airportName "Catania-Fontanarossa Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 39 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICC_08> ;
+    ao:iataCode "CTA"^^xsd:string ;
+    ao:icaoCode "LICC"^^xsd:string ;
+    ao:latitude 37.466801 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-82> ;
+    ao:longitude 15.0664 ;
+    ao:municipality "Catania"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/KGS> a ao:Airport ;
+    ao:airportName "Kos International Airport \"Ippokratis\""^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 412 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LGKO_14> ;
+    ao:iataCode "KGS"^^xsd:string ;
+    ao:icaoCode "LGKO"^^xsd:string ;
+    ao:latitude 36.794523 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/GR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/GR-L> ;
+    ao:longitude 27.09115 ;
+    ao:municipality "Kos Island"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/KRK> a ao:Airport ;
+    ao:airportName "Kraków John Paul II International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 791 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPKK_07> ;
+    ao:iataCode "KRK"^^xsd:string ;
+    ao:icaoCode "EPKK"^^xsd:string ;
+    ao:latitude 50.077702 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/PL> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/PL-MA> ;
+    ao:longitude 19.7848 ;
+    ao:municipality "Balice"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/LCA> a ao:Airport ;
+    ao:airportName "Larnaca International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 8 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LCLK_04> ;
+    ao:iataCode "LCA"^^xsd:string ;
+    ao:icaoCode "LCLK"^^xsd:string ;
+    ao:latitude 34.875099 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/CY> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/CY-04> ;
+    ao:longitude 33.624901 ;
+    ao:municipality "Larnaca"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/LUX> a ao:Airport ;
+    ao:airportName "Luxembourg-Findel International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1234 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ELLX_06> ;
+    ao:iataCode "LUX"^^xsd:string ;
+    ao:icaoCode "ELLX"^^xsd:string ;
+    ao:latitude 49.626845 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/LU> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/LU-L> ;
+    ao:longitude 6.212134 ;
+    ao:municipality "Luxembourg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/NAP> a ao:Airport ;
+    ao:airportName "Naples International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 294 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRN_06> ;
+    ao:iataCode "NAP"^^xsd:string ;
+    ao:icaoCode "LIRN"^^xsd:string ;
+    ao:latitude 40.886002 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-72> ;
+    ao:longitude 14.2908 ;
+    ao:municipality "Napoli"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/PFO> a ao:Airport ;
+    ao:airportName "Paphos International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 41 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LCPH_11> ;
+    ao:iataCode "PFO"^^xsd:string ;
+    ao:icaoCode "LCPH"^^xsd:string ;
+    ao:latitude 34.717999 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/CY> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/CY-06> ;
+    ao:longitude 32.485699 ;
+    ao:municipality "Paphos"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/REB> a ao:Airport ;
+    ao:airportName "Müritz Airpark"^^xsd:string ;
+    ao:airportType "small_airport"^^xsd:string ;
+    ao:elevationFt 220 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDAX_07> ;
+    ao:iataCode "REB"^^xsd:string ;
+    ao:icaoCode "EDAX"^^xsd:string ;
+    ao:latitude 53.306389 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-MV> ;
+    ao:longitude 12.752222 ;
+    ao:municipality "Lärz"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/RIX> a ao:Airport ;
+    ao:airportName "Riga International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 36 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EVRA_18> ;
+    ao:iataCode "RIX"^^xsd:string ;
+    ao:icaoCode "EVRA"^^xsd:string ;
+    ao:latitude 56.920752 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/LV> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/LV-062> ;
+    ao:longitude 23.970711 ;
+    ao:municipality "Riga"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/RMF> a ao:Airport ;
+    ao:airportName "Marsa Alam International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 213 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/HEMA_15> ;
+    ao:iataCode "RMF"^^xsd:string ;
+    ao:icaoCode "HEMA"^^xsd:string ;
+    ao:latitude 25.555548 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/EG> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/EG-BA> ;
+    ao:longitude 34.59245 ;
+    ao:municipality "Marsa Alam"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/SBZ> a ao:Airport ;
+    ao:airportName "Sibiu International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1496 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LRSB_09> ;
+    ao:iataCode "SBZ"^^xsd:string ;
+    ao:icaoCode "LRSB"^^xsd:string ;
+    ao:latitude 45.785841 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/RO> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/RO-SB> ;
+    ao:longitude 24.086666 ;
+    ao:municipality "Sibiu"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/SOF> a ao:Airport ;
+    ao:airportName "Sofia Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1742 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LBSF_09> ;
+    ao:iataCode "SOF"^^xsd:string ;
+    ao:icaoCode "LBSF"^^xsd:string ;
+    ao:latitude 42.696357 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/BG> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/BG-22> ;
+    ao:longitude 23.417671 ;
+    ao:municipality "Sofia"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/TIA> a ao:Airport ;
+    ao:airportName "Tirana International Airport Mother Teresa"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 126 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LATI_17> ;
+    ao:iataCode "TIA"^^xsd:string ;
+    ao:icaoCode "LATI"^^xsd:string ;
+    ao:latitude 41.4147 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/AL> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/AL-02> ;
+    ao:longitude 19.7206 ;
+    ao:municipality "Rinas"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZAG> a ao:Airport ;
+    ao:airportName "Zagreb Franjo Tuđman International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 353 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LDZA_04> ;
+    ao:iataCode "ZAG"^^xsd:string ;
+    ao:icaoCode "LDZA"^^xsd:string ;
+    ao:latitude 45.742901 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/HR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/HR-01> ;
+    ao:longitude 16.0688 ;
+    ao:municipality "Velika Gorica"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/AL> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Albania"^^xsd:string ;
+    ao:isoCode "AL"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/AZ> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Azerbaijan"^^xsd:string ;
+    ao:isoCode "AZ"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/BE> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Belgium"^^xsd:string ;
+    ao:isoCode "BE"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/BG> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Bulgaria"^^xsd:string ;
+    ao:isoCode "BG"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/DK> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Denmark"^^xsd:string ;
+    ao:isoCode "DK"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/EG> a ao:Country ;
+    ao:continent "AF"^^xsd:string ;
+    ao:countryName "Egypt"^^xsd:string ;
+    ao:isoCode "EG"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/FI> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Finland"^^xsd:string ;
+    ao:isoCode "FI"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/HR> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Croatia"^^xsd:string ;
+    ao:isoCode "HR"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/IN> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "India"^^xsd:string ;
+    ao:isoCode "IN"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/IQ> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Iraq"^^xsd:string ;
+    ao:isoCode "IQ"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/JP> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Japan"^^xsd:string ;
+    ao:isoCode "JP"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/LU> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Luxembourg"^^xsd:string ;
+    ao:isoCode "LU"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/LV> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Latvia"^^xsd:string ;
+    ao:isoCode "LV"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/MT> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Malta"^^xsd:string ;
+    ao:isoCode "MT"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/RS> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Serbia"^^xsd:string ;
+    ao:isoCode "RS"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/SE> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Sweden"^^xsd:string ;
+    ao:isoCode "SE"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/TH> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Thailand"^^xsd:string ;
+    ao:isoCode "TH"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/US> a ao:Country ;
+    ao:countryName "United States"^^xsd:string ;
+    ao:isoCode "US"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/AL-02> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "AL"^^xsd:string ;
+    ao:regionCode "AL-02"^^xsd:string ;
+    ao:regionName "Durrës County"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/AT-6> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "AT"^^xsd:string ;
+    ao:regionCode "AT-6"^^xsd:string ;
+    ao:regionName "Styria"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/AT-9> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "AT"^^xsd:string ;
+    ao:regionCode "AT-9"^^xsd:string ;
+    ao:regionName "Vienna"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/AZ-BA> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "AZ"^^xsd:string ;
+    ao:regionCode "AZ-BA"^^xsd:string ;
+    ao:regionName "Baku (city)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/BE-VBR> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "BE"^^xsd:string ;
+    ao:regionCode "BE-VBR"^^xsd:string ;
+    ao:regionName "Flemish Brabant Province"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/BG-22> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "BG"^^xsd:string ;
+    ao:regionCode "BG-22"^^xsd:string ;
+    ao:regionName "Sofia City Province"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/CH-SG> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "CH"^^xsd:string ;
+    ao:regionCode "CH-SG"^^xsd:string ;
+    ao:regionName "St. Gallen"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/CH-ZH> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "CH"^^xsd:string ;
+    ao:regionCode "CH-ZH"^^xsd:string ;
+    ao:regionName "Zürich"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/CY-04> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "CY"^^xsd:string ;
+    ao:regionCode "CY-04"^^xsd:string ;
+    ao:regionName "Larnaca District"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/CY-06> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "CY"^^xsd:string ;
+    ao:regionCode "CY-06"^^xsd:string ;
+    ao:regionName "Paphos District"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BR> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-BR"^^xsd:string ;
+    ao:regionName "Brandenburg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BW> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-BW"^^xsd:string ;
+    ao:regionName "Baden-Württemberg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BY> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-BY"^^xsd:string ;
+    ao:regionName "Bavaria"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-HE> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-HE"^^xsd:string ;
+    ao:regionName "Hesse"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-HH> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-HH"^^xsd:string ;
+    ao:regionName "Hamburg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-MV> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-MV"^^xsd:string ;
+    ao:regionName "Mecklenburg-Vorpommern"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-NI> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-NI"^^xsd:string ;
+    ao:regionName "Lower Saxony"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-SN> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-SN"^^xsd:string ;
+    ao:regionName "Saxony"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DK-84> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DK"^^xsd:string ;
+    ao:regionCode "DK-84"^^xsd:string ;
+    ao:regionName "Capital Region"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/EG-BA> a ao:Region ;
+    ao:continent "AF"^^xsd:string ;
+    ao:isoCode "EG"^^xsd:string ;
+    ao:regionCode "EG-BA"^^xsd:string ;
+    ao:regionName "Red Sea Governorate"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/ES-CT> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "ES"^^xsd:string ;
+    ao:regionCode "ES-CT"^^xsd:string ;
+    ao:regionName "Catalonia"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/ES-IB> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "ES"^^xsd:string ;
+    ao:regionCode "ES-IB"^^xsd:string ;
+    ao:regionName "Islas Baleares"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/FI-18> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "FI"^^xsd:string ;
+    ao:regionCode "FI-18"^^xsd:string ;
+    ao:regionName "Uusimaa Region"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/FR-PAC> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "FR"^^xsd:string ;
+    ao:regionCode "FR-PAC"^^xsd:string ;
+    ao:regionName "Provence-Alpes-Côte-d'Azur"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/GR-L> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "GR"^^xsd:string ;
+    ao:regionCode "GR-L"^^xsd:string ;
+    ao:regionName "South Aegean"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/GR-M> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "GR"^^xsd:string ;
+    ao:regionCode "GR-M"^^xsd:string ;
+    ao:regionName "Crete"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/HR-01> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "HR"^^xsd:string ;
+    ao:regionCode "HR-01"^^xsd:string ;
+    ao:regionName "Zagreb County"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IN-MM> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "IN"^^xsd:string ;
+    ao:regionCode "IN-MM"^^xsd:string ;
+    ao:regionName "Maharashtra"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IQ-AR> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "IQ"^^xsd:string ;
+    ao:regionCode "IQ-AR"^^xsd:string ;
+    ao:regionName "Erbil Governorate"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-34> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-34"^^xsd:string ;
+    ao:regionName "Veneto"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-45> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-45"^^xsd:string ;
+    ao:regionName "Emilia-Romagna"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-62> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-62"^^xsd:string ;
+    ao:regionName "Lazio"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-72> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-72"^^xsd:string ;
+    ao:regionName "Campania"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-75> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-75"^^xsd:string ;
+    ao:regionName "Apulia"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/JP-12> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "JP"^^xsd:string ;
+    ao:regionCode "JP-12"^^xsd:string ;
+    ao:regionName "Chiba Prefecture"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/LU-L> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "LU"^^xsd:string ;
+    ao:regionCode "LU-L"^^xsd:string ;
+    ao:regionName "Luxembourg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/LV-062> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "LV"^^xsd:string ;
+    ao:regionCode "LV-062"^^xsd:string ;
+    ao:regionName "Mārupe Municipality"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/MT-25> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "MT"^^xsd:string ;
+    ao:regionCode "MT-25"^^xsd:string ;
+    ao:regionName "Luqa"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/PL-MA> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "PL"^^xsd:string ;
+    ao:regionCode "PL-MA"^^xsd:string ;
+    ao:regionName "Lesser Poland Voivodeship"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/PL-MZ> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "PL"^^xsd:string ;
+    ao:regionCode "PL-MZ"^^xsd:string ;
+    ao:regionName "Masovian Voivodeship"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/RO-IF> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "RO"^^xsd:string ;
+    ao:regionCode "RO-IF"^^xsd:string ;
+    ao:regionName "Ilfov County"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/RO-SB> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "RO"^^xsd:string ;
+    ao:regionCode "RO-SB"^^xsd:string ;
+    ao:regionName "Sibiu County"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/RS-00> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "RS"^^xsd:string ;
+    ao:regionCode "RS-00"^^xsd:string ;
+    ao:regionName "Beograd (city)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/SE-AB> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "SE"^^xsd:string ;
+    ao:regionCode "SE-AB"^^xsd:string ;
+    ao:regionName "Stockholms län"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/TH-10> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "TH"^^xsd:string ;
+    ao:regionCode "TH-10"^^xsd:string ;
+    ao:regionName "Bangkok (special administrative area)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-06> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "TR"^^xsd:string ;
+    ao:regionCode "TR-06"^^xsd:string ;
+    ao:regionName "Ankara Province"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-07> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "TR"^^xsd:string ;
+    ao:regionCode "TR-07"^^xsd:string ;
+    ao:regionName "Antalya Province"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/US-NY> a ao:Region ;
+    ao:isoCode "US"^^xsd:string ;
+    ao:regionCode "US-NY"^^xsd:string ;
+    ao:regionName "New York"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_01> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRU> ;
+    ao:closed false ;
+    ao:lengthFt 9800 ;
+    ao:lighted true ;
+    ao:runwayIdent "01"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_07L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRU> ;
+    ao:closed false ;
+    ao:lengthFt 11936 ;
+    ao:lighted true ;
+    ao:runwayIdent "07L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_07R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRU> ;
+    ao:closed false ;
+    ao:lengthFt 10535 ;
+    ao:lighted true ;
+    ao:runwayIdent "07R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDAX_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/REB> ;
+    ao:closed false ;
+    ao:lengthFt 7808 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDB_06L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BER> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "06L"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDB_06R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BER> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "06R"^^xsd:string ;
+    ao:surface "concrete"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07C> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FRA> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "07C"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FRA> ;
+    ao:closed false ;
+    ao:lengthFt 9186 ;
+    ao:lighted true ;
+    ao:runwayIdent "07L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FRA> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "07R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_18> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FRA> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "18"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDH_05> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAM> ;
+    ao:closed false ;
+    ao:lengthFt 10663 ;
+    ao:lighted true ;
+    ao:runwayIdent "05"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 150 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDH_15> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAM> ;
+    ao:closed false ;
+    ao:lengthFt 12028 ;
+    ao:lighted true ;
+    ao:runwayIdent "15"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 150 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_06> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CGN> ;
+    ao:closed false ;
+    ao:lengthFt 8067 ;
+    ao:lighted true ;
+    ao:runwayIdent "06"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_13L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CGN> ;
+    ao:closed false ;
+    ao:lengthFt 12516 ;
+    ao:lighted true ;
+    ao:runwayIdent "13L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_13R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CGN> ;
+    ao:closed false ;
+    ao:lengthFt 6112 ;
+    ao:lighted true ;
+    ao:runwayIdent "13R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDL_05L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/DUS> ;
+    ao:closed false ;
+    ao:lengthFt 8858 ;
+    ao:lighted true ;
+    ao:runwayIdent "05L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDL_05R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/DUS> ;
+    ao:closed false ;
+    ao:lengthFt 9842 ;
+    ao:lighted true ;
+    ao:runwayIdent "05R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDM_08L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MUC> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "08L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDM_08R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MUC> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "08R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDP_08L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LEJ> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "08L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDP_08R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LEJ> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "08R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 198 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/STR> ;
+    ao:closed false ;
+    ao:lengthFt 10974 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_H-NORTH> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/STR> ;
+    ao:closed false ;
+    ao:lengthFt 98 ;
+    ao:lighted true ;
+    ao:runwayIdent "H-NORTH"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 98 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_H-SOUTH> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/STR> ;
+    ao:closed false ;
+    ao:lengthFt 98 ;
+    ao:lighted true ;
+    ao:runwayIdent "H-SOUTH"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 98 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09C> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAJ> ;
+    ao:closed false ;
+    ao:lengthFt 2548 ;
+    ao:lighted false ;
+    ao:runwayIdent "09C"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 75 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAJ> ;
+    ao:closed false ;
+    ao:lengthFt 12434 ;
+    ao:lighted true ;
+    ao:runwayIdent "09L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAJ> ;
+    ao:closed false ;
+    ao:lengthFt 7677 ;
+    ao:lighted true ;
+    ao:runwayIdent "09R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_04L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HEL> ;
+    ao:closed false ;
+    ao:lengthFt 10039 ;
+    ao:lighted true ;
+    ao:runwayIdent "04L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_04R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HEL> ;
+    ao:closed false ;
+    ao:lengthFt 11286 ;
+    ao:lighted true ;
+    ao:runwayIdent "04R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_15> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/HEL> ;
+    ao:closed false ;
+    ao:lengthFt 9518 ;
+    ao:lighted true ;
+    ao:runwayIdent "15"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGKK_08L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LGW> ;
+    ao:closed false ;
+    ao:lengthFt 8402 ;
+    ao:lighted true ;
+    ao:runwayIdent "08L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGKK_08R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LGW> ;
+    ao:closed false ;
+    ao:lengthFt 10883 ;
+    ao:lighted true ;
+    ao:runwayIdent "08R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGLL_09L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LHR> ;
+    ao:closed false ;
+    ao:lengthFt 12799 ;
+    ao:lighted true ;
+    ao:runwayIdent "09L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGLL_09R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LHR> ;
+    ao:closed false ;
+    ao:lengthFt 12001 ;
+    ao:lighted true ;
+    ao:runwayIdent "09R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_04L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CPH> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "04L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_04R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CPH> ;
+    ao:closed false ;
+    ao:lengthFt 10827 ;
+    ao:lighted true ;
+    ao:runwayIdent "04R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_12> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CPH> ;
+    ao:closed false ;
+    ao:lengthFt 9186 ;
+    ao:lighted true ;
+    ao:runwayIdent "12"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ELLX_06> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LUX> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "06"^^xsd:string ;
+    ao:surface "ASPHALT"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPKK_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/KRK> ;
+    ao:closed false ;
+    ao:lengthFt 8366 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPWA_11> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/WAW> ;
+    ao:closed false ;
+    ao:lengthFt 9186 ;
+    ao:lighted true ;
+    ao:runwayIdent "11"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPWA_15> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/WAW> ;
+    ao:closed false ;
+    ao:lengthFt 12106 ;
+    ao:lighted true ;
+    ao:runwayIdent "15"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_01L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ARN> ;
+    ao:closed false ;
+    ao:lengthFt 10830 ;
+    ao:lighted true ;
+    ao:runwayIdent "01L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_01R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ARN> ;
+    ao:closed false ;
+    ao:lengthFt 8201 ;
+    ao:lighted true ;
+    ao:runwayIdent "01R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_08> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ARN> ;
+    ao:closed false ;
+    ao:lengthFt 8202 ;
+    ao:lighted true ;
+    ao:runwayIdent "08"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/EVRA_18> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/RIX> ;
+    ao:closed false ;
+    ao:lengthFt 10499 ;
+    ao:lighted true ;
+    ao:runwayIdent "18"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/HEMA_15> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/RMF> ;
+    ao:closed false ;
+    ao:lengthFt 11253 ;
+    ao:lighted true ;
+    ao:runwayIdent "15"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_04L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/JFK> ;
+    ao:closed false ;
+    ao:lengthFt 12079 ;
+    ao:lighted true ;
+    ao:runwayIdent "04L"^^xsd:string ;
+    ao:surface "PEM"^^xsd:string ;
+    ao:widthFt 200 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_04R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/JFK> ;
+    ao:closed false ;
+    ao:lengthFt 8400 ;
+    ao:lighted true ;
+    ao:runwayIdent "04R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 200 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_13L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/JFK> ;
+    ao:closed false ;
+    ao:lengthFt 10000 ;
+    ao:lighted true ;
+    ao:runwayIdent "13L"^^xsd:string ;
+    ao:surface "PEM"^^xsd:string ;
+    ao:widthFt 200 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_13R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/JFK> ;
+    ao:closed false ;
+    ao:lengthFt 14511 ;
+    ao:lighted true ;
+    ao:runwayIdent "13R"^^xsd:string ;
+    ao:surface "PEM"^^xsd:string ;
+    ao:widthFt 200 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LATI_17> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/TIA> ;
+    ao:closed false ;
+    ao:lengthFt 9843 ;
+    ao:lighted true ;
+    ao:runwayIdent "17"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LBSF_09> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/SOF> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "09"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 147 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LCLK_04> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/LCA> ;
+    ao:closed false ;
+    ao:lengthFt 9823 ;
+    ao:lighted true ;
+    ao:runwayIdent "04"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LCPH_11> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/PFO> ;
+    ao:closed false ;
+    ao:lengthFt 8858 ;
+    ao:lighted true ;
+    ao:runwayIdent "11"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LDZA_04> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZAG> ;
+    ao:closed false ;
+    ao:lengthFt 10669 ;
+    ao:lighted true ;
+    ao:runwayIdent "04"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_02> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BCN> ;
+    ao:closed false ;
+    ao:lengthFt 8294 ;
+    ao:lighted true ;
+    ao:runwayIdent "02"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 147 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_06L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BCN> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "06L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_06R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BCN> ;
+    ao:closed false ;
+    ao:lengthFt 8727 ;
+    ao:lighted true ;
+    ao:runwayIdent "06R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEPA_06L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMI> ;
+    ao:closed false ;
+    ao:lengthFt 10728 ;
+    ao:lighted true ;
+    ao:runwayIdent "06L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEPA_06R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMI> ;
+    ao:closed false ;
+    ao:lengthFt 9842 ;
+    ao:lighted true ;
+    ao:runwayIdent "06R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFML_13L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MRS> ;
+    ao:closed false ;
+    ao:lengthFt 11483 ;
+    ao:lighted true ;
+    ao:runwayIdent "13L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFML_13R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MRS> ;
+    ao:closed false ;
+    ao:lengthFt 7776 ;
+    ao:lighted true ;
+    ao:runwayIdent "13R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08H> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> ;
+    ao:closed false ;
+    ao:lengthFt 1444 ;
+    ao:lighted false ;
+    ao:runwayIdent "08H"^^xsd:string ;
+    ao:surface "GRASS"^^xsd:string ;
+    ao:widthFt 99 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> ;
+    ao:closed false ;
+    ao:lengthFt 13829 ;
+    ao:lighted true ;
+    ao:runwayIdent "08L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> ;
+    ao:closed false ;
+    ao:lengthFt 8858 ;
+    ao:lighted true ;
+    ao:runwayIdent "08R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_09L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> ;
+    ao:closed false ;
+    ao:lengthFt 8858 ;
+    ao:lighted true ;
+    ao:runwayIdent "09L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_09R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> ;
+    ao:closed false ;
+    ao:lengthFt 13780 ;
+    ao:lighted true ;
+    ao:runwayIdent "09R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_02> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ORY> ;
+    ao:closed false ;
+    ao:lengthFt 7874 ;
+    ao:lighted true ;
+    ao:runwayIdent "02"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_06> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ORY> ;
+    ao:closed false ;
+    ao:lengthFt 11975 ;
+    ao:lighted true ;
+    ao:runwayIdent "06"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ORY> ;
+    ao:closed false ;
+    ao:lengthFt 10892 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LGKO_14> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/KGS> ;
+    ao:closed false ;
+    ao:lengthFt 7841 ;
+    ao:lighted true ;
+    ao:runwayIdent "14"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LGSA_11> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CHQ> ;
+    ao:closed false ;
+    ao:lengthFt 10982 ;
+    ao:lighted true ;
+    ao:runwayIdent "11"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIBD_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRI> ;
+    ao:closed false ;
+    ao:lengthFt 9843 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIBD_12> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRI> ;
+    ao:closed true ;
+    ao:lengthFt 512 ;
+    ao:lighted false ;
+    ao:runwayIdent "12"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 164 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICC_08> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/CTA> ;
+    ao:closed false ;
+    ao:lengthFt 7989 ;
+    ao:lighted true ;
+    ao:runwayIdent "08"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICJ_02> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMO> ;
+    ao:closed false ;
+    ao:lengthFt 6804 ;
+    ao:lighted true ;
+    ao:runwayIdent "02"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICJ_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMO> ;
+    ao:closed false ;
+    ao:lengthFt 10912 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPE_12> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BLQ> ;
+    ao:closed false ;
+    ao:lengthFt 9196 ;
+    ao:lighted true ;
+    ao:runwayIdent "12"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPZ_04L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/VCE> ;
+    ao:closed false ;
+    ao:lengthFt 9121 ;
+    ao:lighted true ;
+    ao:runwayIdent "04L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPZ_04R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/VCE> ;
+    ao:closed false ;
+    ao:lengthFt 10827 ;
+    ao:lighted true ;
+    ao:runwayIdent "04R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_07> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FCO> ;
+    ao:closed false ;
+    ao:lengthFt 10849 ;
+    ao:lighted true ;
+    ao:runwayIdent "07"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 147 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16C> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FCO> ;
+    ao:closed true ;
+    ao:lengthFt 11818 ;
+    ao:lighted true ;
+    ao:runwayIdent "16C"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FCO> ;
+    ao:closed false ;
+    ao:lengthFt 12801 ;
+    ao:lighted true ;
+    ao:runwayIdent "16L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/FCO> ;
+    ao:closed false ;
+    ao:lengthFt 12801 ;
+    ao:lighted true ;
+    ao:runwayIdent "16R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRN_06> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/NAP> ;
+    ao:closed false ;
+    ao:lengthFt 8622 ;
+    ao:lighted true ;
+    ao:runwayIdent "06"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LMML_05> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MLA> ;
+    ao:closed false ;
+    ao:lengthFt 7785 ;
+    ao:lighted true ;
+    ao:runwayIdent "05"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LMML_13> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/MLA> ;
+    ao:closed false ;
+    ao:lengthFt 10991 ;
+    ao:lighted true ;
+    ao:runwayIdent "13"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 190 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16C> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/GRZ> ;
+    ao:closed false ;
+    ao:lengthFt 9842 ;
+    ao:lighted true ;
+    ao:runwayIdent "16C"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/GRZ> ;
+    ao:closed false ;
+    ao:lengthFt 2100 ;
+    ao:lighted false ;
+    ao:runwayIdent "16L"^^xsd:string ;
+    ao:surface "GRS"^^xsd:string ;
+    ao:widthFt 98 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/GRZ> ;
+    ao:closed false ;
+    ao:lengthFt 2493 ;
+    ao:lighted false ;
+    ao:runwayIdent "16R"^^xsd:string ;
+    ao:surface "GRS"^^xsd:string ;
+    ao:widthFt 82 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWW_11> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/VIE> ;
+    ao:closed false ;
+    ao:lengthFt 11483 ;
+    ao:lighted true ;
+    ao:runwayIdent "11"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWW_16> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/VIE> ;
+    ao:closed false ;
+    ao:lengthFt 11811 ;
+    ao:lighted true ;
+    ao:runwayIdent "16"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LROP_08L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/OTP> ;
+    ao:closed false ;
+    ao:lengthFt 11484 ;
+    ao:lighted true ;
+    ao:runwayIdent "08L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LROP_08R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/OTP> ;
+    ao:closed false ;
+    ao:lengthFt 11484 ;
+    ao:lighted true ;
+    ao:runwayIdent "08R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LRSB_09> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/SBZ> ;
+    ao:closed false ;
+    ao:lengthFt 8629 ;
+    ao:lighted true ;
+    ao:runwayIdent "09"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_01H> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZRH> ;
+    ao:closed false ;
+    ao:lengthFt 1010 ;
+    ao:lighted false ;
+    ao:runwayIdent "01H"^^xsd:string ;
+    ao:surface "GRASS"^^xsd:string ;
+    ao:widthFt 91 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_10> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZRH> ;
+    ao:closed false ;
+    ao:lengthFt 8202 ;
+    ao:lighted true ;
+    ao:runwayIdent "10"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_14> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZRH> ;
+    ao:closed false ;
+    ao:lengthFt 10827 ;
+    ao:lighted true ;
+    ao:runwayIdent "14"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_16> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZRH> ;
+    ao:closed false ;
+    ao:lengthFt 12139 ;
+    ao:lighted true ;
+    ao:runwayIdent "16"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_10> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ACH> ;
+    ao:closed false ;
+    ao:lengthFt 4774 ;
+    ao:lighted true ;
+    ao:runwayIdent "10"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 98 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_10L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ACH> ;
+    ao:closed false ;
+    ao:lengthFt 2657 ;
+    ao:lighted false ;
+    ao:runwayIdent "10L"^^xsd:string ;
+    ao:surface "GRASS"^^xsd:string ;
+    ao:widthFt 65 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_XX> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ACH> ;
+    ao:closed true ;
+    ao:lighted false ;
+    ao:runwayIdent "XX"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAC_03L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ESB> ;
+    ao:closed false ;
+    ao:lengthFt 12303 ;
+    ao:lighted true ;
+    ao:runwayIdent "03L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAC_03R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/ESB> ;
+    ao:closed false ;
+    ao:lengthFt 12303 ;
+    ao:lighted true ;
+    ao:runwayIdent "03R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18C> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/AYT> ;
+    ao:closed false ;
+    ao:lengthFt 11155 ;
+    ao:lighted true ;
+    ao:runwayIdent "18C"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/AYT> ;
+    ao:closed false ;
+    ao:lengthFt 11155 ;
+    ao:lighted true ;
+    ao:runwayIdent "18L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/AYT> ;
+    ao:closed false ;
+    ao:lengthFt 9811 ;
+    ao:lighted true ;
+    ao:runwayIdent "18R"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFJ_06L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/SAW> ;
+    ao:closed false ;
+    ao:lengthFt 9843 ;
+    ao:lighted true ;
+    ao:runwayIdent "06L"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFJ_06R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/SAW> ;
+    ao:closed false ;
+    ao:lengthFt 11614 ;
+    ao:lighted false ;
+    ao:runwayIdent "06R"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_16L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> ;
+    ao:closed false ;
+    ao:lengthFt 12303 ;
+    ao:lighted true ;
+    ao:runwayIdent "16L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 147 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_16R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> ;
+    ao:closed false ;
+    ao:lengthFt 12303 ;
+    ao:lighted true ;
+    ao:runwayIdent "16R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_17L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> ;
+    ao:closed false ;
+    ao:lengthFt 13451 ;
+    ao:lighted true ;
+    ao:runwayIdent "17L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_17R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> ;
+    ao:closed false ;
+    ao:lengthFt 13451 ;
+    ao:lighted true ;
+    ao:runwayIdent "17R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 147 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_18> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> ;
+    ao:closed false ;
+    ao:lengthFt 10039 ;
+    ao:lighted true ;
+    ao:runwayIdent "18"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LYBE_12L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BEG> ;
+    ao:closed false ;
+    ao:lengthFt 11155 ;
+    ao:lighted true ;
+    ao:runwayIdent "12L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/LYBE_12R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BEG> ;
+    ao:closed false ;
+    ao:lengthFt 11483 ;
+    ao:lighted true ;
+    ao:runwayIdent "12R"^^xsd:string ;
+    ao:surface "ASPH"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/EBL> ;
+    ao:closed true ;
+    ao:lengthFt 9197 ;
+    ao:lighted true ;
+    ao:runwayIdent "15"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 95 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/EBL> ;
+    ao:closed true ;
+    ao:lengthFt 4085 ;
+    ao:lighted false ;
+    ao:runwayIdent "15L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 105 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/EBL> ;
+    ao:closed true ;
+    ao:lighted false ;
+    ao:runwayIdent "15R"^^xsd:string ;
+    ao:surface "UNK"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_18> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/EBL> ;
+    ao:closed false ;
+    ao:lengthFt 15748 ;
+    ao:lighted true ;
+    ao:runwayIdent "18"^^xsd:string ;
+    ao:surface "Concrete"^^xsd:string ;
+    ao:widthFt 246 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/RJAA_16L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/NRT> ;
+    ao:closed false ;
+    ao:lengthFt 8202 ;
+    ao:lighted true ;
+    ao:runwayIdent "16L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/RJAA_16R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/NRT> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "16R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 196 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/UBBB_16> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/GYD> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "16"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/UBBB_17> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/GYD> ;
+    ao:closed false ;
+    ao:lengthFt 10499 ;
+    ao:lighted true ;
+    ao:runwayIdent "17"^^xsd:string ;
+    ao:surface "CON"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/VABB_09> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BOM> ;
+    ao:closed false ;
+    ao:lengthFt 11511 ;
+    ao:lighted true ;
+    ao:runwayIdent "09"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/VABB_14> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BOM> ;
+    ao:closed false ;
+    ao:lengthFt 9419 ;
+    ao:lighted true ;
+    ao:runwayIdent "14"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 148 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_01> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BKK> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "01"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_02L> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BKK> ;
+    ao:closed false ;
+    ao:lengthFt 13123 ;
+    ao:lighted true ;
+    ao:runwayIdent "02L"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_02R> a ao:Runway ;
+    ao:belongsToAirport <http://www.semanticweb.org/ontologies/airport_ontology#Airport/BKK> ;
+    ao:closed false ;
+    ao:lengthFt 12139 ;
+    ao:lighted true ;
+    ao:runwayIdent "02R"^^xsd:string ;
+    ao:surface "ASP"^^xsd:string ;
+    ao:widthFt 197 .
+
+ao:hasRunway a owl:ObjectProperty ;
+    rdfs:comment "Links an Airport to one of its Runways." ;
+    rdfs:domain ao:Airport ;
+    rdfs:range ao:Runway .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BEG> a ao:Airport ;
+    ao:airportName "Belgrade Nikola Tesla Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 335 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LYBE_12L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LYBE_12R> ;
+    ao:iataCode "BEG"^^xsd:string ;
+    ao:icaoCode "LYBE"^^xsd:string ;
+    ao:latitude 44.818401 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/RS> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/RS-00> ;
+    ao:longitude 20.309099 ;
+    ao:municipality "Belgrade"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BER> a ao:Airport ;
+    ao:airportName "Berlin Brandenburg Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 157 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDB_06L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDB_06R> ;
+    ao:iataCode "BER"^^xsd:string ;
+    ao:icaoCode "EDDB"^^xsd:string ;
+    ao:latitude 52.361738 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BR> ;
+    ao:longitude 13.502341 ;
+    ao:municipality "Berlin"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BOM> a ao:Airport ;
+    ao:airportName "Chhatrapati Shivaji Maharaj International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 39 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/VABB_09>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/VABB_14> ;
+    ao:iataCode "BOM"^^xsd:string ;
+    ao:icaoCode "VABB"^^xsd:string ;
+    ao:latitude 19.088699 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IN> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IN-MM> ;
+    ao:longitude 72.867897 ;
+    ao:municipality "Mumbai"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRI> a ao:Airport ;
+    ao:airportName "Bari Karol Wojtyła International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 193 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIBD_07>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIBD_12> ;
+    ao:iataCode "BRI"^^xsd:string ;
+    ao:icaoCode "LIBD"^^xsd:string ;
+    ao:latitude 41.138901 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-75> ;
+    ao:longitude 16.760599 ;
+    ao:municipality "Bari"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/DUS> a ao:Airport ;
+    ao:airportName "Düsseldorf Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 147 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDL_05L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDL_05R> ;
+    ao:iataCode "DUS"^^xsd:string ;
+    ao:icaoCode "EDDL"^^xsd:string ;
+    ao:latitude 51.289501 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-NW> ;
+    ao:longitude 6.76678 ;
+    ao:municipality "Düsseldorf"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ESB> a ao:Airport ;
+    ao:airportName "Esenboğa International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 3125 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAC_03L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAC_03R> ;
+    ao:iataCode "ESB"^^xsd:string ;
+    ao:icaoCode "LTAC"^^xsd:string ;
+    ao:latitude 40.128101 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/TR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-06> ;
+    ao:longitude 32.995098 ;
+    ao:municipality "Ankara"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/GYD> a ao:Airport ;
+    ao:airportName "Heydar Aliyev International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 10 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/UBBB_16>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/UBBB_17> ;
+    ao:iataCode "GYD"^^xsd:string ;
+    ao:icaoCode "UBBB"^^xsd:string ;
+    ao:latitude 40.47278 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/AZ> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/AZ-BA> ;
+    ao:longitude 50.050931 ;
+    ao:municipality "Baku"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAM> a ao:Airport ;
+    ao:airportName "Hamburg Helmut Schmidt Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 53 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDH_05>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDH_15> ;
+    ao:iataCode "HAM"^^xsd:string ;
+    ao:icaoCode "EDDH"^^xsd:string ;
+    ao:latitude 53.630402 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-HH> ;
+    ao:longitude 9.98823 ;
+    ao:municipality "Hamburg"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/LEJ> a ao:Airport ;
+    ao:airportName "Leipzig/Halle Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 465 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDP_08L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDP_08R> ;
+    ao:iataCode "LEJ"^^xsd:string ;
+    ao:icaoCode "EDDP"^^xsd:string ;
+    ao:latitude 51.420657 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-SN> ;
+    ao:longitude 12.232705 ;
+    ao:municipality "Schkeuditz"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/LGW> a ao:Airport ;
+    ao:airportName "London Gatwick Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 202 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGKK_08L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGKK_08R> ;
+    ao:iataCode "LGW"^^xsd:string ;
+    ao:icaoCode "EGKK"^^xsd:string ;
+    ao:latitude 51.148744 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/GB> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/GB-ENG> ;
+    ao:longitude -0.185739 ;
+    ao:municipality "London"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/LHR> a ao:Airport ;
+    ao:airportName "London Heathrow Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 83 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGLL_09L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EGLL_09R> ;
+    ao:iataCode "LHR"^^xsd:string ;
+    ao:icaoCode "EGLL"^^xsd:string ;
+    ao:latitude 51.470748 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/GB> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/GB-ENG> ;
+    ao:longitude -0.459909 ;
+    ao:municipality "London"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/MLA> a ao:Airport ;
+    ao:airportName "Malta International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 300 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LMML_05>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LMML_13> ;
+    ao:iataCode "MLA"^^xsd:string ;
+    ao:icaoCode "LMML"^^xsd:string ;
+    ao:latitude 35.845932 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/MT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/MT-25> ;
+    ao:longitude 14.491546 ;
+    ao:municipality "Valletta"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/MRS> a ao:Airport ;
+    ao:airportName "Marseille Provence Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 74 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFML_13L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFML_13R> ;
+    ao:iataCode "MRS"^^xsd:string ;
+    ao:icaoCode "LFML"^^xsd:string ;
+    ao:latitude 43.438088 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/FR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/FR-PAC> ;
+    ao:longitude 5.2125 ;
+    ao:municipality "Marignane, Bouches-du-Rhône"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/MUC> a ao:Airport ;
+    ao:airportName "Munich Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1487 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDM_08L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDM_08R> ;
+    ao:iataCode "MUC"^^xsd:string ;
+    ao:icaoCode "EDDM"^^xsd:string ;
+    ao:latitude 48.353802 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BY> ;
+    ao:longitude 11.7861 ;
+    ao:municipality "Munich"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/NRT> a ao:Airport ;
+    ao:airportName "Narita International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 141 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/RJAA_16L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/RJAA_16R> ;
+    ao:iataCode "NRT"^^xsd:string ;
+    ao:icaoCode "RJAA"^^xsd:string ;
+    ao:latitude 35.76858 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/JP> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/JP-12> ;
+    ao:longitude 140.388714 ;
+    ao:municipality "Narita"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/OTP> a ao:Airport ;
+    ao:airportName "Bucharest Henri Coandă International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 314 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LROP_08L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LROP_08R> ;
+    ao:iataCode "OTP"^^xsd:string ;
+    ao:icaoCode "LROP"^^xsd:string ;
+    ao:latitude 44.571792 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/RO> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/RO-IF> ;
+    ao:longitude 26.103285 ;
+    ao:municipality "Otopeni"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMI> a ao:Airport ;
+    ao:airportName "Palma de Mallorca Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 27 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEPA_06L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEPA_06R> ;
+    ao:iataCode "PMI"^^xsd:string ;
+    ao:icaoCode "LEPA"^^xsd:string ;
+    ao:latitude 39.551701 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/ES> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/ES-IB> ;
+    ao:longitude 2.73881 ;
+    ao:municipality "Palma de Mallorca"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/PMO> a ao:Airport ;
+    ao:airportName "Falcone–Borsellino Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 65 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICJ_02>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LICJ_07> ;
+    ao:iataCode "PMO"^^xsd:string ;
+    ao:icaoCode "LICJ"^^xsd:string ;
+    ao:latitude 38.175999 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-82> ;
+    ao:longitude 13.091 ;
+    ao:municipality "Palermo"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/SAW> a ao:Airport ;
+    ao:airportName "Istanbul Sabiha Gökçen International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 312 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFJ_06L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFJ_06R> ;
+    ao:iataCode "SAW"^^xsd:string ;
+    ao:icaoCode "LTFJ"^^xsd:string ;
+    ao:latitude 40.898602 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/TR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-34> ;
+    ao:longitude 29.3092 ;
+    ao:municipality "Pendik, Istanbul"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/VCE> a ao:Airport ;
+    ao:airportName "Venice Marco Polo Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 7 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPZ_04L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIPZ_04R> ;
+    ao:iataCode "VCE"^^xsd:string ;
+    ao:icaoCode "LIPZ"^^xsd:string ;
+    ao:latitude 45.505299 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-34> ;
+    ao:longitude 12.3519 ;
+    ao:municipality "Venezia (VE)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/VIE> a ao:Airport ;
+    ao:airportName "Vienna International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 600 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWW_11>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWW_16> ;
+    ao:iataCode "VIE"^^xsd:string ;
+    ao:icaoCode "LOWW"^^xsd:string ;
+    ao:latitude 48.110298 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/AT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/AT-9> ;
+    ao:longitude 16.5697 ;
+    ao:municipality "Vienna"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/WAW> a ao:Airport ;
+    ao:airportName "Warsaw Chopin Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 362 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPWA_11>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EPWA_15> ;
+    ao:iataCode "WAW"^^xsd:string ;
+    ao:icaoCode "EPWA"^^xsd:string ;
+    ao:latitude 52.165699 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/PL> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/PL-MZ> ;
+    ao:longitude 20.9671 ;
+    ao:municipality "Warsaw"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/AT> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Austria"^^xsd:string ;
+    ao:isoCode "AT"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/CH> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Switzerland"^^xsd:string ;
+    ao:isoCode "CH"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/CY> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Cyprus"^^xsd:string ;
+    ao:isoCode "CY"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/ES> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Spain"^^xsd:string ;
+    ao:isoCode "ES"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/GB> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "United Kingdom"^^xsd:string ;
+    ao:isoCode "GB"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/GR> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Greece"^^xsd:string ;
+    ao:isoCode "GR"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/PL> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Poland"^^xsd:string ;
+    ao:isoCode "PL"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/RO> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Romania"^^xsd:string ;
+    ao:isoCode "RO"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-NW> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string ;
+    ao:regionCode "DE-NW"^^xsd:string ;
+    ao:regionName "North Rhine-Westphalia"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/FR-IDF> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "FR"^^xsd:string ;
+    ao:regionCode "FR-IDF"^^xsd:string ;
+    ao:regionName "Île-de-France"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/GB-ENG> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "GB"^^xsd:string ;
+    ao:regionCode "GB-ENG"^^xsd:string ;
+    ao:regionName "England"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-82> a ao:Region ;
+    ao:continent "EU"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string ;
+    ao:regionCode "IT-82"^^xsd:string ;
+    ao:regionName "Sicily"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-34> a ao:Region ;
+    ao:continent "AS"^^xsd:string ;
+    ao:isoCode "TR"^^xsd:string ;
+    ao:regionCode "TR-34"^^xsd:string ;
+    ao:regionName "İstanbul Province"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ACH> a ao:Airport ;
+    ao:airportName "Sankt Gallen Altenrhein Airport"^^xsd:string ;
+    ao:airportType "medium_airport"^^xsd:string ;
+    ao:elevationFt 1306 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_10>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_10L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZR_XX> ;
+    ao:iataCode "ACH"^^xsd:string ;
+    ao:icaoCode "LSZR"^^xsd:string ;
+    ao:latitude 47.485001 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/CH> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/CH-SG> ;
+    ao:longitude 9.56077 ;
+    ao:municipality "St. Gallen"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ARN> a ao:Airport ;
+    ao:airportName "Stockholm-Arlanda Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 137 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_01L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_01R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ESSA_08> ;
+    ao:iataCode "ARN"^^xsd:string ;
+    ao:icaoCode "ESSA"^^xsd:string ;
+    ao:latitude 59.64849 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/SE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/SE-AB> ;
+    ao:longitude 17.928829 ;
+    ao:municipality "Stockholm"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/AYT> a ao:Airport ;
+    ao:airportName "Antalya International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 177 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18C>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTAI_18R> ;
+    ao:iataCode "AYT"^^xsd:string ;
+    ao:icaoCode "LTAI"^^xsd:string ;
+    ao:latitude 36.898701 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/TR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-07> ;
+    ao:longitude 30.800501 ;
+    ao:municipality "Antalya"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BCN> a ao:Airport ;
+    ao:airportName "Josep Tarradellas Barcelona-El Prat Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 12 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_02>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_06L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LEBL_06R> ;
+    ao:iataCode "BCN"^^xsd:string ;
+    ao:icaoCode "LEBL"^^xsd:string ;
+    ao:latitude 41.2971 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/ES> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/ES-CT> ;
+    ao:longitude 2.07846 ;
+    ao:municipality "Barcelona"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BKK> a ao:Airport ;
+    ao:airportName "Suvarnabhumi Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 5 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_01>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_02L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/VTBS_02R> ;
+    ao:iataCode "BKK"^^xsd:string ;
+    ao:icaoCode "VTBS"^^xsd:string ;
+    ao:latitude 13.6811 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/TH> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/TH-10> ;
+    ao:longitude 100.747002 ;
+    ao:municipality "Bangkok"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/BRU> a ao:Airport ;
+    ao:airportName "Brussels Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 175 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_01>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_07L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EBBR_07R> ;
+    ao:iataCode "BRU"^^xsd:string ;
+    ao:icaoCode "EBBR"^^xsd:string ;
+    ao:latitude 50.901402 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/BE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/BE-VBR> ;
+    ao:longitude 4.48444 ;
+    ao:municipality "Zaventem"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/CGN> a ao:Airport ;
+    ao:airportName "Cologne Bonn Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 302 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_06>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_13L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDK_13R> ;
+    ao:iataCode "CGN"^^xsd:string ;
+    ao:icaoCode "EDDK"^^xsd:string ;
+    ao:latitude 50.865898 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-NW> ;
+    ao:longitude 7.14274 ;
+    ao:municipality "Köln (Cologne)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/CPH> a ao:Airport ;
+    ao:airportName "Copenhagen Kastrup Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 17 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_04L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_04R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EKCH_12> ;
+    ao:iataCode "CPH"^^xsd:string ;
+    ao:icaoCode "EKCH"^^xsd:string ;
+    ao:latitude 55.617900848389 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DK> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DK-84> ;
+    ao:longitude 12.656000137329 ;
+    ao:municipality "Copenhagen"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/GRZ> a ao:Airport ;
+    ao:airportName "Graz Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1115 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16C>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LOWG_16R> ;
+    ao:iataCode "GRZ"^^xsd:string ;
+    ao:icaoCode "LOWG"^^xsd:string ;
+    ao:latitude 46.9911 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/AT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/AT-6> ;
+    ao:longitude 15.4396 ;
+    ao:municipality "Feldkirchen bei Graz"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/HAJ> a ao:Airport ;
+    ao:airportName "Hannover Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 183 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09C>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDV_09R> ;
+    ao:iataCode "HAJ"^^xsd:string ;
+    ao:icaoCode "EDDV"^^xsd:string ;
+    ao:latitude 52.461102 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-NI> ;
+    ao:longitude 9.68508 ;
+    ao:municipality "Hannover"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/HEL> a ao:Airport ;
+    ao:airportName "Helsinki Vantaa Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 179 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_04L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_04R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EFHK_15> ;
+    ao:iataCode "HEL"^^xsd:string ;
+    ao:icaoCode "EFHK"^^xsd:string ;
+    ao:latitude 60.318363 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/FI> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/FI-18> ;
+    ao:longitude 24.963341 ;
+    ao:municipality "Helsinki (Vantaa)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ORY> a ao:Airport ;
+    ao:airportName "Paris-Orly Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 291 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_02>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_06>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPO_07> ;
+    ao:iataCode "ORY"^^xsd:string ;
+    ao:icaoCode "LFPO"^^xsd:string ;
+    ao:latitude 48.729499 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/FR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/FR-IDF> ;
+    ao:longitude 2.358963 ;
+    ao:municipality "Paris (Orly, Val-de-Marne)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/STR> a ao:Airport ;
+    ao:airportName "Stuttgart Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1276 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_07>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_H-NORTH>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDS_H-SOUTH> ;
+    ao:iataCode "STR"^^xsd:string ;
+    ao:icaoCode "EDDS"^^xsd:string ;
+    ao:latitude 48.689899 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-BW> ;
+    ao:longitude 9.22196 ;
+    ao:municipality "Stuttgart"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/FR> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "France"^^xsd:string ;
+    ao:isoCode "FR"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/EBL> a ao:Airport ;
+    ao:airportName "Erbil International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1341 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_15R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/ORER_18> ;
+    ao:iataCode "EBL"^^xsd:string ;
+    ao:icaoCode "ORER"^^xsd:string ;
+    ao:latitude 36.236047 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IQ> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IQ-AR> ;
+    ao:longitude 43.946615 ;
+    ao:municipality "Arbil"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/FCO> a ao:Airport ;
+    ao:airportName "Rome–Fiumicino Leonardo da Vinci International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 13 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_07>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16C>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LIRF_16R> ;
+    ao:iataCode "FCO"^^xsd:string ;
+    ao:icaoCode "LIRF"^^xsd:string ;
+    ao:latitude 41.804532 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/IT-62> ;
+    ao:longitude 12.251998 ;
+    ao:municipality "Rome"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/FRA> a ao:Airport ;
+    ao:airportName "Frankfurt Main Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 364 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07C>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_07R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/EDDF_18> ;
+    ao:iataCode "FRA"^^xsd:string ;
+    ao:icaoCode "EDDF"^^xsd:string ;
+    ao:latitude 50.026706 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/DE-HE> ;
+    ao:longitude 8.55835 ;
+    ao:municipality "Frankfurt am Main"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/JFK> a ao:Airport ;
+    ao:airportName "John F. Kennedy International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 13 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_04L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_04R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_13L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/KJFK_13R> ;
+    ao:iataCode "JFK"^^xsd:string ;
+    ao:icaoCode "KJFK"^^xsd:string ;
+    ao:latitude 40.639447 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/US> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/US-NY> ;
+    ao:longitude -73.779317 ;
+    ao:municipality "New York"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/ZRH> a ao:Airport ;
+    ao:airportName "Zürich Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 1417 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_01H>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_10>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_14>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LSZH_16> ;
+    ao:iataCode "ZRH"^^xsd:string ;
+    ao:icaoCode "LSZH"^^xsd:string ;
+    ao:latitude 47.458056 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/CH> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/CH-ZH> ;
+    ao:longitude 8.548056 ;
+    ao:municipality "Zurich"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/TR> a ao:Country ;
+    ao:continent "AS"^^xsd:string ;
+    ao:countryName "Turkey"^^xsd:string ;
+    ao:isoCode "TR"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/CDG> a ao:Airport ;
+    ao:airportName "Charles de Gaulle International Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 392 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08H>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_08R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_09L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LFPG_09R> ;
+    ao:iataCode "CDG"^^xsd:string ;
+    ao:icaoCode "LFPG"^^xsd:string ;
+    ao:latitude 49.00896 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/FR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/FR-IDF> ;
+    ao:longitude 2.554117 ;
+    ao:municipality "Paris (Roissy-en-France, Val-d'Oise)"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Airport/IST> a ao:Airport ;
+    ao:airportName "İstanbul Airport"^^xsd:string ;
+    ao:airportType "large_airport"^^xsd:string ;
+    ao:elevationFt 325 ;
+    ao:hasRunway <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_16L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_16R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_17L>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_17R>,
+        <http://www.semanticweb.org/ontologies/airport_ontology#Runway/LTFM_18> ;
+    ao:iataCode "IST"^^xsd:string ;
+    ao:icaoCode "LTFM"^^xsd:string ;
+    ao:latitude 41.274874 ;
+    ao:locatedInCountry <http://www.semanticweb.org/ontologies/airport_ontology#Country/TR> ;
+    ao:locatedInRegion <http://www.semanticweb.org/ontologies/airport_ontology#Region/TR-34> ;
+    ao:longitude 28.732136 ;
+    ao:municipality "Istanbul"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/IT> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Italy"^^xsd:string ;
+    ao:isoCode "IT"^^xsd:string .
+
+<http://www.semanticweb.org/ontologies/airport_ontology#Country/DE> a ao:Country ;
+    ao:continent "EU"^^xsd:string ;
+    ao:countryName "Germany"^^xsd:string ;
+    ao:isoCode "DE"^^xsd:string .
+
+ao:Country a owl:Class ;
+    rdfs:label "Country" ;
+    rdfs:comment "A sovereign country (ISO 3166-1 alpha-2)." .
+
+ao:Region a owl:Class ;
+    rdfs:label "Region" ;
+    rdfs:comment "An administrative region or state (ISO 3166-2)." .
+
+ao:Airport a owl:Class ;
+    rdfs:label "Airport" ;
+    rdfs:comment "A commercial airport identified by its IATA code." .
+
+ao:Runway a owl:Class ;
+    rdfs:label "Runway" ;
+    rdfs:comment "A single runway at an airport." .
+

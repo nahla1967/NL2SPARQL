@@ -4,8 +4,8 @@
   },
   "env": {
     "ANTHROPIC_BASE_URL": "https://agentrouter.org/",
-    "ANTHROPIC_AUTH_TOKEN": "sk-GyDoRyB58MnHC01v16NimRhMqRfM7bR1yRHQUATeuBzWzRha",
-    "ANTHROPIC_API_KEY": "sk-GyDoRyB58MnHC01v16NimRhMqRfM7bR1yRHQUATeuBzWzRha",
-    "ANTHROPIC_MODEL": "claude-haiku-4-5-20251001"
+    "ANTHROPIC_AUTH_TOKEN": "sk-nO5Hf4H69f7iO5OfpB4BFHk4NmnTm8rBYr4B6ffsuXOoT4hS",
+    "ANTHROPIC_API_KEY": "sk-nO5Hf4H69f7iO5OfpB4BFHk4NmnTm8rBYr4B6ffsuXOoT4hS",
+    "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022"
   }
 }
