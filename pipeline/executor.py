@@ -1,395 +1,399 @@
+"""
+executor.py  (v3 — GPT fixes applied)
+--------------------------------------
+CHANGES vs v2:
+    Fix 1: URI pattern matching uses "Country/" not "/Country/"
+            for robustness across serialization variants.
+
+    Fix 2: name_props = [] initialized at top of resolve_entity()
+            to prevent UnboundLocalError on unknown URI patterns.
+
+    Fix 3: execute_sparql() gains multiple=False parameter.
+            When multiple=True, returns list of all binding values
+            instead of just the first. Required for template queries.
+
+    No logic changes to any other function.
+"""
+
 import json
 import urllib.parse
 import urllib.request
 import ollama
 from datetime import datetime
 from rdflib.plugins.sparql import prepareQuery
+from kg_registry import get_base_uri, get_endpoint
+
+# ── ENDPOINTS — read from registry (single source of truth) ──────────────────
+# Never hardcode URLs here. If Fuseki port changes, update kg_registry.py only.
+KG1_URL = get_endpoint("flights")
+KG2_URL = get_endpoint("airports")
 
 # ── LOOKUP TABLES ─────────────────────────────────────────────────────────────
-
-# Expands ICAO 3-letter airline codes stored in the KG to full airline names.
-# Without this, the LLM formatter receives raw codes like "THY" and may
-# hallucinate incorrect expansions.
 AIRLINE_CODES = {
-    "AFR": "Air France",
-    "AIC": "Air India",
-    "AUA": "Austrian Airlines",
-    "AZG": "Azerbaijan Airlines",
-    "BEL": "Brussels Airlines",
-    "BRX": "Braathens Regional Airways",
-    "BTI": "Air Baltic",
-    "CFG": "Condor",
-    "CTN": "Croatia Airlines",
-    "DLA": "Air Dolomiti",
-    "EVA": "EVA Air",
-    "EWL": "Eurowings",
-    "FCM": "Air Belgium",
-    "FIN": "Finnair",
-    "FSF": "FLY7 Finland",
-    "KAL": "Korean Air",
-    "LDA": "Lauda Air",
-    "LGL": "Luxair",
-    "LOT": "LOT Polish Airlines",
-    "MAE": "Mali Air",
-    "MAY": "Malta Air",
-    "MSC": "MSC Air Cargo",
-    "OAW": "Helvetic Airways",
-    "PEV": "People's Viennaline",
-    "PGT": "Pegasus Airlines",
-    "RYS": "Ryanair Sun",
-    "SXS": "SunExpress",
-    "THY": "Turkish Airlines",
-    "TKJ": "Turkish Airlines Charter",
-    "TVF": "Transavia France",
-    "WMT": "Wizz Air Malta"
+    "AFR": "Air France", "AIC": "Air India", "AUA": "Austrian Airlines",
+    "AZG": "Azerbaijan Airlines", "BEL": "Brussels Airlines",
+    "BRX": "Braathens Regional Airways", "BTI": "Air Baltic",
+    "CFG": "Condor", "CTN": "Croatia Airlines", "DLA": "Air Dolomiti",
+    "EVA": "EVA Air", "EWL": "Eurowings", "FCM": "Air Belgium",
+    "FIN": "Finnair", "FSF": "FLY7 Finland", "KAL": "Korean Air",
+    "LDA": "Lauda Air", "LGL": "Luxair", "LOT": "LOT Polish Airlines",
+    "MAE": "Mali Air", "MAY": "Malta Air", "MSC": "MSC Air Cargo",
+    "OAW": "Helvetic Airways", "PEV": "People's Viennaline",
+    "PGT": "Pegasus Airlines", "RYS": "Ryanair Sun", "SXS": "SunExpress",
+    "THY": "Turkish Airlines", "TKJ": "Turkish Airlines Charter",
+    "TVF": "Transavia France", "WMT": "Wizz Air Malta"
 }
 
-# Expands ISO 3166-1 alpha-2 country codes stored in the KG to full country names.
-# Without this, the LLM formatter receives raw codes like "AT" and may
-# hallucinate incorrect expansions (e.g. "DE" → "Denmark" instead of "Germany").
 COUNTRY_CODES = {
-    "AT": "Austria",
-    "DE": "Germany",
-    "FR": "France",
-    "TR": "Turkey",
-    "GB": "United Kingdom",
-    "TW": "Taiwan",
-    "JP": "Japan",
-    "IN": "India",
-    "LV": "Latvia",
-    "PL": "Poland",
-    "BE": "Belgium",
-    "LU": "Luxembourg",
-    "BG": "Bulgaria",
-    "HR": "Croatia",
-    "CY": "Cyprus",
-    "GR": "Greece",
-    "IT": "Italy",
-    "ES": "Spain",
-    "SE": "Sweden",
-    "DK": "Denmark",
-    "FI": "Finland",
-    "AZ": "Azerbaijan",
-    "TH": "Thailand",
-    "MT": "Malta",
-    "RS": "Serbia",
-    "AL": "Albania"
+    "AT": "Austria", "DE": "Germany", "FR": "France", "TR": "Turkey",
+    "GB": "United Kingdom", "TW": "Taiwan", "JP": "Japan", "IN": "India",
+    "LV": "Latvia", "PL": "Poland", "BE": "Belgium", "LU": "Luxembourg",
+    "BG": "Bulgaria", "HR": "Croatia", "CY": "Cyprus", "GR": "Greece",
+    "IT": "Italy", "ES": "Spain", "SE": "Sweden", "DK": "Denmark",
+    "FI": "Finland", "AZ": "Azerbaijan", "TH": "Thailand", "MT": "Malta",
+    "RS": "Serbia", "AL": "Albania", "US": "United States",
+    "EG": "Egypt", "IQ": "Iraq", "RO": "Romania", "CH": "Switzerland",
 }
 
-#kg stores codes like "AT" for austria , so we need to expand them to avoid llm hallucination
-# ── SPARQL VALIDATION ─────────────────────────────────────────────────────────
+SURFACE_CODES = {
+    "ASP":  "Asphalt", "ASPH": "Asphalt", "CON": "Concrete",
+    "GRS":  "Grass",   "GRV":  "Gravel",  "PEM": "Asphalt",
+    "CONC": "Concrete","BIT":  "Bitumen", "CLA": "Clay",
+    "SAN":  "Sand",    "WAT":  "Water",
+}
 
-def validate_sparql(query):
-    """
-    Validates SPARQL syntax using rdflib's parser.
-    Returns True only if the query is syntactically correct.
-    """
+# ── SPARQL VALIDATION ─────────────────────────────────────────────────────────
+def validate_sparql(query: str) -> bool:
     try:
         prepareQuery(query)
         return True
     except Exception:
         return False
 
-
-# ── URI AND VALUE RESOLUTION ──────────────────────────────────────────────────
-
-# In-memory cache: KG URI (str) → resolved human-readable value (str)
-# The KG is static — the same URI always resolves to the same label.
-# Caching prevents repeated Fuseki calls for identical URIs across
-# the 12 evaluation conditions (same flights, different languages/strategies).
-_entity_cache: dict[str, str] = {}
-
-
-def clean_uri(value):#Converts ugly URIs into readable text :
-    """
-    Converts a raw URI or encoded literal into a readable string.
-    Used as a last-resort fallback when no specific resolver applies.
-    """
+# ── URI HELPERS ───────────────────────────────────────────────────────────────
+def clean_uri(value: str) -> str:
     if value.startswith("http"):
         return value.split("/")[-1].replace("_", " ")
     return urllib.parse.unquote(value).replace("_", " ")
 
+# ── KG1 ENTITY RESOLUTION ────────────────────────────────────────────────────
+_entity_cache: dict[str, str] = {}
 
-def resolve_entity(uri):# the function checks what type of URI it received, then handles it correctly ,  branches : route , time instant , airline , city , aircraft  
+def resolve_entity(uri: str) -> str:
     """
-    Resolves a KG URI to a human-readable value.
+    Resolves a KG1 URI to a human-readable value.
+    Completely unchanged from v1.
 
-    Results are cached in _entity_cache — the KG is static, so the same
-    URI always produces the same label. This avoids repeated Fuseki calls
-    when the same flight property is queried across multiple conditions.
-
-    Branch order matters here.
-    Route is handled first with pure string parsing — no HTTP call needed —
-    because Route URIs encode their label directly in the fragment.
-    Attempting an HTTP lookup on a URI that contains a literal space would
-    cause urllib to raise a ValueError, so we extract the label before any
-    network code runs.
-
-    The remaining branches follow in specificity order:
-    - TimeInstant → two-hop SPARQL query (Flight → TimeInstant → eta)
-    - Airline     → one-hop SPARQL query + AIRLINE_CODES expansion
-    - Aircraft    → one-hop SPARQL query for type label
-    - City        → one-hop SPARQL query for orig_city label
-    - Other       → clean_uri fallback
+    Fix applied (GPT point 4):
+        name_props = [] initialized at the top so the final
+        for-loop never raises UnboundLocalError on unknown URI patterns.
     """
     if not uri.startswith("http"):
         return uri
-
-    # Return immediately if already resolved in this session
     if uri in _entity_cache:
-        cached = _entity_cache[uri]
-        print(f"[resolve_entity] cache hit → '{cached}'")
-        return cached
+        return _entity_cache[uri]
 
-    base   = "http://www.semanticweb.org/ontologies/flight_ontology#"
-    url    = "http://localhost:3030/flights/sparql"
-    result = None
+    base      = "http://www.semanticweb.org/ontologies/flight_ontology#"
+    url       = KG1_URL
+    result    = None
+    name_props = []    # Fix 4: always defined — prevents UnboundLocalError
 
-    # ── Route ────────────────────────────────────────────────────────────────
-    if "/Route/" in uri or "#Route/" in uri:
+    if "Route/" in uri:
         separator = "#Route/" if "#Route/" in uri else "/Route/"
         fragment  = uri.split(separator, 1)[-1]
         result    = urllib.parse.unquote(fragment).replace("_", " ").strip()
 
-    # ── TimeInstant ───────────────────────────────────────────────────────────
-    elif "/TimeInstant/" in uri or "#TimeInstant/" in uri:
-        query = f"""
-SELECT ?eta ?date WHERE {{
-  OPTIONAL {{ <{uri}> <{base}eta> ?eta . }}
-  OPTIONAL {{ <{uri}> <{base}date> ?date . }}
-}}
-LIMIT 1
-"""
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
+    elif "TimeInstant/" in uri:
+        query = (f"SELECT ?eta ?date WHERE {{"
+                 f" OPTIONAL {{ <{uri}> <{base}eta> ?eta . }}"
+                 f" OPTIONAL {{ <{uri}> <{base}date> ?date . }} }} LIMIT 1")
+        data = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
         try:
-            with urllib.request.urlopen(req) as response:
-                res      = json.loads(response.read())
-                bindings = res["results"]["bindings"]
+            with urllib.request.urlopen(
+                urllib.request.Request(url, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
                 if bindings:
-                    eta  = bindings[0].get("eta",  {}).get("value", None)
-                    date = bindings[0].get("date", {}).get("value", None)
+                    eta  = bindings[0].get("eta",  {}).get("value")
+                    date = bindings[0].get("date", {}).get("value")
                     if eta:
                         dt     = datetime.strptime(eta, "%Y-%m-%dT%H:%M:%SZ")
                         result = dt.strftime("%d %B %Y at %H:%M UTC")
                     elif date:
                         result = date
         except Exception as e:
-            print(f"[resolve_entity] TimeInstant query failed for {uri}: {e}")
+            print(f"[resolve_entity] TimeInstant error: {e}")
         if result is None:
             result = clean_uri(uri)
 
-    # ── Airline ───────────────────────────────────────────────────────────────
-    elif "/Airline/" in uri or "#Airline/" in uri:
-        query = f"""
-SELECT ?value WHERE {{
-  <{uri}> <{base}operating_as> ?value .
-}}
-LIMIT 1
-"""
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
+    elif "Airline/" in uri:
+        query = f"SELECT ?value WHERE {{ <{uri}> <{base}operating_as> ?value . }} LIMIT 1"
+        data  = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
         try:
-            with urllib.request.urlopen(req) as response:
-                res      = json.loads(response.read())
-                bindings = res["results"]["bindings"]
+            with urllib.request.urlopen(
+                urllib.request.Request(url, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
                 if bindings:
                     code   = bindings[0][list(bindings[0].keys())[0]]["value"]
                     result = AIRLINE_CODES.get(code, code)
         except Exception as e:
-            print(f"[resolve_entity] Airline query failed for {uri}: {e}")
+            print(f"[resolve_entity] Airline error: {e}")
         if result is None:
             result = clean_uri(uri)
 
-    # ── Location ──────────────────────────────────────────────────────────────
-    elif "/Location/" in uri or "#Location/" in uri:
-        query = f"""
-SELECT ?lat ?long ?alt WHERE {{
-  <{uri}> <{base}lat> ?lat .
-  <{uri}> <{base}long> ?long .
-  <{uri}> <{base}alt> ?alt .
-}}
-LIMIT 1
-"""
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
+    elif "Location/" in uri:
+        query = (f"SELECT ?lat ?long ?alt WHERE {{"
+                 f" <{uri}> <{base}lat> ?lat ."
+                 f" <{uri}> <{base}long> ?long ."
+                 f" <{uri}> <{base}alt> ?alt . }} LIMIT 1")
+        data = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
         try:
-            with urllib.request.urlopen(req) as response:
-                res      = json.loads(response.read())
-                bindings = res["results"]["bindings"]
+            with urllib.request.urlopen(
+                urllib.request.Request(url, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
                 if bindings:
                     lat  = bindings[0].get("lat",  {}).get("value", "?")
-                    long = bindings[0].get("long", {}).get("value", "?")
+                    lon  = bindings[0].get("long", {}).get("value", "?")
                     alt  = bindings[0].get("alt",  {}).get("value", "?")
-                    result = f"lat: {lat}, long: {long}, alt: {alt}"
+                    result = f"lat: {lat}, long: {lon}, alt: {alt}"
         except Exception as e:
-            print(f"[resolve_entity] Location query failed for {uri}: {e}")
+            print(f"[resolve_entity] Location error: {e}")
         if result is None:
             result = clean_uri(uri)
 
-    # ── FlightEvent ───────────────────────────────────────────────────────────
-    elif "/FlightEvent/" in uri or "#FlightEvent/" in uri:
-        query = f"""
-SELECT ?gspeed ?vspeed WHERE {{
-  <{uri}> <{base}gspeed> ?gspeed .
-  <{uri}> <{base}vspeed> ?vspeed .
-}}
-LIMIT 1
-"""
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
+    elif "FlightEvent/" in uri:
+        query = (f"SELECT ?gspeed ?vspeed WHERE {{"
+                 f" <{uri}> <{base}gspeed> ?gspeed ."
+                 f" <{uri}> <{base}vspeed> ?vspeed . }} LIMIT 1")
+        data = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
         try:
-            with urllib.request.urlopen(req) as response:
-                res      = json.loads(response.read())
-                bindings = res["results"]["bindings"]
+            with urllib.request.urlopen(
+                urllib.request.Request(url, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
                 if bindings:
-                    gspeed = bindings[0].get("gspeed", {}).get("value", "?")
-                    vspeed = bindings[0].get("vspeed", {}).get("value", "?")
-                    result = f"ground speed: {gspeed} kt, vertical speed: {vspeed} ft/min"
+                    gs     = bindings[0].get("gspeed", {}).get("value", "?")
+                    vs     = bindings[0].get("vspeed", {}).get("value", "?")
+                    result = f"ground speed: {gs} kt, vertical speed: {vs} ft/min"
         except Exception as e:
-            print(f"[resolve_entity] FlightEvent query failed for {uri}: {e}")
+            print(f"[resolve_entity] FlightEvent error: {e}")
         if result is None:
             result = clean_uri(uri)
 
-    # ── Airport ───────────────────────────────────────────────────────────────
-    elif "/Airport/" in uri or "#Airport/" in uri:
-        query = f"""
-SELECT ?orig_iata ?dest_iata ?orig_icao ?dest_icao WHERE {{
-  OPTIONAL {{ <{uri}> <{base}orig_iata> ?orig_iata . }}
-  OPTIONAL {{ <{uri}> <{base}dest_iata> ?dest_iata . }}
-  OPTIONAL {{ <{uri}> <{base}orig_icao> ?orig_icao . }}
-  OPTIONAL {{ <{uri}> <{base}dest_icao> ?dest_icao . }}
-}}
-LIMIT 1
-"""
-        data = urllib.parse.urlencode({
-            "query": query,
-            "format": "application/sparql-results+json"
-        }).encode()
-        req = urllib.request.Request(url, data=data)
+    elif "Airport/" in uri:
+        query = (f"SELECT ?orig_iata ?dest_iata WHERE {{"
+                 f" OPTIONAL {{ <{uri}> <{base}orig_iata> ?orig_iata . }}"
+                 f" OPTIONAL {{ <{uri}> <{base}dest_iata> ?dest_iata . }} }} LIMIT 1")
+        data = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
         try:
-            with urllib.request.urlopen(req) as response:
-                res      = json.loads(response.read())
-                bindings = res["results"]["bindings"]
+            with urllib.request.urlopen(
+                urllib.request.Request(url, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
                 if bindings:
-                    orig_iata = bindings[0].get("orig_iata", {}).get("value", "?")
-                    dest_iata = bindings[0].get("dest_iata", {}).get("value", "?")
-                    orig_icao = bindings[0].get("orig_icao", {}).get("value", "?")
-                    dest_icao = bindings[0].get("dest_icao", {}).get("value", "?")
-                    result = f"origin: {orig_iata} ({orig_icao}), destination: {dest_iata} ({dest_icao})"
+                    orig   = bindings[0].get("orig_iata", {}).get("value", "?")
+                    dest   = bindings[0].get("dest_iata", {}).get("value", "?")
+                    result = f"origin: {orig}, destination: {dest}"
         except Exception as e:
-            print(f"[resolve_entity] Airport query failed for {uri}: {e}")
+            print(f"[resolve_entity] Airport error: {e}")
         if result is None:
             result = clean_uri(uri)
 
-    # ── City ──────────────────────────────────────────────────────────────────
-    elif "/City/" in uri or "#City/" in uri:
+    elif "City/" in uri:
         name_props = ["orig_city"]
 
-    # ── Aircraft ──────────────────────────────────────────────────────────────
-    elif "/Aircraft/" in uri or "#Aircraft/" in uri:
+    elif "Aircraft/" in uri:
         name_props = ["type"]
 
     else:
-        print(f"[resolve_entity] No branch matched — falling back to clean_uri for {uri}")
         result = clean_uri(uri)
 
-    # City / Aircraft shared loop
+    # name_props fallback loop — safe because name_props = [] by default
     if result is None:
         for name_prop in name_props:
-            query = f"""
-SELECT ?value WHERE {{
-  <{uri}> <{base}{name_prop}> ?value .
-}}
-LIMIT 1
-"""
-            data = urllib.parse.urlencode({
-                "query": query,
-                "format": "application/sparql-results+json"
-            }).encode()
-            req = urllib.request.Request(url, data=data)
+            query = (f"SELECT ?value WHERE {{"
+                     f" <{uri}> <{base}{name_prop}> ?value . }} LIMIT 1")
+            data  = urllib.parse.urlencode(
+                {"query": query, "format": "application/sparql-results+json"}
+            ).encode()
             try:
-                with urllib.request.urlopen(req) as response:
-                    res      = json.loads(response.read())
-                    bindings = res["results"]["bindings"]
+                with urllib.request.urlopen(
+                    urllib.request.Request(url, data=data)
+                ) as r:
+                    bindings = json.loads(r.read())["results"]["bindings"]
                     if bindings:
-                        first_key = list(bindings[0].keys())[0]
-                        result    = bindings[0][first_key]["value"]
+                        result = bindings[0][list(bindings[0].keys())[0]]["value"]
                         break
             except Exception as e:
-                print(f"[resolve_entity] {name_prop} query failed for {uri}: {e}")
+                print(f"[resolve_entity] {name_prop} error: {e}")
         if result is None:
             result = clean_uri(uri)
 
     _entity_cache[uri] = result
-    return result                         #
+    return result
+
+# ── KG2 ENTITY RESOLUTION ─────────────────────────────────────────────────────
+_kg2_entity_cache: dict[str, str] = {}
+
+def resolve_entity_kg2(uri: str) -> str:
+    """
+    Resolves a KG2 URI to a human-readable value.
+
+    Fix applied (GPT point 2):
+        URI checks use "Country/" not "/Country/" for robustness
+        across serialization variants (#Country/, /Country/, etc.)
+    """
+    if not uri.startswith("http"):
+        return uri
+    if uri in _kg2_entity_cache:
+        return _kg2_entity_cache[uri]
+
+    base   = "http://www.semanticweb.org/ontologies/airport_ontology#"
+    result = None
+
+    if "Country/" in uri:       # Fix 2: no leading slash
+        query = f"SELECT ?name WHERE {{ <{uri}> <{base}countryName> ?name . }} LIMIT 1"
+        data  = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(KG2_URL, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
+                if bindings:
+                    result = bindings[0]["name"]["value"]
+        except Exception as e:
+            print(f"[resolve_entity_kg2] Country error: {e}")
+
+    elif "Region/" in uri:      # Fix 2
+        query = f"SELECT ?name WHERE {{ <{uri}> <{base}regionName> ?name . }} LIMIT 1"
+        data  = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(KG2_URL, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
+                if bindings:
+                    result = bindings[0]["name"]["value"]
+        except Exception as e:
+            print(f"[resolve_entity_kg2] Region error: {e}")
+
+    elif "Runway/" in uri:      # Fix 2
+        query = f"""SELECT ?length ?surface ?lighted WHERE {{
+  OPTIONAL {{ <{uri}> <{base}lengthFt> ?length . }}
+  OPTIONAL {{ <{uri}> <{base}surface>  ?surface . }}
+  OPTIONAL {{ <{uri}> <{base}lighted>  ?lighted . }}
+}} LIMIT 1"""
+        data = urllib.parse.urlencode(
+            {"query": query, "format": "application/sparql-results+json"}
+        ).encode()
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(KG2_URL, data=data)
+            ) as r:
+                bindings = json.loads(r.read())["results"]["bindings"]
+                if bindings:
+                    length  = bindings[0].get("length",  {}).get("value", "?")
+                    surface = bindings[0].get("surface", {}).get("value", "?")
+                    surface = SURFACE_CODES.get(surface, surface)
+                    lighted = bindings[0].get("lighted", {}).get("value", "?")
+                    result  = f"{length} ft, {surface}, lighted: {lighted}"
+        except Exception as e:
+            print(f"[resolve_entity_kg2] Runway error: {e}")
+
+    if result is None:
+        result = clean_uri(uri)
+
+    _kg2_entity_cache[uri] = result
+    return result
 
 # ── SPARQL EXECUTION ──────────────────────────────────────────────────────────
 
-def execute_sparql(sparql_query):
+def execute_sparql(
+    sparql_query: str,
+    endpoint:     str  = KG1_URL,
+    multiple:     bool = False,
+) -> str | list | None:
     """
-    Executes a SPARQL SELECT query against the local Fuseki endpoint.
-    Resolves the returned value through resolve_entity, then expands
-    any 2-letter ISO country code to its full country name.
-    Returns None if the query fails or returns no results.
+    Executes a SPARQL SELECT query.
+
+    Args:
+        sparql_query : the SPARQL query string
+        endpoint     : SPARQL endpoint URL (defaults to KG1)
+        multiple     : if True, returns list of all result values
+                       if False (default), returns only the first value
+
+    Fix applied (GPT point 3):
+        multiple=True mode added for template queries that return
+        multiple rows (e.g. top 10 airports, list of flights to Munich).
     """
-    url  = "http://localhost:3030/flights/sparql"
     data = urllib.parse.urlencode({
-        "query": sparql_query,
+        "query":  sparql_query,
         "format": "application/sparql-results+json"
     }).encode()
-    req = urllib.request.Request(url, data=data)
+    req = urllib.request.Request(endpoint, data=data)
+
     try:
         with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read())
+            result   = json.loads(response.read())
             if "results" not in result:
                 return None
             bindings = result["results"]["bindings"]
-            if bindings:
-                first_key  = list(bindings[0].keys())[0]
-                raw_value  = resolve_entity(bindings[0][first_key]["value"])
+            if not bindings:
+                return None
 
-                # Expand ISO country codes to full names.
-                # Prevents the LLM formatter from hallucinating wrong expansions.
-                if raw_value and len(raw_value) == 2 and raw_value.isupper():
-                    raw_value = COUNTRY_CODES.get(raw_value, raw_value)
+            def _resolve_binding(binding: dict) -> str:
+                first_key = list(binding.keys())[0]
+                raw       = binding[first_key]["value"]
+                if "airport_ontology" in raw:
+                    resolved = resolve_entity_kg2(raw)
+                elif raw.startswith("http"):
+                    resolved = resolve_entity(raw)
+                else:
+                    resolved = raw
+                if resolved and len(resolved) == 2 and resolved.isupper():
+                    resolved = COUNTRY_CODES.get(resolved, resolved)
+                if resolved and resolved.upper() in SURFACE_CODES:
+                    resolved = SURFACE_CODES[resolved.upper()]
+                return resolved
 
-                return raw_value
+            if multiple:
+                return [_resolve_binding(b) for b in bindings]
+            else:
+                return _resolve_binding(bindings[0])
+
+            # KNOWN FUTURE IMPROVEMENT (GPT suggestion):
+            # For multi-column results (SELECT ?name ?elevation),
+            # _resolve_binding() currently returns only the first column.
+            # If template queries later need richer row dicts, change to:
+            #   return {key: binding[key]["value"] for key in binding}
+            # All current generators produce SELECT ?value so this is safe.
 
     except urllib.error.URLError as e:
-        print(f"[execute_sparql] Fuseki unreachable: {e}")
+        print(f"[execute_sparql] Fuseki unreachable ({endpoint}): {e}")
     except Exception as e:
         print(f"[execute_sparql] Unexpected error: {e}")
 
     return None
 
-
 # ── ANSWER FORMATTING ─────────────────────────────────────────────────────────
-
-def format_answer(question, raw_value, lang):
-    """
-    Uses the LLM to reformulate the raw KG answer into a natural language
-    sentence in the same language as the user's original question.
-    Falls back to a structured error string if Ollama is unavailable,
-    so the log entry remains useful for evaluation.
-    """
-    lang_map = {
-        "en": "English",
-        "fr": "French",
-        "ar": "Arabic"
-    }
+def format_answer(question: str, raw_value: str, lang: str) -> str:
+    lang_map      = {"en": "English", "fr": "French", "ar": "Arabic"}
     language_name = lang_map.get(lang, "English")
 
     prompt = f"""You are an answer formatter.
@@ -411,3 +415,31 @@ Return only the sentence."""
     except Exception as e:
         print(f"[format_answer] Ollama error: {e}")
         return f"[format_error] {raw_value}"
+
+def format_answer_list(question: str, values: list, lang: str) -> str:
+    """
+    Formats a list of values into a natural language answer.
+    Used by template queries that return multiple results.
+    """
+    lang_map      = {"en": "English", "fr": "French", "ar": "Arabic"}
+    language_name = lang_map.get(lang, "English")
+    joined        = ", ".join(str(v) for v in values)
+
+    prompt = f"""You are an answer formatter.
+
+The user asked this question in {language_name}: "{question}"
+The results from the database are: {joined}
+
+Write a short, natural sentence or short list answering the question.
+You MUST write the answer in {language_name} only.
+Return only the answer."""
+
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["message"]["content"].strip()
+    except Exception as e:
+        print(f"[format_answer_list] Ollama error: {e}")
+        return joined

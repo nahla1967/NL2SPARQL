@@ -1,36 +1,43 @@
 import ollama
 
-BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
+# Used ONLY for the static few-shot examples below.
+# Never applied to real query URIs.
+FLIGHT_BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
 
 def extract_sparql(text):
     start = text.find("SELECT")
     if start != -1:
         query = text[start:].strip()
-        open_braces = query.count("{")
+        open_braces  = query.count("{")
         close_braces = query.count("}")
         deficit = open_braces - close_braces
-        if deficit > 0:      # ← INSIDE the if block
+        if deficit > 0:
             query += "\n}" * deficit
         return query
     return text.strip()
 
-def inject_and_generate(flight_uri, property_short, user_question, strategy="zero-shot", property2_uri=None):
-    property_uri = BASE + property_short
-    is_two_hop = property2_uri is not None
-    property2_full = BASE + property2_uri if is_two_hop else None
+# ── SIGNATURE CHANGE ─────────────────────────────────────────────────────────
+# property_uri and property2_uri are now FULL URIs passed by the caller.
+# The generator no longer prepends any BASE — it has no way to know which
+# ontology it is working with, so the caller must resolve that.
+# ─────────────────────────────────────────────────────────────────────────────
+def inject_and_generate(entity_uri, property_uri, user_question,
+                        strategy="zero-shot", property2_uri=None):
+
+    is_two_hop    = property2_uri is not None
 
     if strategy == "zero-shot":
         if is_two_hop:
-            prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
 
-            The flight subject URI is: <{flight_uri}>
+            The subject URI is: <{entity_uri}>
             The first property URI is: <{property_uri}>
-            The second property URI is: <{property2_full}>
+            The second property URI is: <{property2_uri}>
 
             Write a valid SPARQL SELECT query that retrieves the value using two hops.
             The query must follow this exact structure:
             SELECT ?value WHERE {{
-            <flight_uri> <property1_uri> ?intermediate .
+            <subject_uri> <property1_uri> ?intermediate .
             ?intermediate <property2_uri> ?value .
             }}
 
@@ -38,64 +45,64 @@ def inject_and_generate(flight_uri, property_short, user_question, strategy="zer
             Return only the SPARQL query. No explanation. No markdown."""
 
         else:
-            prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
 
-            The flight subject URI is: <{flight_uri}>
+            The subject URI is: <{entity_uri}>
             The property URI is: <{property_uri}>
 
-            Write a valid SPARQL SELECT query that retrieves the value of that property for that flight.
+            Write a valid SPARQL SELECT query that retrieves the value of that property.
             The query must start with SELECT ?value WHERE {{
             Use full URIs with angle brackets. Do not use PREFIX declarations.
             Return only the SPARQL query. No explanation. No markdown."""
 
     elif strategy == "few-shot":
         if is_two_hop:
-            prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
 
             Here is an example of a correct two-hop SPARQL query:
 
             Question: What type of aircraft is used on flight BR62?
-            Flight URI: <{BASE}Flight/flight_3a28bc61>
-            First property URI: <{BASE}hasAircraft>
-            Second property URI: <{BASE}type>
+            Subject URI: <{FLIGHT_BASE}Flight/flight_3a28bc61>
+            First property URI: <{FLIGHT_BASE}hasAircraft>
+            Second property URI: <{FLIGHT_BASE}type>
             SPARQL:
             SELECT ?value WHERE {{
-            <{BASE}Flight/flight_3a28bc61> <{BASE}hasAircraft> ?intermediate .
-            ?intermediate <{BASE}type> ?value .
+            <{FLIGHT_BASE}Flight/flight_3a28bc61> <{FLIGHT_BASE}hasAircraft> ?intermediate .
+            ?intermediate <{FLIGHT_BASE}type> ?value .
             }}
 
             Now write a two-hop SPARQL query for:
-            Flight URI: <{flight_uri}>
+            Subject URI: <{entity_uri}>
             First property URI: <{property_uri}>
-            Second property URI: <{property2_full}>
+            Second property URI: <{property2_uri}>
 
             The query must follow the same structure as the example.
             Use full URIs with angle brackets. Do not use PREFIX declarations.
             Return only the SPARQL query. No explanation. No markdown."""
 
         else:
-                    prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
 
             Here are examples of correct SPARQL queries:
 
             Question: What airline operates flight BR62?
-            Flight URI: <{BASE}Flight/flight_3a28bc61>
-            Property URI: <{BASE}hasAirline>
+            Subject URI: <{FLIGHT_BASE}Flight/flight_3a28bc61>
+            Property URI: <{FLIGHT_BASE}hasAirline>
             SPARQL:
             SELECT ?value WHERE {{
-            <{BASE}Flight/flight_3a28bc61> <{BASE}hasAirline> ?value .
+            <{FLIGHT_BASE}Flight/flight_3a28bc61> <{FLIGHT_BASE}hasAirline> ?value .
             }}
 
             Question: What is the departure city of flight AF1739?
-            Flight URI: <{BASE}Flight/flight_3a3a6d0c>
-            Property URI: <{BASE}hasOriginCity>
+            Subject URI: <{FLIGHT_BASE}Flight/flight_3a3a6d0c>
+            Property URI: <{FLIGHT_BASE}hasOriginCity>
             SPARQL:
             SELECT ?value WHERE {{
-            <{BASE}Flight/flight_3a3a6d0c> <{BASE}hasOriginCity> ?value .
+            <{FLIGHT_BASE}Flight/flight_3a3a6d0c> <{FLIGHT_BASE}hasOriginCity> ?value .
             }}
 
             Now write a SPARQL query for:
-            Flight URI: <{flight_uri}>
+            Subject URI: <{entity_uri}>
             Property URI: <{property_uri}>
 
             The query must start with SELECT ?value WHERE {{
@@ -104,21 +111,21 @@ def inject_and_generate(flight_uri, property_short, user_question, strategy="zer
 
     elif strategy == "cot":
         if is_two_hop:
-            prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
             Think step by step:
 
             Step 1 — Identify the subject.
-            The flight we are asking about is: <{flight_uri}>
+            The entity we are asking about is: <{entity_uri}>
 
             Step 2 — Identify the first property.
             The first property leads to an intermediate node: <{property_uri}>
 
             Step 3 — Identify the second property.
-            The second property retrieves the final value from the intermediate node: <{property2_full}>
+            The second property retrieves the final value: <{property2_uri}>
 
             Step 4 — Build the WHERE clause.
-            First hop: <{flight_uri}> <{property_uri}> ?intermediate .
-            Second hop: ?intermediate <{property2_full}> ?value .
+            First hop:  <{entity_uri}> <{property_uri}> ?intermediate .
+            Second hop: ?intermediate <{property2_uri}> ?value .
 
             Step 5 — Write the full query.
             The query must start with SELECT ?value WHERE {{
@@ -126,11 +133,11 @@ def inject_and_generate(flight_uri, property_short, user_question, strategy="zer
             Return only the SPARQL query. No explanation. No markdown."""
 
         else:
-                    prompt = f"""You are a SPARQL query generator for a flight knowledge graph.
+            prompt = f"""You are a SPARQL query generator for a knowledge graph.
             Think step by step:
 
             Step 1 — Identify the subject.
-            The flight we are asking about is: <{flight_uri}>
+            The entity we are asking about is: <{entity_uri}>
 
             Step 2 — Identify the property.
             The property being asked about is: <{property_uri}>
@@ -140,13 +147,13 @@ def inject_and_generate(flight_uri, property_short, user_question, strategy="zer
 
             Step 4 — Build the WHERE clause.
             Connect the subject to the property to get the value:
-            <{flight_uri}> <{property_uri}> ?value .
+            <{entity_uri}> <{property_uri}> ?value .
 
             Step 5 — Write the full query.
             The query must start with SELECT ?value WHERE {{
             Use full URIs with angle brackets. Do not use PREFIX declarations.
             Return only the SPARQL query. No explanation. No markdown."""
-                    
+
     response = ollama.chat(
         model="llama3",
         messages=[{"role": "user", "content": prompt}]

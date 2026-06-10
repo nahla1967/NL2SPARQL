@@ -1,301 +1,400 @@
+"""
+test_pipeline.py
+----------------
+Tests the three working branches of the NL2SPARQL multi-KG pipeline.
+
+HOW TO RUN:
+    1. Make sure Fuseki is running with BOTH datasets:
+          http://localhost:3030/flights/sparql   (KG1)
+          http://localhost:3030/airports/sparql  (KG2)
+    2. Make sure Ollama is running:
+          ollama serve
+    3. From your project root (NL2SPARQL/):
+          python test_pipeline.py
+
+WHAT IT TESTS:
+    Branch B — single_kg1  : 5 questions (EN/FR/AR) against KG1
+    Branch C — single_kg2  : 5 questions (EN/FR/AR) against KG2
+    Branch D — cross_kg    : 5 questions (EN/FR/AR) bridging KG1 → KG2
+
+OUTPUT:
+    Prints a result table per branch.
+    Saves all results to test_results.jsonl.
+    Prints a final summary with pass/fail counts.
+"""
+
 import json
-from pipeline.language   import detect_language
-from pipeline.extractor  import extract_entities, validate_extraction, is_flight_question
-from pipeline.mapper     import load_lexicon, map_property_cascade, map_flight
-from pipeline.generator  import inject_and_generate
-from pipeline.executor   import validate_sparql, execute_sparql, format_answer
+import sys
+import time
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TEST SUITE — 20 REALISTIC USER QUESTIONS
-# ══════════════════════════════════════════════════════════════════════════════
-#
-# Coverage:
-#   Languages   : English (8), French (6), Arabic (6)
-#   Strategies  : zero-shot (7), few-shot (7), cot (6)
-#   Error types : typos (3), out-of-scope (2), missing flight number (2),
-#                 unknown flight (1), mixed language (2), clean (10)
-#
-# Expected outcome is documented per case so results are self-explanatory.
-# ══════════════════════════════════════════════════════════════════════════════
+from pipeline.language  import detect_language
+from router             import route
+from pipeline.extractor import (
+    extract_entities, validate_extraction, is_flight_question,
+    extract_airport_entities, validate_airport_extraction,
+)
+from pipeline.mapper import (
+    load_lexicon, map_property_cascade, map_flight, map_airport,
+)
+from pipeline.generator import inject_and_generate
+from pipeline.executor  import (
+    validate_sparql, execute_sparql, format_answer,
+)
+from cross_kg_resolver  import resolve_cross_kg
+from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
-TEST_CASES = [
+# ── TEST CASES ────────────────────────────────────────────────────────────────
 
-    # ── TWO-HOP — ENGLISH ─────────────────────────────────────────────────────
-    {
-        "id": 1,
-        "question":  "What is the aircraft type of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasAircraft → type"
-    },
-    {
-        "id": 2,
-        "question":  "What is the aircraft type of flight OS295?",
-        "condition": "few-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop few-shot: hasAircraft → type"
-    },
-    {
-        "id": 3,
-        "question":  "What is the aircraft type of flight OS295?",
-        "condition": "cot",
-        "expected":  "success",
-        "note":      "EN — two-hop CoT: hasAircraft → type"
-    },
-    {
-        "id": 4,
-        "question":  "What is the ground speed of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasFlightEvent → gspeed"
-    },
-    {
-        "id": 5,
-        "question":  "What is the vertical speed of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasFlightEvent → vspeed"
-    },
-    {
-        "id": 6,
-        "question":  "What is the registration of the aircraft of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasAircraft → reg"
-    },
-    {
-        "id": 7,
-        "question":  "What is the transponder code of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasAircraft → TransponderCode"
-    },
-    {
-        "id": 8,
-        "question":  "What livery does the airline of flight OS295 use?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — two-hop: hasAirline → painted_as"
-    },
-
-    # ── TWO-HOP — FRENCH ──────────────────────────────────────────────────────
-    {
-        "id": 9,
-        "question":  "Quel est le type d'appareil du vol OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "FR — two-hop: hasAircraft → type"
-    },
-    {
-        "id": 10,
-        "question":  "Quelle est la vitesse au sol du vol OS295?",
-        "condition": "few-shot",
-        "expected":  "success",
-        "note":      "FR — two-hop: hasFlightEvent → gspeed"
-    },
-
-    # ── TWO-HOP — ARABIC ──────────────────────────────────────────────────────
-    {
-        "id": 11,
-        "question":  "ما نوع طائرة الرحلة OS295؟",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "AR — two-hop: hasAircraft → type"
-    },
-    {
-        "id": 12,
-        "question":  "ما هي سرعة الرحلة OS295؟",
-        "condition": "cot",
-        "expected":  "success",
-        "note":      "AR — two-hop: hasFlightEvent → gspeed"
-    },
-
-    # ── SINGLE-HOP — REGRESSION CHECK ─────────────────────────────────────────
-    {
-        "id": 13,
-        "question":  "What is the departure city of flight OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "EN — single-hop regression: hasOriginCity"
-    },
-    {
-        "id": 14,
-        "question":  "What is the airline of flight OS295?",
-        "condition": "few-shot",
-        "expected":  "success",
-        "note":      "EN — single-hop regression: hasAirline"
-    },
-    {
-        "id": 15,
-        "question":  "Quelle est la ville de départ du vol OS295?",
-        "condition": "zero-shot",
-        "expected":  "success",
-        "note":      "FR — single-hop regression: hasOriginCity"
-    },
+BRANCH_B_TESTS = [
+    ("What is the airline of flight OS295?",         "single_kg1", "Austrian"),
+    ("What is the departure city of flight TK1887?", "single_kg1", "Vienna or Istanbul"),
+    ("Quel est l'aéroport d'origine du vol OS295?",  "single_kg1", "VIE or Vienna"),
+    ("ما هي شركة الطيران للرحلة OS295؟",              "single_kg1", "Austrian Airlines"),
+    ("What is the ground speed of flight OS295?",    "single_kg1", "knots"),
 ]
 
+BRANCH_C_TESTS = [
+    ("What is the elevation of Vienna airport?",             "single_kg2", "600"),
+    ("What country is Frankfurt airport in?",                "single_kg2", "Germany"),
+    ("Quelle est l'élévation de l'aéroport de Munich?",      "single_kg2", "1487"),
+    ("ما هو ارتفاع مطار فيينا؟",                              "single_kg2", "600"),
+    ("What type of airport is London Heathrow?",             "single_kg2", "large_airport"),
+]
 
-# ══════════════════════════════════════════════════════════════════════════════
-# RUNNER
-# ══════════════════════════════════════════════════════════════════════════════
+BRANCH_D_TESTS = [
+    ("What country is the destination airport of flight OS295?",       "cross_kg", "Germany"),
+    ("What is the elevation of the arrival airport of flight OS295?",  "cross_kg", "should return ft value"),
+    ("Quel pays est l'aéroport de destination du vol OS295?",          "cross_kg", "Allemagne or Germany"),
+    ("ما هو البلد الذي يقع فيه مطار وصول الرحلة OS295؟",               "cross_kg", "Germany"),
+    ("What is the elevation of the departure airport of flight OS295?","cross_kg", "600"),
+]
 
-def run_test(case, lexicon):
-    question  = case["question"]
-    condition = case["condition"]
-    expected  = case["expected"]
+ALL_TESTS = [
+    ("BRANCH B — single_kg1", BRANCH_B_TESTS),
+    ("BRANCH C — single_kg2", BRANCH_C_TESTS),
+    ("BRANCH D — cross_kg",   BRANCH_D_TESTS),
+]
 
+STRATEGY = "zero-shot"
+
+GREEN  = "\033[92m"
+RED    = "\033[91m"
+YELLOW = "\033[93m"
+RESET  = "\033[0m"
+
+def ok(s):   return f"{GREEN}{s}{RESET}"
+def err(s):  return f"{RED}{s}{RESET}"
+def warn(s): return f"{YELLOW}{s}{RESET}"
+
+# ── CORE RUNNER ───────────────────────────────────────────────────────────────
+
+def run_single_test(question: str, expected_type: str) -> dict:
     result = {
-        "id":            case["id"],
         "question":      question,
-        "condition":     condition,
-        "expected":      expected,
-        "note":          case["note"],
-        "language":      None,
-        "entities":      None,
-        "mapping_layer": None,
+        "expected_type": expected_type,
+        "detected_lang": None,
+        "query_type":    None,
+        "routing_ok":    False,
+        "entity":        None,
         "property_uri":  None,
-        "flight_uri":    None,
+        "mapping_layer": None,
         "sparql":        None,
         "sparql_valid":  False,
         "raw_answer":    None,
         "final_answer":  None,
-        "failure_type":  None,
-        "verdict":       None,   # PASS / FAIL / EXPECTED_FAIL
+        "failure_type":  "not_run",
+        "duration_s":    0,
     }
 
-    # ── STEP 0: language detection ─────────────────────────────────────────────
-    lang = detect_language(question)
-    result["language"] = lang
+    t0 = time.time()
 
-    # ── STEP 1: entity extraction ──────────────────────────────────────────────
-    entities = extract_entities(question, lang)
-    result["entities"] = entities
+    try:
+        lang = detect_language(question)
+        result["detected_lang"] = lang
 
-    if not validate_extraction(entities) or not is_flight_question(entities):
-        result["failure_type"] = "extraction_failure"
-        result["verdict"] = "PASS" if expected == "extraction_failure" else "FAIL"
-        return result
+        routing    = route(question)
+        query_type = routing["query_type"]
+        result["query_type"] = query_type
+        result["entity"]     = routing["entity"]
+        result["routing_ok"] = (query_type == expected_type)
 
-    # ── STEP 2: mapping ────────────────────────────────────────────────────────
-    property_uri, mapping_layer , property2_uri = map_property_cascade(entities["property"], lexicon)
-    flight_uri = map_flight(entities["entity"])
+        if query_type == "out_of_scope":
+            result["failure_type"] = "out_of_scope"
+            return result
 
-    result["property_uri"]  = property_uri
-    result["flight_uri"]    = flight_uri
-    result["mapping_layer"] = mapping_layer
+        # ── BRANCH B ──────────────────────────────────────────────────────────
+        if query_type == "single_kg1":
+            entities = extract_entities(question, lang)
+            if not validate_extraction(entities) or not is_flight_question(entities):
+                result["failure_type"] = "extraction_failure"
+                return result
 
-    if not flight_uri or not property_uri:
-        result["failure_type"] = "mapping_failure"
-        result["verdict"] = "PASS" if expected == "mapping_failure" else "FAIL"
-        return result
+            lexicon = load_lexicon(get_lexicon("flights"))
+            prop_uri, layer, prop2 = map_property_cascade(
+                entities["property"], lexicon, get_lexicon("flights")
+            )
+            flight_uri = map_flight(entities["entity"])
+            result["property_uri"]  = prop_uri
+            result["mapping_layer"] = layer
 
-    # ── STEP 3: SPARQL generation ──────────────────────────────────────────────
-    sparql = inject_and_generate(flight_uri, property_uri, question, strategy=condition , property2_uri=property2_uri)
-    result["sparql"] = sparql
+            if not flight_uri or not prop_uri:
+                result["failure_type"] = "mapping_failure"
+                return result
 
-    # ── STEP 4: validation ─────────────────────────────────────────────────────
-    is_valid = (
-        validate_sparql(sparql)
-        and sparql.strip().startswith("SELECT")
-        and "PREFIX" not in sparql
-        and property_uri in sparql
-    )
-    result["sparql_valid"] = is_valid
+            BASE = get_base_uri("flights")
+            full_prop_uri  = BASE + prop_uri
+            full_prop2_uri = (BASE + prop2) if prop2 else None
 
-    if not is_valid:
-        result["failure_type"] = "generation_failure"
-        result["verdict"] = "PASS" if expected == "generation_failure" else "FAIL"
-        return result
+            sparql = inject_and_generate(
+                flight_uri, full_prop_uri, question,
+                strategy=STRATEGY, property2_uri=full_prop2_uri
+            )
+            result["sparql"] = sparql
 
-    # ── STEP 5: execution ──────────────────────────────────────────────────────
-    raw = execute_sparql(sparql)
-    result["raw_answer"] = raw
+            is_valid = (
+                validate_sparql(sparql)
+                and sparql.strip().startswith("SELECT")
+                and "PREFIX" not in sparql
+                and full_prop_uri in sparql
+            )
+            if full_prop2_uri:
+                if full_prop2_uri not in sparql:
+                    is_valid = False
+            result["sparql_valid"] = is_valid
 
-    if raw:
-        answer = format_answer(question, raw, lang)
-        result["final_answer"]  = answer
-        result["failure_type"]  = "success"
-        result["verdict"]       = "PASS" if expected == "success" else "FAIL"
-    else:
-        result["failure_type"] = "execution_failure"
-        result["verdict"] = "PASS" if expected == "execution_failure" else "FAIL"
+            if is_valid:
+                raw = execute_sparql(sparql, endpoint=get_endpoint("flights"))
+                result["raw_answer"] = raw
+                if raw:
+                    result["final_answer"] = format_answer(question, raw, lang)
+                    result["failure_type"] = "success"
+                else:
+                    result["failure_type"] = "execution_failure"
+            else:
+                result["failure_type"] = "generation_failure"
 
+        # ── BRANCH C ──────────────────────────────────────────────────────────
+       # ── BRANCH C ──────────────────────────────────────────────────────────
+        elif query_type == "single_kg2":
+
+            entities = extract_airport_entities(
+                question,
+                lang,
+                routing["entity"]
+            )
+
+            print("\n[DEBUG] Question:", question)
+            print("[DEBUG] Extracted entities:", entities)
+
+            if not validate_airport_extraction(entities):
+                print("[DEBUG] AIRPORT EXTRACTION FAILED")
+                result["failure_type"] = "extraction_failure"
+                return result
+
+            lexicon_path = get_lexicon("airports")
+            lexicon = load_lexicon(lexicon_path)
+
+            prop_uri, layer, prop2 = map_property_cascade(
+                entities["property"],
+                lexicon,
+                lexicon_path
+            )
+
+            print("[DEBUG] Property:", entities["property"])
+            print("[DEBUG] Mapped property:", prop_uri)
+
+            airport_uri = (
+                map_airport(entities["entity"])
+                if entities["entity"]
+                else None
+            )
+
+            print("[DEBUG] Airport entity:", entities["entity"])
+            print("[DEBUG] Airport URI:", airport_uri)
+
+            result["property_uri"] = prop_uri
+            result["mapping_layer"] = layer
+
+            if not airport_uri or not prop_uri:
+                print("[DEBUG] MAPPING FAILURE")
+                print("[DEBUG] airport_uri =", airport_uri)
+                print("[DEBUG] prop_uri    =", prop_uri)
+
+                result["failure_type"] = "mapping_failure"
+                return result
+
+            BASE = get_base_uri("airports")
+            full_prop_uri = BASE + prop_uri
+            full_prop2_uri = (BASE + prop2) if prop2 else None
+
+            sparql = inject_and_generate(
+                airport_uri,
+                full_prop_uri,
+                question,
+                strategy=STRATEGY,
+                property2_uri=full_prop2_uri
+            )
+
+            result["sparql"] = sparql
+
+            is_valid = (
+                validate_sparql(sparql)
+                and sparql.strip().startswith("SELECT")
+                and "PREFIX" not in sparql
+                and full_prop_uri in sparql
+            )
+
+            result["sparql_valid"] = is_valid
+
+            if is_valid:
+                raw = execute_sparql(
+                    sparql,
+                    endpoint=get_endpoint("airports")
+                )
+
+                result["raw_answer"] = raw
+
+                if raw:
+                    result["final_answer"] = format_answer(
+                        question,
+                        raw,
+                        lang
+                    )
+                    result["failure_type"] = "success"
+                else:
+                    result["failure_type"] = "execution_failure"
+
+            else:
+                result["failure_type"] = "generation_failure"
+
+        # ── BRANCH D ──────────────────────────────────────────────────────────
+        elif query_type == "cross_kg":
+            flight_number = routing["entity"]
+            direction     = routing["direction"]
+            flight_uri    = map_flight(flight_number)
+
+            if not flight_uri:
+                result["failure_type"] = "mapping_failure"
+                return result
+
+            entities = extract_airport_entities(question, lang, iata_from_router=None)
+            lexicon_path = get_lexicon("airports")
+            lexicon      = load_lexicon(lexicon_path)
+            prop_uri, layer, prop2 = map_property_cascade(
+                entities["property"], lexicon, lexicon_path
+            )
+            result["property_uri"]  = prop_uri
+            result["mapping_layer"] = layer
+
+            if not prop_uri:
+                result["failure_type"] = "mapping_failure"
+                return result
+
+            BASE          = get_base_uri("airports")
+            full_prop_uri = BASE + prop_uri
+
+            cross_result = resolve_cross_kg(
+                flight_uri     = flight_uri,
+                direction      = direction,
+                property_uri   = full_prop_uri,
+                property_short = prop_uri,
+            )
+            result["raw_answer"] = cross_result.get("raw_value")
+
+            if cross_result["success"]:
+                raw = cross_result["raw_value"]
+                result["final_answer"] = format_answer(question, raw, lang)
+                result["failure_type"] = "success"
+            else:
+                result["failure_type"] = cross_result.get("failure_type", "cross_kg_failure")
+
+        elif query_type == "template":
+            result["failure_type"] = "template_not_implemented"
+
+    except Exception as e:
+        result["failure_type"] = f"exception: {str(e)}"
+
+    result["duration_s"] = round(time.time() - t0, 2)
     return result
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MAIN
-# ══════════════════════════════════════════════════════════════════════════════
+# ── DISPLAY ───────────────────────────────────────────────────────────────────
+
+def print_result(i: int, question: str, expected: str, r: dict):
+    routing_mark = ok("✓") if r["routing_ok"] else err("✗")
+    success_mark = ok("✓") if r["failure_type"] == "success" else err("✗")
+
+    q_short = question[:55] + "…" if len(question) > 55 else question
+    print(f"  [{i+1}] {q_short}")
+    print(f"       lang={r['detected_lang']}  route={routing_mark} {r['query_type']}  "
+          f"map={r['mapping_layer'] or '-'}  valid={r['sparql_valid']}  "
+          f"end2end={success_mark}  ({r['duration_s']}s)")
+    if r["final_answer"]:
+        print(f"       → {r['final_answer']}")
+    elif r["failure_type"] != "success":
+        print(f"       {warn('⚠')} failure: {r['failure_type']}")
+    print()
+
+
+# ── MAIN ──────────────────────────────────────────────────────────────────────
+
+def main():
+    all_results  = []
+    total        = 0
+    total_routed = 0
+    total_passed = 0
+
+    log_file = open("test_results.jsonl", "w", encoding="utf-8")
+
+    for branch_name, cases in ALL_TESTS:
+        print(f"\n{'─'*60}")
+        print(f"  {branch_name}")
+        print(f"{'─'*60}")
+
+        branch_passed = 0
+        branch_routed = 0
+
+        for i, (question, expected_type, note) in enumerate(cases):
+            print(f"\n  Running test {i+1}/{len(cases)}...")
+            r = run_single_test(question, expected_type)
+            r["note"]   = note
+            r["branch"] = branch_name
+            all_results.append(r)
+            log_file.write(json.dumps(r, ensure_ascii=False) + "\n")
+            print_result(i, question, expected_type, r)
+
+            if r["routing_ok"]:                    branch_routed += 1
+            if r["failure_type"] == "success":     branch_passed += 1
+
+        total        += len(cases)
+        total_routed += branch_routed
+        total_passed += branch_passed
+
+        print(f"  Branch result: routing {branch_routed}/{len(cases)}  "
+              f"end-to-end {branch_passed}/{len(cases)}")
+
+    log_file.close()
+
+    print(f"\n{'═'*60}")
+    print(f"  FINAL SUMMARY")
+    print(f"{'═'*60}")
+    print(f"  Total questions : {total}")
+    print(f"  Routing correct : {total_routed}/{total}  "
+          f"({round(total_routed/total*100)}%)")
+    print(f"  End-to-end pass : {total_passed}/{total}  "
+          f"({round(total_passed/total*100)}%)")
+    print(f"\n  Full results saved to: test_results.jsonl")
+    print(f"{'═'*60}\n")
+
+    failures = [r for r in all_results if r["failure_type"] != "success"]
+    if failures:
+        print("  Failure breakdown:")
+        from collections import Counter
+        counts = Counter(r["failure_type"] for r in failures)
+        for ft, n in counts.most_common():
+            print(f"    {ft:30s} × {n}")
+        print()
+
 
 if __name__ == "__main__":
-
-    lexicon = load_lexicon()
-
-    passed       = 0
-    failed       = 0
-    all_results  = []
-
-    print("=" * 72)
-    print("  NL2SPARQL — FULL USER STRESS TEST  (20 questions)")
-    print("=" * 72)
-
-    for case in TEST_CASES:
-        print(f"\n── Test {case['id']:02d} | {case['condition']:9} | {case['note']}")
-        print(f"   Q  : {case['question']}")
-
-        result = run_test(case, lexicon)
-        all_results.append(result)
-
-        lang    = result["language"]
-        tier    = result["mapping_layer"] or "—"
-        outcome = result["failure_type"]  or "—"
-        verdict = result["verdict"]
-
-        prop = "—"
-        if result["property_uri"]:
-            prop = result["property_uri"].split("#")[-1]
-
-        if verdict == "PASS" and outcome == "success":
-            print(f"   ✅ PASS  | lang={lang} tier={tier} prop={prop}")
-            print(f"   ↳ {result['final_answer']}")
-            passed += 1
-
-        elif verdict == "PASS":
-            # expected failure — correctly rejected
-            print(f"   ✅ PASS  | correctly rejected → {outcome}")
-            passed += 1
-
-        else:
-            print(f"   ❌ FAIL  | expected={case['expected']} got={outcome}")
-            print(f"            | lang={lang} tier={tier} prop={prop}")
-            if result["sparql"]:
-                print(f"            | SPARQL valid={result['sparql_valid']}")
-            failed += 1
-
-    # ── SUMMARY ───────────────────────────────────────────────────────────────
-    total = len(TEST_CASES)
-    print("\n" + "=" * 72)
-    print(f"  RESULTS : {passed}/{total} passed   {failed}/{total} failed")
-
-    # breakdown by language
-    for lg in ["en", "fr", "ar"]:
-        group   = [r for r in all_results if r["language"] == lg]
-        p       = sum(1 for r in group if r["verdict"] == "PASS")
-        print(f"  {lg.upper()}      : {p}/{len(group)} passed")
-
-    # breakdown by tier
-    print()
-    for tier in ["pre-norm", "exact", "fuzzy", "semantic"]:
-        group = [r for r in all_results if r["mapping_layer"] == tier]
-        if group:
-            p = sum(1 for r in group if r["verdict"] == "PASS")
-            print(f"  Tier [{tier:8}] : {p}/{len(group)} passed")
-
-    print("=" * 72)
-
-    # ── SAVE RESULTS ──────────────────────────────────────────────────────────
-    with open("test_results.jsonl", "w", encoding="utf-8") as f:
-        for r in all_results:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
-    print("\n  Results saved to test_results.jsonl")
+    main()

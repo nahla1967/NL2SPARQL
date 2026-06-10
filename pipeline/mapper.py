@@ -1,4 +1,23 @@
-# pipeline/mapper.py
+"""
+mapper.py  (modified — v2)
+--------------------------
+WHAT CHANGED vs v1:
+    load_lexicon() now accepts an optional path argument.
+    map_property_cascade() now accepts an optional lexicon argument.
+    map_airport() added — resolves an airport IATA code to its KG2 URI.
+
+    All existing functions (map_property, map_property_fuzzy,
+    map_property_with_embeddings, map_flight, map_property_cascade)
+    are completely unchanged in logic — only signatures updated to
+    accept config so the same cascade works for both KG1 and KG2.
+
+WHY THIS APPROACH:
+    The cascade (pre-norm → exact → fuzzy → semantic) is language-agnostic
+    and property-agnostic. It does not care whether the property belongs to
+    flights or airports. Only the lexicon it searches changes.
+    Passing the lexicon as a parameter — rather than hardcoding the path —
+    is the minimal change needed to make the mapper work for both KGs.
+"""
 
 import json
 import re
@@ -7,26 +26,22 @@ import urllib.request
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
 from rapidfuzz import process, fuzz
+from kg_registry import get_endpoint, get_base_uri
 
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
+FUSEKI_URL           = "http://localhost:3030/flights/sparql"
+CACHE_EMBEDDINGS_KG1 = "lexicon_embeddings.npy"
+CACHE_PHRASES_KG1    = "lexicon_phrases.json"
+CACHE_EMBEDDINGS_KG2 = "lexicon_airports_embeddings.npy"
+CACHE_PHRASES_KG2    = "lexicon_airports_phrases.json"
 
-FUSEKI_URL       = "http://localhost:3030/flights/sparql"
-CACHE_EMBEDDINGS = "lexicon_embeddings.npy"   # pre-computed phrase vectors
-CACHE_PHRASES    = "lexicon_phrases.json"     # phrase list aligned to the matrix
-
-FUZZY_THRESHOLD    = 80   # rapidfuzz WRatio score out of 100
-# 80 instead of 87: catches spelling mistakes ("componie" → "compagnie" scores 82)
-# while still rejecting random noise. You can lower to 75 for more coverage.
-
-SEMANTIC_THRESHOLD = 0.75 # cosine similarity
+FUZZY_THRESHOLD    = 80
+SEMANTIC_THRESHOLD = 0.75
 
 
 # ── TEXT NORMALISATION ────────────────────────────────────────────────────────
-# Arabic normalisation removes diacritics, unifies alef variants, teh marbuta,
-# and ya variants — all of which are stylistic, not semantic distinctions.
-
 def _normalise(text: str) -> str:
-    text = re.sub(r'[\u064B-\u0652]', '', text)   # diacritics
+    text = re.sub(r'[\u064B-\u0652]', '', text)
     text = re.sub(r'[إأآا]', 'ا', text)
     text = re.sub(r'ة', 'ه', text)
     text = re.sub(r'[يى]', 'ي', text)
@@ -37,283 +52,213 @@ def _normalise(text: str) -> str:
 
 # ── LEXICON ───────────────────────────────────────────────────────────────────
 
-def load_lexicon():
-    with open("lexicon.json", "r", encoding="utf-8") as f:
+def load_lexicon(path: str = "lexicon.json") -> dict:
+    """
+    Loads a lexicon from the given path.
+    Defaults to lexicon.json (KG1) for backward compatibility.
+    Pass "lexicon_airports.json" for KG2.
+    """
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def _get_phrases(lexicon: dict) -> list[str]:
-    """
-    Returns all property expression keys from the lexicon.
-    No filter needed — the cleaned lexicon stores only real expressions
-    inside 'properties'. Metadata lives separately under '_sections'.
-    """
-    return list(lexicon["properties"].keys())
+    return [
+        k for k in lexicon["properties"].keys()
+        if not k.startswith("_")
+    ]
 
 
-# ── PRE-NORMALISE STEP ───────────────────────────────────────────────────────
-#
-# Before calling any cascade tier, try a plain normalisation + exact lookup.
-# This is NOT the same as map_property below:
-#   - map_property does  _normalise(input) → lexicon lookup (Tier 1)
-#   - _pre_normalise     does the same but ALSO handles:
-#       * stripping small stopwords ("the", "du", "la", "de", "ال")
-#       * collapsing multiple spaces
-#       * stripping trailing question marks
-#
-# The idea: the LLM extractor now returns a raw phrase like "gate" or
-# "ville de départ" stripped of question framing. The pre-normalise step
-# catches the majority of clean inputs in a single cheap operation,
-# keeping the cascade for genuinely difficult cases only.
-
-
+# ── PRE-NORM STEP ─────────────────────────────────────────────────────────────
 def _pre_normalise(text: str) -> str:
-    """
-    Lightweight cleanup before lexicon lookup.
-    Strips punctuation, common article words, and extra whitespace.
-    """
     text = text.strip().lower()
-
-    # Strip trailing question mark (language-agnostic)
     text = re.sub(r'\?+$', '', text)
-
-    # Collapse internal punctuation to spaces — "ville,d'arrivée" → "ville d'arrivée"
     text = re.sub(r'[^\w\s\u0600-\u06FF]', ' ', text)
-
-    # Collapse multiple spaces
     text = re.sub(r'\s+', ' ', text)
-
     return text.strip()
 
-
-def _pre_map(text: str, lexicon: dict) -> tuple[str | None, str | None]:
-    """
-    Tries direct normalised lookup before invoking any cascade tier.
-    Returns (property_short_name, None) on success, or (None, None) on failure.
-    This step is fast and cheap — no fuzzy, no embeddings.
-    """
+def _pre_map(text: str, lexicon: dict) -> tuple:
     norm = _pre_normalise(text)
     normalised_properties = {
         _normalise(k): v
         for k, v in lexicon["properties"].items()
+        if not k.startswith("_")
     }
     result = normalised_properties.get(norm)
     if result:
-        print(f"[pre-norm] '{text}' → '{norm}' → exact hit: {result}")
+        print(f"[pre-norm] '{text}' → exact hit: {result}")
     return result, None
 
 
-# ── TIER 1 — EXACT MATCH ──────────────────────────────────────────────────────
-
+# ── TIER 1: EXACT ─────────────────────────────────────────────────────────────
 def map_property(property_text: str, lexicon: dict) -> str | None:
     key = _normalise(property_text)
     normalised_properties = {
         _normalise(k): v
         for k, v in lexicon["properties"].items()
+        if not k.startswith("_")
     }
     return normalised_properties.get(key)
 
 
-# ── TIER 2 — FUZZY MATCH (rapidfuzz) ─────────────────────────────────────────
-# WRatio is a composite scorer that handles partial matches, transpositions,
-# and reorderings — robust to minor wording variations without needing
-# vector representations at all.
-# Example failures it catches that exact match misses:
-#   "departure town"     → "departure city"
-#   "aéroport d'arrivée" → "ville d'arrivée"
-#   "مدينة الانطلاق"    → "مدينة المغادرة"
-
+# ── TIER 2: FUZZY ─────────────────────────────────────────────────────────────
 def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
     phrases      = _get_phrases(lexicon)
     norm_in      = _normalise(property_text)
     norm_phrases = [_normalise(p) for p in phrases]
-
     result = process.extractOne(norm_in, norm_phrases, scorer=fuzz.WRatio)
     if result is None:
         return None
-
     matched_phrase, score, index = result
     print(f"[fuzzy] input='{property_text}' → match='{phrases[index]}' score={score}")
-
     if score >= FUZZY_THRESHOLD:
         return lexicon["properties"][phrases[index]]
     return None
 
 
-# ── TIER 3 — SEMANTIC EMBEDDINGS (language-aware) ─────────────────────────────
-# The lexicon never changes between runs, so recomputing embeddings every time
-# is wasteful. We compute the phrase matrix once, persist it to disk, and load
-# it on subsequent runs. Only the user's query needs a fresh forward pass.
-#
-# IMPORTANT: semantic matching is language-aware.
-# Without language filtering, a French query like "componie" could incorrectly
-# match an Arabic phrase that happens to be vectorially close. To prevent this:
-#   1. Detect the script of the input (Arabic / Latin)
-#   2. Build a sub-matrix of only same-script lexicon entries
-#   3. Search within that sub-matrix first
-#   4. Fall back to full matrix only if no good match found
-#
-# Known limitation: this heuristic splits the lexicon by script (Arabic vs Latin),
-# which means EN/FR share the same semantic space. This is acceptable since they
-# are morphologically close and the multilingual model handles cross-lingual cases.
-
-_embedding_model   = None   # lazy-loaded on first use
-_cached_embeddings = None   # numpy matrix (n_phrases × 768)
-_cached_phrases    = None   # list aligned to the matrix rows
-
+# ── TIER 3: SEMANTIC ──────────────────────────────────────────────────────────
+_embedding_model   = None
+_cached_embeddings = {}   # dict: cache_path → numpy matrix
+_cached_phrases    = {}   # dict: cache_path → list of phrases
 
 def _get_model():
     global _embedding_model
     if _embedding_model is None:
-        print("[mapper] Loading embedding model (first time)...")
+        print("[mapper] Loading embedding model...")
         _embedding_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
     return _embedding_model
 
-
-def _load_or_build_cache(lexicon: dict):
+def _load_or_build_cache(lexicon: dict, lexicon_path: str):
     """
     Returns (phrases, embedding_matrix).
-    Loads from disk if the cache exists; builds and saves it on first run.
+    Uses separate cache files for KG1 and KG2 lexicons.
     """
-    global _cached_embeddings, _cached_phrases
-    if _cached_embeddings is not None:
-        return _cached_phrases, _cached_embeddings
-
     import os
-    if os.path.exists(CACHE_EMBEDDINGS) and os.path.exists(CACHE_PHRASES):
-        print("[mapper] Loading pre-computed lexicon embeddings from cache...")
-        with open(CACHE_PHRASES, "r", encoding="utf-8") as f:
-            _cached_phrases = json.load(f)
-        _cached_embeddings = np.load(CACHE_EMBEDDINGS)
-        return _cached_phrases, _cached_embeddings
+    # Choose cache file based on lexicon path
+    if "airport" in lexicon_path:
+        emb_cache   = CACHE_EMBEDDINGS_KG2
+        phrase_cache = CACHE_PHRASES_KG2
+    else:
+        emb_cache   = CACHE_EMBEDDINGS_KG1
+        phrase_cache = CACHE_PHRASES_KG1
 
-    print("[mapper] Building embedding cache (one-time setup)...")
+    if emb_cache in _cached_embeddings:
+        return _cached_phrases[emb_cache], _cached_embeddings[emb_cache]
+
+    if os.path.exists(emb_cache) and os.path.exists(phrase_cache):
+        print(f"[mapper] Loading cached embeddings from {emb_cache}...")
+        with open(phrase_cache, "r", encoding="utf-8") as f:
+            phrases = json.load(f)
+        embeddings = np.load(emb_cache)
+        _cached_phrases[emb_cache]    = phrases
+        _cached_embeddings[emb_cache] = embeddings
+        return phrases, embeddings
+
+    print(f"[mapper] Building embedding cache for {lexicon_path}...")
     model        = _get_model()
     phrases      = _get_phrases(lexicon)
     norm_phrases = [_normalise(p) for p in phrases]
     embeddings   = model.encode(norm_phrases, show_progress_bar=True)
-
-    np.save(CACHE_EMBEDDINGS, embeddings)
-    with open(CACHE_PHRASES, "w", encoding="utf-8") as f:
+    np.save(emb_cache, embeddings)
+    with open(phrase_cache, "w", encoding="utf-8") as f:
         json.dump(phrases, f, ensure_ascii=False)
-
-    _cached_phrases    = phrases
-    _cached_embeddings = embeddings
+    _cached_phrases[emb_cache]    = phrases
+    _cached_embeddings[emb_cache] = embeddings
     return phrases, embeddings
 
+_ARABIC_RE = re.compile(r'^[\u0600-\u06FF\s\?]+$')
+
+def _is_arabic_phrase(phrase: str) -> bool:
+    return bool(_ARABIC_RE.match(phrase))
 
 def _detect_script(text: str) -> str:
-    """
-    Heuristic language/script detection for semantic filtering.
-    Returns 'arabic' | 'latin' based on dominant Unicode block.
-    """
     arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
     total        = len([c for c in text if c.isalpha()])
     if total == 0:
         return "latin"
     return "arabic" if arabic_chars / total > 0.3 else "latin"
 
-
-_ARABIC_RE  = re.compile(r'^[\u0600-\u06FF\s\?]+$')
-
-
-def _is_arabic_phrase(phrase: str) -> bool:
-    """True if phrase is primarily Arabic script."""
-    return bool(_ARABIC_RE.match(phrase))
-
-
-def map_property_with_embeddings(property_text: str, lexicon: dict) -> str | None:
-    """
-    Semantic fallback with language-aware search.
-    See cascade docstring above for the language-filtering strategy.
-    """
-    model           = _get_model()#the AI that converts phrases to vectors
-    phrases, matrix = _load_or_build_cache(lexicon)#a pre-computed table of vectors for every phrase in your lexicon
+def map_property_with_embeddings(
+    property_text: str,
+    lexicon: dict,
+    lexicon_path: str = "lexicon.json"
+) -> str | None:
+    model           = _get_model()
+    phrases, matrix = _load_or_build_cache(lexicon, lexicon_path)
     norm_in         = _normalise(property_text)
     script          = _detect_script(norm_in)
+    query_vec       = model.encode(norm_in)
 
-    query_vec = model.encode(norm_in)# Convert user input to vector
-
-    # Step 1: same-script candidates only
     same_script_indices = [
         i for i, ph in enumerate(phrases)
         if (_is_arabic_phrase(ph) if script == "arabic" else not _is_arabic_phrase(ph))
     ]
 
     if same_script_indices:
-        sub_matrix      = matrix[same_script_indices]
-        sub_scores      = util.cos_sim(query_vec, sub_matrix)[0]
-        best_sub_idx    = sub_scores.argmax().item()
-        best_sub_score  = sub_scores[best_sub_idx].item()
-        best_index      = same_script_indices[best_sub_idx]
-        best_phrase     = phrases[best_index]
-        best_score      = best_sub_score
+        sub_matrix  = matrix[same_script_indices]
+        sub_scores  = util.cos_sim(query_vec, sub_matrix)[0]
+        best_sub_idx   = sub_scores.argmax().item()
+        best_sub_score = sub_scores[best_sub_idx].item()
+        best_index     = same_script_indices[best_sub_idx]
+        best_phrase    = phrases[best_index]
 
-        print(f"[semantic] input='{property_text}' [script={script}] "
-              f"→ match='{best_phrase}' score={best_score:.3f} "
-              f"(searched {len(same_script_indices)} same-script candidates)")
+        print(f"[semantic] '{property_text}' [script={script}] "
+              f"→ '{best_phrase}' score={best_sub_score:.3f}")
 
-        if best_score >= SEMANTIC_THRESHOLD:
+        if best_sub_score >= SEMANTIC_THRESHOLD:
             return lexicon["properties"][best_phrase]
 
-    # Step 2: fallback — search full matrix (cross-script permitted)
-    all_scores     = util.cos_sim(query_vec, matrix)[0]
-    best_full_idx  = all_scores.argmax().item()
+    all_scores      = util.cos_sim(query_vec, matrix)[0]
+    best_full_idx   = all_scores.argmax().item()
     best_full_score = all_scores[best_full_idx].item()
     best_full_phrase = phrases[best_full_idx]
 
-    print(f"[semantic] input='{property_text}' [script={script}] "
-          f"→ full-matrix best: match='{best_full_phrase}' score={best_full_score:.3f} "
-          f"(same-script search returned no confident match)")
+    print(f"[semantic] '{property_text}' full-matrix → "
+          f"'{best_full_phrase}' score={best_full_score:.3f}")
 
-    # Only return if full-matrix score is notably better AND above threshold
-    # This prevents silently accepting a mediocre cross-script match
     if best_full_score >= SEMANTIC_THRESHOLD + 0.05:
         return lexicon["properties"][best_full_phrase]
-
     return None
 
 
-# ── FULL CASCADE (returns URI + tier for evaluation) ──────────────────────────
+# ── FULL CASCADE ──────────────────────────────────────────────────────────────
 
-def map_property_cascade(property_text, lexicon):
+def map_property_cascade(
+    property_text: str,
+    lexicon: dict,
+    lexicon_path: str = "lexicon.json"
+) -> tuple:
     """
-    Returns (prop1, tier, prop2):
-    - prop1 : first property URI (or None if no match)
-    - tier  : which tier resolved it
-    - prop2 : second property URI for two-hop, or None for single-hop
+    Returns (prop1, tier, prop2).
+    lexicon_path is used to select the correct embedding cache.
+    Defaults to KG1 for backward compatibility.
     """
     if not property_text:
         return None, None, None
 
     def _unpack(uri):
-        """
-        If uri is a list → two-hop: return (first, second)
-        If uri is a string → single-hop: return (uri, None)
-        """
         if isinstance(uri, list):
             return uri[0], uri[1]
+        if isinstance(uri, dict):
+            # special_query entries (e.g. coordinates) — return as-is
+            return uri, None
         return uri, None
 
-    # Tier 0 — pre-norm
     uri, _ = _pre_map(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
         return prop1, "pre-norm", prop2
 
-    # Tier 1 — exact
     uri = map_property(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
         return prop1, "exact", prop2
 
-    # Tier 2 — fuzzy
     uri = map_property_fuzzy(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
         return prop1, "fuzzy", prop2
 
-    # Tier 3 — semantic
-    uri = map_property_with_embeddings(property_text, lexicon)
+    uri = map_property_with_embeddings(property_text, lexicon, lexicon_path)
     if uri:
         prop1, prop2 = _unpack(uri)
         return prop1, "semantic", prop2
@@ -321,23 +266,14 @@ def map_property_cascade(property_text, lexicon):
     return None, None, None
 
 
-# ── FLIGHT MAPPING ────────────────────────────────────────────────────────────
-
-# In-memory cache: flight_number (str) → KG URI (str)
-# The KG is static — a flight number always resolves to the same URI.
-# Caching avoids a redundant Fuseki HTTP call on every repeated lookup,
-# which matters during evaluation where the same flights appear across
-# multiple conditions and languages.
+# ── FLIGHT MAPPING (KG1) — UNCHANGED ─────────────────────────────────────────
 _flight_uri_cache: dict[str, str] = {}
 
-
-def map_flight(flight_number: str) -> str | None: #this is 1 hop just finding the flight uri , one step not multi hop
+def map_flight(flight_number: str) -> str | None:
     base          = "http://www.semanticweb.org/ontologies/flight_ontology#"
     flight_number = flight_number.strip().upper()
 
-    # Return immediately if already resolved in this session
     if flight_number in _flight_uri_cache:
-        print(f"[map_flight] cache hit → {flight_number}")
         return _flight_uri_cache[flight_number]
 
     query = f"""
@@ -347,7 +283,7 @@ SELECT ?flight WHERE {{
 LIMIT 1
 """
     data = urllib.parse.urlencode({
-        "query": query,
+        "query":  query,
         "format": "application/sparql-results+json"
     }).encode()
     req = urllib.request.Request(FUSEKI_URL, data=data)
@@ -357,7 +293,7 @@ LIMIT 1
             bindings = result["results"]["bindings"]
             if bindings:
                 uri = bindings[0]["flight"]["value"]
-                _flight_uri_cache[flight_number] = uri   # store for future calls
+                _flight_uri_cache[flight_number] = uri
                 return uri
     except urllib.error.URLError as e:
         print(f"[map_flight] Fuseki unreachable: {e}")
@@ -365,4 +301,47 @@ LIMIT 1
         print(f"[map_flight] Unexpected error: {e}")
     return None
 
-#why didnt we put the flights in the lexicon ? because the flights are dynamic so we need to query fuseki because "too many , random uris" + faster , propertes in lexicon because they are fixed + knwown in advance + instant
+
+# ── AIRPORT MAPPING (KG2) — NEW ───────────────────────────────────────────────
+_airport_uri_cache: dict[str, str] = {}
+
+def map_airport(iata: str) -> str | None:
+    """
+    Resolves an IATA code to its KG2 Airport URI.
+    Queries the /airports/sparql endpoint.
+
+    Example: "VIE" → "http://...airport_ontology#Airport/VIE"
+
+    Uses an in-memory cache — the KG is static.
+    """
+    iata     = iata.strip().upper()
+    endpoint = get_endpoint("airports")
+    base     = get_base_uri("airports")
+
+    if iata in _airport_uri_cache:
+        return _airport_uri_cache[iata]
+
+    query = f"""
+SELECT ?airport WHERE {{
+  ?airport <{base}iataCode> "{iata}" .
+}}
+LIMIT 1
+"""
+    data = urllib.parse.urlencode({
+        "query":  query,
+        "format": "application/sparql-results+json"
+    }).encode()
+    req = urllib.request.Request(endpoint, data=data)
+    try:
+        with urllib.request.urlopen(req) as response:
+            result   = json.loads(response.read())
+            bindings = result["results"]["bindings"]
+            if bindings:
+                uri = bindings[0]["airport"]["value"]
+                _airport_uri_cache[iata] = uri
+                return uri
+    except urllib.error.URLError as e:
+        print(f"[map_airport] Fuseki unreachable: {e}")
+    except Exception as e:
+        print(f"[map_airport] Unexpected error: {e}")
+    return None
