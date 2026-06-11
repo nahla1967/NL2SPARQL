@@ -45,125 +45,221 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CASES ────────────────────────────────────────────────────────────────
 
-BRANCH_TESTS = [
+"""
+test_pipeline.py
+----------------
+Tests the three working branches of the NL2SPARQL multi-KG pipeline.
 
-# ─────────────────────────────────────────────────────
-# KG1 — FLIGHT QUERIES (15 tests)
-# Covers: exact match, multilingual, short form, fuzzy
-# ─────────────────────────────────────────────────────
+HOW TO RUN:
+    1. Make sure Fuseki is running with BOTH datasets:
+          http://localhost:3030/flights/sparql   (KG1)
+          http://localhost:3030/airports/sparql  (KG2)
+    2. Make sure Ollama is running:
+          ollama serve
+    3. From your project root (NL2SPARQL/):
+          python test_pipeline.py
 
-# English — exact
-("What is the departure city of flight OS295?",          "single_kg1", "en-exact"),
-("Which airline operates flight BR62?",                  "single_kg1", "en-exact"),
-("What is the destination of flight FR707?",             "single_kg1", "en-exact"),
-("What aircraft is used for flight KE567?",              "single_kg1", "en-exact"),
-("What is the arrival time of flight OS631?",            "single_kg1", "en-exact"),
+WHAT IT TESTS:
+    Branch B — single_kg1  : 5 questions (EN/FR/AR) against KG1
+    Branch C — single_kg2  : 5 questions (EN/FR/AR) against KG2
+    Branch D — cross_kg    : 5 questions (EN/FR/AR) bridging KG1 → KG2
 
-# French — exact
-("Quelle est la ville de départ du vol OS52?",           "single_kg1", "fr-exact"),
-("Quel est l'aéroport d'arrivée du vol TO4388?",         "single_kg1", "fr-exact"),
-("Quelle compagnie opère le vol FR6889?",                "single_kg1", "fr-exact"),
+OUTPUT:
+    Prints a result table per branch.
+    Saves all results to test_results.jsonl.
+    Prints a final summary with pass/fail counts.
+"""
 
-# Arabic — exact
-("ما هي مدينة المغادرة للرحلة OS295؟",                  "single_kg1", "ar-exact"),
-("إلى أين تتجه الرحلة FR164؟",                          "single_kg1", "ar-exact"),
-("من يشغّل الرحلة DE1866؟",                             "single_kg1", "ar-exact"),
+import json
+import sys
+import time
 
-# Short / degraded form
-("departure city OS631",                                 "single_kg1", "en-short"),
-("airline FR9005",                                       "single_kg1", "en-short"),
-("destination of BR62",                                  "single_kg1", "en-short"),
-("vol OS295 ville départ",                               "single_kg1", "fr-short"),
+from pipeline.language  import detect_language
+from router             import route
+from pipeline.extractor import (
+    extract_entities, validate_extraction, is_flight_question,
+    extract_airport_entities, validate_airport_extraction,
+)
+from pipeline.mapper import (
+    load_lexicon, map_property_cascade, map_flight, map_airport,
+)
+from pipeline.generator import inject_and_generate
+from pipeline.executor  import (
+    validate_sparql, execute_sparql, format_answer,
+)
+from cross_kg_resolver  import resolve_cross_kg
+from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
+# ── TEST CASES ────────────────────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────
-# KG2 — AIRPORT QUERIES (15 tests)
-# Covers: exact, IATA, multilingual, fuzzy/typo
-# ─────────────────────────────────────────────────────
-
-# English — exact entity + exact property
-("What is the elevation of Vienna airport?",             "single_kg2", "en-exact"),
-("What country is Munich airport in?",                   "single_kg2", "en-exact"),
-("What city is London Heathrow located in?",             "single_kg2", "en-exact"),
-("What type of airport is Frankfurt airport?",           "single_kg2", "en-exact"),
-("What country is Paris Charles de Gaulle airport in?",  "single_kg2", "en-exact"),
-
-# IATA code as entity
-("What is the elevation of MUC?",                        "single_kg2", "en-iata"),
-("What country is VIE in?",                              "single_kg2", "en-iata"),
-("City of LHR airport",                                  "single_kg2", "en-iata"),
-
+NEW_BATCH = [
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 1 — KG1 EXACT MATCH  (10 questions)
+# Tests: flight number extraction, exact lexicon hits, EN/FR/AR
+# Expected: all single_kg1, all success
+# ═══════════════════════════════════════════════════════════════════
+ 
+# English
+("What is the gate of flight OS529?",                    "single_kg1", "kg1-en-exact"),
+("What terminal does flight TK1847 use?",                "single_kg1", "kg1-en-exact"),
+("What is the callsign of flight LO283?",                "single_kg1", "kg1-en-exact"),
+("What weather conditions affect flight FR9005?",        "single_kg1", "kg1-en-exact"),
+("Which runway does flight OS631 use?",                  "single_kg1", "kg1-en-exact"),
+ 
+# French — different flights from batch 1
+("Quelle est la porte du vol OS529?",                    "single_kg1", "kg1-fr-exact"),
+("Quel est le terminal du vol TK1847?",                  "single_kg1", "kg1-fr-exact"),
+("Quelle est la compagnie aérienne du vol LO283?",       "single_kg1", "kg1-fr-exact"),
+ 
+# Arabic — different flights from batch 1
+("ما هي بوابة الصعود للرحلة OS529؟",                     "single_kg1", "kg1-ar-exact"),
+("ما هو المدرج الذي تستخدمه الرحلة FR707؟",              "single_kg1", "kg1-ar-exact"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 2 — KG2 EXACT MATCH  (10 questions)
+# Tests: airport entity detection, exact lexicon hits, EN/FR/AR
+# Expected: all single_kg2, all success
+# ═══════════════════════════════════════════════════════════════════
+ 
+# English — different airports from batch 1
+("What is the elevation of Istanbul airport?",           "single_kg2", "kg2-en-exact"),
+("What country is Brussels airport in?",                 "single_kg2", "kg2-en-exact"),
+("What is the IATA code of Stockholm airport?",          "single_kg2", "kg2-en-exact"),
+("What city does Copenhagen airport serve?",             "single_kg2", "kg2-en-exact"),
+("What is the ICAO code of Rome airport?",               "single_kg2", "kg2-en-exact"),
+ 
+# French — different airports
+("Quel est le type de l'aéroport de Bruxelles?",        "single_kg2", "kg2-fr-exact"),
+("Dans quelle ville se trouve l'aéroport de Rome?",     "single_kg2", "kg2-fr-exact"),
+("Quel est le pays de l'aéroport de Stockholm?",        "single_kg2", "kg2-fr-exact"),
+ 
+# Arabic — different airports
+("ما هو ارتفاع مطار إسطنبول؟",                          "single_kg2", "kg2-ar-exact"),
+("في أي دولة يقع مطار بروكسل؟",                         "single_kg2", "kg2-ar-exact"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 3 — NEW SYNONYM ENTRIES  (5 questions)
+# Tests: the new lexicon entries added in lexicon_airports_patch.json
+# nation → country, town/serve → municipality, kind → airportType
+# Expected: all single_kg2, all success
+# ═══════════════════════════════════════════════════════════════════
+ 
+("What nation is London Heathrow airport in?",           "single_kg2", "kg2-synonym-nation"),
+("Which town does Frankfurt airport serve?",             "single_kg2", "kg2-synonym-town"),
+("What kind of facility is Munich airport?",             "single_kg2", "kg2-synonym-kind"),
+("What nation is Vienna airport located in?",            "single_kg2", "kg2-synonym-nation"),
+("Which city does Warsaw airport serve?",                "single_kg2", "kg2-synonym-serve"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 4 — CROSS-KG  (10 questions)
+# Tests: KG1 flight → IATA → KG2 airport property
+# Tests the flexible cross-KG signal detection (Fix 2)
+# Expected: all cross_kg, all success
+# ═══════════════════════════════════════════════════════════════════
+ 
+# English — destination
+("What country is the destination airport of flight LO283?",     "cross_kg", "xkg-en-dest"),
+("What is the elevation of the landing airport of flight TK1847?","cross_kg", "xkg-en-dest"),
+("What type of airport does flight FR9005 land at?",              "cross_kg", "xkg-en-dest"),
+("What city is the arrival airport of flight OS529 in?",          "cross_kg", "xkg-en-dest"),
+ 
+# English — origin
+("What country is the departure airport of flight LO283?",        "cross_kg", "xkg-en-orig"),
+("What is the elevation of the origin airport of flight TK1847?", "cross_kg", "xkg-en-orig"),
+ 
 # French
-("Quelle est l'élévation de l'aéroport de Munich?",     "single_kg2", "fr-exact"),
-("Dans quelle ville se trouve l'aéroport de Munich?",   "single_kg2", "fr-exact"),
-("Quel est le pays de l'aéroport de Vienne?",           "single_kg2", "fr-exact"),
-
+("Dans quel pays se trouve l'aéroport de destination du vol LO283?", "cross_kg", "xkg-fr-dest"),
+("Quelle est l'élévation de l'aéroport de départ du vol OS529?",     "cross_kg", "xkg-fr-orig"),
+ 
 # Arabic
-("ما هو ارتفاع مطار فيينا؟",                            "single_kg2", "ar-exact"),
-("في أي دولة يقع مطار ميونخ؟",                          "single_kg2", "ar-exact"),
-("ما هو نوع مطار فرانكفورت؟",                           "single_kg2", "ar-exact"),
-
-# Typo / fuzzy
-("elevtion of viena airport",                            "single_kg2", "en-typo"),
-
-
-# ─────────────────────────────────────────────────────
-# CROSS KG — FLIGHT + AIRPORT (10 tests)
-# KG1 gives IATA → KG2 answers airport property
-# Covers: origin, destination, EN/FR/AR
-# ─────────────────────────────────────────────────────
-
-# English — destination airport property
-("What country is the destination airport of flight OS295?",     "cross_kg", "en-dest"),
-("What is the elevation of the arrival airport of flight BR62?", "cross_kg", "en-dest"),
-("What city is the destination airport of flight FR707?",        "cross_kg", "en-dest"),
-("What type of airport does flight KE567 land at?",              "cross_kg", "en-dest"),
-
-# English — origin airport property
-("What country is the departure airport of flight OS631?",       "cross_kg", "en-orig"),
-("What is the elevation of the origin airport of flight OS52?",  "cross_kg", "en-orig"),
-
-# French
-("Dans quel pays se trouve l'aéroport de destination du vol OS295?",  "cross_kg", "fr-dest"),
-("Quelle est l'élévation de l'aéroport de départ du vol BR62?",       "cross_kg", "fr-orig"),
-
-# Arabic
-("ما هي دولة مطار الوصول للرحلة FR707؟",                "cross_kg", "ar-dest"),
-("ما هو ارتفاع مطار المغادرة للرحلة OS295؟",            "cross_kg", "ar-orig"),
-
-
-# ─────────────────────────────────────────────────────
-# EMBEDDING / SEMANTIC FALLBACK (5 tests)
-# Property phrases not in lexicon — should reach tier 3
-# ─────────────────────────────────────────────────────
-
-("How high above sea level is Vienna airport?",          "single_kg2", "en-semantic"),
-("What nation is Frankfurt airport located in?",         "single_kg2", "en-semantic"),
-("Which town does Munich airport serve?",                "single_kg2", "en-semantic"),
-("What kind of facility is London Heathrow?",            "single_kg2", "en-semantic"),
-("What is the ground speed of flight OS295?",            "single_kg1", "en-semantic"),
-
-
-# ─────────────────────────────────────────────────────
-# EDGE CASES / ROBUSTNESS (5 tests)
-# ─────────────────────────────────────────────────────
-
-("Who won the FIFA World Cup?",                          "out_of_scope", "noise"),
-("What is the weather in Paris?",                        "out_of_scope", "noise"),
-("elevation",                                            "out_of_scope", "noise"),
-("flight",                                               "out_of_scope", "noise"),
-("OS295 VIE elevation country",                          "single_kg2",   "ambiguous"),
-
+("ما هي دولة مطار الوصول للرحلة TK1847؟",                "cross_kg", "xkg-ar-dest"),
+("ما هو ارتفاع مطار المغادرة للرحلة LO283؟",             "cross_kg", "xkg-ar-orig"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 5 — FUZZY / TYPO TOLERANCE  (5 questions)
+# Tests: the fuzzy tier of map_property_cascade
+# Deliberate typos and spelling variants
+# Expected: single_kg1 or single_kg2, success
+# ═══════════════════════════════════════════════════════════════════
+ 
+("What is the elevtion of Viena airport?",               "single_kg2", "fuzzy-typo"),
+("What cuntry is Frankfort airport in?",                 "single_kg2", "fuzzy-typo"),
+("Which airlin operates flight FR707?",                  "single_kg1", "fuzzy-typo"),
+("What is the departur city of flight OS295?",           "single_kg1", "fuzzy-typo"),
+("destiantion of flight BR62",                           "single_kg1", "fuzzy-short-typo"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 6 — SEMANTIC FALLBACK  (5 questions)
+# Tests: embedding tier — phrases NOT in lexicon, must reach tier 3
+# These are genuine paraphrases a real user might type
+# Expected: success (semantic mapping to correct property)
+# ═══════════════════════════════════════════════════════════════════
+ 
+("How far above the ground is Vienna airport?",          "single_kg2", "semantic-elevation"),
+("What is the official designation of Munich airport?",  "single_kg2", "semantic-airportType"),
+("Where is Berlin Brandenburg airport physically located?","single_kg2","semantic-municipality"),
+("How fast was flight OS295 flying?",                    "single_kg1", "semantic-speed"),
+("Which carrier is responsible for flight DE1866?",      "single_kg1", "semantic-airline"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 7 — OUT-OF-SCOPE / NOISE  (5 questions)
+# Tests: the minimum structure guard (Fix 4) + general robustness
+# None of these should produce a flight or airport answer
+# Expected: all out_of_scope
+# ═══════════════════════════════════════════════════════════════════
+ 
+("Who is the president of France?",                      "out_of_scope", "noise-general"),
+("How do I book a flight?",                              "out_of_scope", "noise-general"),
+("runway",                                               "out_of_scope", "noise-single-word"),
+("What is the best pizza in Naples?",                    "out_of_scope", "noise-location-trap"),
+("Tell me about the history of aviation",                "out_of_scope", "noise-general"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 8 — SHORT FORM QUERIES  (5 questions)
+# Tests: 2-3 word inputs that ARE valid (contain flight number or entity)
+# These were previously failing or untested
+# Expected: success
+# ═══════════════════════════════════════════════════════════════════
+ 
+("gate OS529",                                           "single_kg1", "short-2words"),
+("terminal TK1847",                                      "single_kg1", "short-2words"),
+("elevation IST",                                        "single_kg2", "short-2words"),
+("country VIE airport",                                  "single_kg2", "short-3words"),
+("airline DE1866",                                       "single_kg1", "short-2words"),
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+# GROUP 9 — TWO-HOP QUERIES  (5 questions)
+# Tests: property2_uri injection — requires intermediate node
+# Examples: aircraft type, country via locatedInCountry → countryName
+# Expected: all success with two-hop SPARQL
+# ═══════════════════════════════════════════════════════════════════
+ 
+("What type of aircraft is used on flight OS295?",       "single_kg1", "two-hop-aircraft-type"),
+("What is the aircraft registration of flight BR62?",    "single_kg1", "two-hop-aircraft-reg"),
+("What is the ground speed of flight TK1847?",           "single_kg1", "two-hop-speed"),
+("What continent is Vienna airport on?",                 "single_kg2", "two-hop-continent"),
+("What region is Frankfurt airport in?",                 "single_kg2", "two-hop-region"),
+ 
 ]
+ 
 
 ALL_TESTS = [
-    ("FULL PIPELINE TEST", BRANCH_TESTS),
+    ("FULL PIPELINE TEST", NEW_BATCH),
 ]
 
 
 ALL_TESTS = [
   #  ("BRANCH B — single_kg1", BRANCH_B_TESTS),
-    ("BRANCH C — single_kg2", BRANCH_TESTS),
+    ("BRANCH C — single_kg2", NEW_BATCH),
    # ("BRANCH D — cross_kg",   BRANCH_D_TESTS),
 ]
 

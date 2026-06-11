@@ -1,44 +1,78 @@
 """
-generator.py  (v2 — KG-agnostic)
-----------------------------------
-WHAT CHANGED vs v1:
-    The generator no longer prepends any BASE URI internally.
-    It accepts full URIs directly from the caller.
+generator.py  (v3 — reversed-triple fix)
+------------------------------------------
+WHAT CHANGED vs v2:
+    Added fix_reversed_triple() inside extract_sparql().
 
-    v1 had:
-        property_uri = BASE + property_short   ← hardcoded flight_ontology
-    v2 has:
-        property_uri is received as a full URI ← caller decides the base
+    WHY THIS IS NEEDED:
+        For Arabic questions, the LLM sometimes generates triples in
+        the wrong order:
+            <subject> ?value <property> .    ← WRONG
+        instead of:
+            <subject> <property> ?value .    ← CORRECT
 
-WHY THIS MATTERS:
-    This makes the generator completely KG-agnostic.
-    The same function generates correct SPARQL for:
-        - KG1 flight queries   (flight_ontology URIs)
-        - KG2 airport queries  (airport_ontology URIs)
-        - Any future KG        (any URI namespace)
+        This is a known LLM behavior: Arabic reads right-to-left, and
+        the model occasionally mirrors that order into SPARQL.
 
-    The caller (main.py or test_pipeline.py) builds the full URI:
-        full_prop_uri = get_base_uri("airports") + prop_short
+        The fix is a regex that detects this exact pattern and flips it.
+        No LLM call needed — pure string correction.
 
-    The generator receives it and uses it directly — no modification.
+    This fix is applied BEFORE returning from extract_sparql(), so it
+    protects all three strategies (zero-shot, few-shot, cot) equally.
 
-FLIGHT_BASE:
-    Still used ONLY in few-shot example URIs, not in query construction.
-    These are static demonstration examples, not real query URIs.
+    No other changes. The KG-agnostic design from v2 is preserved.
 """
 
+import re
 import ollama
 
 # Used ONLY for the static few-shot examples below.
-# Never applied to real query URIs.
 FLIGHT_BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
 
+
+# ── REVERSED TRIPLE FIX ───────────────────────────────────────────────────────
+
+def fix_reversed_triple(sparql: str) -> str:
+    """
+    Detects and corrects reversed SPARQL triples.
+
+    The LLM occasionally generates (especially for Arabic questions):
+        <subject_uri> ?value <property_uri> .   ← WRONG ORDER
+
+    This function flips them to the correct form:
+        <subject_uri> <property_uri> ?value .   ← CORRECT
+
+    The pattern: a full URI, then a variable, then another full URI,
+    ending with a dot — unambiguously a reversed triple.
+
+    Works for all variable names (?value, ?v, ?result, etc.).
+    Does not modify two-hop triples (?intermediate is a variable, not URI).
+    """
+    # Matches: <uri> ?var <uri> .
+    pattern = re.compile(
+        r'(<[^>]+>)\s+\?(\w+)\s+(<[^>]+>)\s*\.',
+        re.MULTILINE
+    )
+
+    def flip(m):
+        subject      = m.group(1)
+        var_name     = m.group(2)
+        property_uri = m.group(3)
+        print(f"[generator] Reversed triple detected — auto-correcting")
+        return f"{subject} {property_uri} ?{var_name} ."
+
+    return pattern.sub(flip, sparql)
+
+
+# ── SPARQL EXTRACTOR ──────────────────────────────────────────────────────────
 
 def extract_sparql(text: str) -> str:
     """
     Extracts the SPARQL SELECT query from the LLM response.
-    Handles cases where the LLM adds explanatory text before or after.
-    Auto-closes any unclosed braces to recover from truncated responses.
+
+    1. Finds the SELECT keyword and strips everything before it.
+    2. Auto-closes unclosed braces (handles truncated responses).
+    3. Fixes reversed triples (handles Arabic LLM output quirk).
     """
     start = text.find("SELECT")
     if start != -1:
@@ -48,9 +82,15 @@ def extract_sparql(text: str) -> str:
         deficit      = open_braces - close_braces
         if deficit > 0:
             query += "\n}" * deficit
+
+        # Fix reversed triples before returning
+        query = fix_reversed_triple(query)
         return query
+
     return text.strip()
 
+
+# ── MAIN GENERATOR ────────────────────────────────────────────────────────────
 
 def inject_and_generate(
     entity_uri:    str,
@@ -91,6 +131,9 @@ SELECT ?value WHERE {{
 ?intermediate <property2_uri> ?value .
 }}
 
+IMPORTANT: The triple order must always be: subject property object.
+Never write: subject ?variable property.
+
 Use full URIs with angle brackets. Do not use PREFIX declarations.
 Return only the SPARQL query. No explanation. No markdown."""
 
@@ -102,6 +145,11 @@ The property URI is: <{property_uri}>
 
 Write a valid SPARQL SELECT query that retrieves the value of that property.
 The query must start with SELECT ?value WHERE {{
+
+IMPORTANT: The triple order must always be: subject property object.
+Write: <{entity_uri}> <{property_uri}> ?value .
+Never write: <{entity_uri}> ?value <{property_uri}> .
+
 Use full URIs with angle brackets. Do not use PREFIX declarations.
 Return only the SPARQL query. No explanation. No markdown."""
 
@@ -129,6 +177,7 @@ First property URI: <{property_uri}>
 Second property URI: <{property2_uri}>
 
 The query must follow the same structure as the example.
+IMPORTANT: Triple order is always subject → property → object (never reversed).
 Use full URIs with angle brackets. Do not use PREFIX declarations.
 Return only the SPARQL query. No explanation. No markdown."""
 
@@ -158,6 +207,7 @@ Subject URI: <{entity_uri}>
 Property URI: <{property_uri}>
 
 The query must start with SELECT ?value WHERE {{
+IMPORTANT: Triple order is always subject → property → object (never reversed).
 Use full URIs with angle brackets. Do not use PREFIX declarations.
 Return only the SPARQL query. No explanation. No markdown."""
 
@@ -178,6 +228,7 @@ Step 3 — Identify the second property.
 The second property retrieves the final value: <{property2_uri}>
 
 Step 4 — Build the WHERE clause.
+IMPORTANT: Triple order is always: subject property object.
 First hop:  <{entity_uri}> <{property_uri}> ?intermediate .
 Second hop: ?intermediate <{property2_uri}> ?value .
 
@@ -200,8 +251,9 @@ Step 3 — Identify what to retrieve.
 We want to retrieve an unknown value — call it ?value.
 
 Step 4 — Build the WHERE clause.
-Connect the subject to the property to get the value:
-<{entity_uri}> <{property_uri}> ?value .
+IMPORTANT: Triple order is always: subject property object.
+Correct:   <{entity_uri}> <{property_uri}> ?value .
+WRONG:     <{entity_uri}> ?value <{property_uri}> .
 
 Step 5 — Write the full query.
 The query must start with SELECT ?value WHERE {{

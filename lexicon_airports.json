@@ -29,83 +29,30 @@
       "runwayIdent"
     ]
   },
- "cross_kg_signals": {
-    "departure airport":      {"cross_kg": true, "direction": "origin"},
-    "origin airport":         {"cross_kg": true, "direction": "origin"},
-    "departing airport":      {"cross_kg": true, "direction": "origin"},
-    "departs from airport":   {"cross_kg": true, "direction": "origin"},
-    "take off from":          {"cross_kg": true, "direction": "origin"},
-    "arrival airport":        {"cross_kg": true, "direction": "destination"},
-    "destination airport":    {"cross_kg": true, "direction": "destination"},
-    "landing airport":        {"cross_kg": true, "direction": "destination"},
-    "land at":                {"cross_kg": true, "direction": "destination"},
-    "lands at":               {"cross_kg": true, "direction": "destination"},
-    "landing at":             {"cross_kg": true, "direction": "destination"},
-    "aéroport de départ":     {"cross_kg": true, "direction": "origin"},
-    "aéroport d'origine":     {"cross_kg": true, "direction": "origin"},
-    "aéroport d'arrivée":     {"cross_kg": true, "direction": "destination"},
-    "aéroport de destination":{"cross_kg": true, "direction": "destination"},
-    "atterrit à":             {"cross_kg": true, "direction": "destination"},
-    "décolle de":             {"cross_kg": true, "direction": "origin"},
-    "مطار المغادرة":          {"cross_kg": true, "direction": "origin"},
-    "مطار الإقلاع":           {"cross_kg": true, "direction": "origin"},
-    "مطار الوصول":            {"cross_kg": true, "direction": "destination"},
-    "مطار الهبوط":            {"cross_kg": true, "direction": "destination"},
-    "يهبط في":                {"cross_kg": true, "direction": "destination"},
-    "يقلع من":                {"cross_kg": true, "direction": "origin"}
-},
-    "origin airport": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "departing airport": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "arrival airport": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "destination airport": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "landing airport": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "aéroport de départ": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "aéroport d'origine": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "aéroport d'arrivée": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "aéroport de destination": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "مطار المغادرة": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "مطار الإقلاع": {
-      "cross_kg": true,
-      "direction": "origin"
-    },
-    "مطار الوصول": {
-      "cross_kg": true,
-      "direction": "destination"
-    },
-    "مطار الهبوط": {
-      "cross_kg": true,
-      "direction": "destination"
-    }
+  "cross_kg_signals": {
+    "departure airport": { "cross_kg": true, "direction": "origin" },
+    "origin airport": { "cross_kg": true, "direction": "origin" },
+    "departing airport": { "cross_kg": true, "direction": "origin" },
+    "departs from airport": { "cross_kg": true, "direction": "origin" },
+    "take off from": { "cross_kg": true, "direction": "origin" },
+    "arrival airport": { "cross_kg": true, "direction": "destination" },
+    "destination airport": { "cross_kg": true, "direction": "destination" },
+    "landing airport": { "cross_kg": true, "direction": "destination" },
+    "land at": { "cross_kg": true, "direction": "destination" },
+    "lands at": { "cross_kg": true, "direction": "destination" },
+    "landing at": { "cross_kg": true, "direction": "destination" },
+    "aéroport de départ": { "cross_kg": true, "direction": "origin" },
+    "aéroport d'origine": { "cross_kg": true, "direction": "origin" },
+    "aéroport d'arrivée": { "cross_kg": true, "direction": "destination" },
+    "aéroport de destination": { "cross_kg": true, "direction": "destination" },
+    "atterrit à": { "cross_kg": true, "direction": "destination" },
+    "décolle de": { "cross_kg": true, "direction": "origin" },
+    "مطار المغادرة": { "cross_kg": true, "direction": "origin" },
+    "مطار الإقلاع": { "cross_kg": true, "direction": "origin" },
+    "مطار الوصول": { "cross_kg": true, "direction": "destination" },
+    "مطار الهبوط": { "cross_kg": true, "direction": "destination" },
+    "يهبط في": { "cross_kg": true, "direction": "destination" },
+    "يقلع من": { "cross_kg": true, "direction": "origin" }
   },
   "properties": {
     "elevation": "elevationFt",
@@ -168,37 +115,41 @@
     "numéro de piste": "runwayIdent",
     "رقم المدرج": "runwayIdent",
     "معرف المدرج": "runwayIdent",
-   "country":                  ["locatedInCountry", "countryName"],
-"which country":            ["locatedInCountry", "countryName"],
-"what country":             ["locatedInCountry", "countryName"],
-"country of the airport":   ["locatedInCountry", "countryName"],
-"in which country":         ["locatedInCountry", "countryName"],
-"pays":                     ["locatedInCountry", "countryName"],
-"quel pays":                ["locatedInCountry", "countryName"],
-"dans quel pays":           ["locatedInCountry", "countryName"],
-"pays de l'aéroport":       ["locatedInCountry", "countryName"],
-"البلد":                    ["locatedInCountry", "countryName"],
-"الدولة":                   ["locatedInCountry", "countryName"],
-"في أي دولة":               ["locatedInCountry", "countryName"],
-"ما هي دولة المطار":        ["locatedInCountry", "countryName"],
-"بلد المطار":               ["locatedInCountry", "countryName"],
-
-"region":                   ["locatedInRegion", "regionName"],
-"which region":             ["locatedInRegion", "regionName"],
-"what region":              ["locatedInRegion", "regionName"],
-"région":                   ["locatedInRegion", "regionName"],
-"quelle région":            ["locatedInRegion", "regionName"],
-"المنطقة":                  ["locatedInRegion", "regionName"],
-"أي منطقة":                 ["locatedInRegion", "regionName"],
-
-"continent":                ["locatedInCountry", "continent"],
-"which continent":          ["locatedInCountry", "continent"],
-"what continent":           ["locatedInCountry", "continent"],
-"continent de l'aéroport":  ["locatedInCountry", "continent"],
-"quel continent":           ["locatedInCountry", "continent"],
-"القارة":                   ["locatedInCountry", "continent"],
-"أي قارة":                  ["locatedInCountry", "continent"],
-"قارة المطار":              ["locatedInCountry", "continent"],
+    "country": ["locatedInCountry", "countryName"],
+    "which country": ["locatedInCountry", "countryName"],
+    "what country": ["locatedInCountry", "countryName"],
+    "country of the airport": ["locatedInCountry", "countryName"],
+    "in which country": ["locatedInCountry", "countryName"],
+    "pays": ["locatedInCountry", "countryName"],
+    "quel pays": ["locatedInCountry", "countryName"],
+    "dans quel pays": ["locatedInCountry", "countryName"],
+    "pays de l'aéroport": ["locatedInCountry", "countryName"],
+    "البلد": ["locatedInCountry", "countryName"],
+    "الدولة": ["locatedInCountry", "countryName"],
+    "في أي دولة": ["locatedInCountry", "countryName"],
+    "ما هي دولة المطار": ["locatedInCountry", "countryName"],
+    "بلد المطار": ["locatedInCountry", "countryName"],
+    "nation": ["locatedInCountry", "countryName"],
+    "in which nation": ["locatedInCountry", "countryName"],
+    "what nation": ["locatedInCountry", "countryName"],
+    "which nation": ["locatedInCountry", "countryName"],
+    "located in": ["locatedInCountry", "countryName"],
+    "located in country": ["locatedInCountry", "countryName"],
+    "region": ["locatedInRegion", "regionName"],
+    "which region": ["locatedInRegion", "regionName"],
+    "what region": ["locatedInRegion", "regionName"],
+    "région": ["locatedInRegion", "regionName"],
+    "quelle région": ["locatedInRegion", "regionName"],
+    "المنطقة": ["locatedInRegion", "regionName"],
+    "أي منطقة": ["locatedInRegion", "regionName"],
+    "continent": ["locatedInCountry", "continent"],
+    "which continent": ["locatedInCountry", "continent"],
+    "what continent": ["locatedInCountry", "continent"],
+    "continent de l'aéroport": ["locatedInCountry", "continent"],
+    "quel continent": ["locatedInCountry", "continent"],
+    "القارة": ["locatedInCountry", "continent"],
+    "أي قارة": ["locatedInCountry", "continent"],
+    "قارة المطار": ["locatedInCountry", "continent"],
     "airport type": "airportType",
     "type of airport": "airportType",
     "what type": "airportType",
@@ -207,6 +158,12 @@
     "quel type d'aéroport": "airportType",
     "نوع المطار": "airportType",
     "ما نوع المطار": "airportType",
+    "what kind of": "airportType",
+    "what kind": "airportType",
+    "kind of airport": "airportType",
+    "kind of facility": "airportType",
+    "what facility": "airportType",
+    "type of facility": "airportType",
     "airport name": "airportName",
     "name of the airport": "airportName",
     "full name": "airportName",
@@ -223,6 +180,16 @@
     "quelle ville": "municipality",
     "المدينة": "municipality",
     "أي مدينة": "municipality",
+    "town": "municipality",
+    "which town": "municipality",
+    "what town": "municipality",
+    "serves": "municipality",
+    "serve": "municipality",
+    "which city does it serve": "municipality",
+    "which town does it serve": "municipality",
+    "nearest city": "municipality",
+    "nearest town": "municipality",
+    "served by": "municipality",
     "iata code": "iataCode",
     "iata": "iataCode",
     "airport code": "iataCode",
@@ -239,36 +206,19 @@
     "longitude": "longitude",
     "longitude de l'aéroport": "longitude",
     "خط الطول": "longitude",
-    "coordinates": {
-      "special_query": "coordinates"
-    },
-    "gps coordinates": {
-      "special_query": "coordinates"
-    },
-    "position": {
-      "special_query": "coordinates"
-    },
-    "location": {
-      "special_query": "coordinates"
-    },
-    "coordonnées": {
-      "special_query": "coordinates"
-    },
-    "coordonnées gps": {
-      "special_query": "coordinates"
-    },
-    "position de l aéroport": {
-      "special_query": "coordinates"
-    },
-    "الإحداثيات": {
-      "special_query": "coordinates"
-    },
-    "إحداثيات المطار": {
-      "special_query": "coordinates"
-    },
-    "موقع المطار": {
-      "special_query": "coordinates"
-    }
+    "coordinates": { "special_query": "coordinates" },
+    "gps coordinates": { "special_query": "coordinates" },
+    "position": { "special_query": "coordinates" },
+    "location": { "special_query": "coordinates" },
+    "coordonnées": { "special_query": "coordinates" },
+    "coordonnées gps": { "special_query": "coordinates" },
+    "position de l aéroport": { "special_query": "coordinates" },
+    "الإحداثيات": { "special_query": "coordinates" },
+    "إحداثيات المطار": { "special_query": "coordinates" },
+    "موقع المطار": { "special_query": "coordinates" },
+    "how high is": "elevationFt",
+    "height above sea level": "elevationFt",
+    "feet above sea level": "elevationFt"
   },
   "template_triggers": {
     "filter_numeric_kg2": {
@@ -353,7 +303,6 @@
         "أصغر"
       ]
     },
-    
     "compare_two_airports": {
       "description": "Compare two specific airports on a property",
       "examples": [
@@ -440,25 +389,23 @@
   },
   "_runway_note": "An airport may have multiple runways with different lengths. When runway length is queried without a specific runway identifier, the system returns the longest runway by default.",
   "airport_entities": {
-    "vienne":           "VIE",
-"francfort":        "FRA",
-"frankfort":        "FRA",
-
-"paris":            "CDG",
-"ميونخ":            "MUC",
-"فيينا":            "VIE",
-"فرانكفورت":        "FRA",
-"لندن":             "LHR",
-"مطار ميونخ":       "MUC",
-"مطار فيينا":       "VIE",
-"مطار فرانكفورت":   "FRA",
-"مطار لندن":        "LHR",
-"paris charles de gaulle airport": "CDG",
-"charles de gaulle":               "CDG",
-"heathrow":                        "LHR",
-"london heathrow":                 "LHR",
-"frankfurt airport":               "FRA",
-
+    "vienne": "VIE",
+    "francfort": "FRA",
+    "frankfort": "FRA",
+    "paris": "CDG",
+    "ميونخ": "MUC",
+    "فيينا": "VIE",
+    "فرانكفورت": "FRA",
+    "لندن": "LHR",
+    "مطار ميونخ": "MUC",
+    "مطار فيينا": "VIE",
+    "مطار فرانكفورت": "FRA",
+    "مطار لندن": "LHR",
+    "paris charles de gaulle airport": "CDG",
+    "charles de gaulle": "CDG",
+    "heathrow": "LHR",
+    "london heathrow": "LHR",
+    "frankfurt airport": "FRA",
     "ACH": "ACH",
     "ARN": "ARN",
     "AYT": "AYT",
