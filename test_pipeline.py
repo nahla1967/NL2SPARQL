@@ -45,35 +45,125 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CASES ────────────────────────────────────────────────────────────────
 
-BRANCH_C_TESTS = [
-("What is the elevation of Vienna airport?",             "single_kg2", "600"),
-("What country is Frankfurt airport in?",                "single_kg2", "Germany"),
-("Quelle est l'élévation de l'aéroport de Munich?",      "single_kg2", "1487"),
-("ما هو ارتفاع مطار فيينا؟",                              "single_kg2", "600"),
-("What type of airport is London Heathrow?",             "single_kg2", "large_airport"),
+BRANCH_TESTS = [
+
+# ─────────────────────────────────────────────────────
+# KG1 — FLIGHT QUERIES (15 tests)
+# Covers: exact match, multilingual, short form, fuzzy
+# ─────────────────────────────────────────────────────
+
+# English — exact
+("What is the departure city of flight OS295?",          "single_kg1", "en-exact"),
+("Which airline operates flight BR62?",                  "single_kg1", "en-exact"),
+("What is the destination of flight FR707?",             "single_kg1", "en-exact"),
+("What aircraft is used for flight KE567?",              "single_kg1", "en-exact"),
+("What is the arrival time of flight OS631?",            "single_kg1", "en-exact"),
+
+# French — exact
+("Quelle est la ville de départ du vol OS52?",           "single_kg1", "fr-exact"),
+("Quel est l'aéroport d'arrivée du vol TO4388?",         "single_kg1", "fr-exact"),
+("Quelle compagnie opère le vol FR6889?",                "single_kg1", "fr-exact"),
+
+# Arabic — exact
+("ما هي مدينة المغادرة للرحلة OS295؟",                  "single_kg1", "ar-exact"),
+("إلى أين تتجه الرحلة FR164؟",                          "single_kg1", "ar-exact"),
+("من يشغّل الرحلة DE1866؟",                             "single_kg1", "ar-exact"),
+
+# Short / degraded form
+("departure city OS631",                                 "single_kg1", "en-short"),
+("airline FR9005",                                       "single_kg1", "en-short"),
+("destination of BR62",                                  "single_kg1", "en-short"),
+("vol OS295 ville départ",                               "single_kg1", "fr-short"),
 
 
-# Additional tests
-("What country is Munich airport in?",                   "single_kg2", "Germany"),
-("What is the elevation of Frankfurt Airport?",          "single_kg2", "elevation"),
-("What type of airport is Vienna Airport?",              "single_kg2", "airport type"),
-("What city is London Heathrow located in?",             "single_kg2", "London"),
-("What country is Paris Charles de Gaulle Airport in?",  "single_kg2", "France"),
+# ─────────────────────────────────────────────────────
+# KG2 — AIRPORT QUERIES (15 tests)
+# Covers: exact, IATA, multilingual, fuzzy/typo
+# ─────────────────────────────────────────────────────
 
-("Quel est le pays de l'aéroport de Vienne ?",           "single_kg2", "Autriche"),
-("Quelle est l'élévation de l'aéroport de Francfort ?",  "single_kg2", "elevation"),
-("Dans quelle ville se trouve l'aéroport de Munich ?",   "single_kg2", "Munich"),
+# English — exact entity + exact property
+("What is the elevation of Vienna airport?",             "single_kg2", "en-exact"),
+("What country is Munich airport in?",                   "single_kg2", "en-exact"),
+("What city is London Heathrow located in?",             "single_kg2", "en-exact"),
+("What type of airport is Frankfurt airport?",           "single_kg2", "en-exact"),
+("What country is Paris Charles de Gaulle airport in?",  "single_kg2", "en-exact"),
 
-("ما هو نوع مطار فيينا؟",                                "single_kg2", "airport type"),
-("في أي دولة يقع مطار ميونخ؟",                           "single_kg2", "Germany"),
+# IATA code as entity
+("What is the elevation of MUC?",                        "single_kg2", "en-iata"),
+("What country is VIE in?",                              "single_kg2", "en-iata"),
+("City of LHR airport",                                  "single_kg2", "en-iata"),
+
+# French
+("Quelle est l'élévation de l'aéroport de Munich?",     "single_kg2", "fr-exact"),
+("Dans quelle ville se trouve l'aéroport de Munich?",   "single_kg2", "fr-exact"),
+("Quel est le pays de l'aéroport de Vienne?",           "single_kg2", "fr-exact"),
+
+# Arabic
+("ما هو ارتفاع مطار فيينا؟",                            "single_kg2", "ar-exact"),
+("في أي دولة يقع مطار ميونخ؟",                          "single_kg2", "ar-exact"),
+("ما هو نوع مطار فرانكفورت؟",                           "single_kg2", "ar-exact"),
+
+# Typo / fuzzy
+("elevtion of viena airport",                            "single_kg2", "en-typo"),
 
 
+# ─────────────────────────────────────────────────────
+# CROSS KG — FLIGHT + AIRPORT (10 tests)
+# KG1 gives IATA → KG2 answers airport property
+# Covers: origin, destination, EN/FR/AR
+# ─────────────────────────────────────────────────────
+
+# English — destination airport property
+("What country is the destination airport of flight OS295?",     "cross_kg", "en-dest"),
+("What is the elevation of the arrival airport of flight BR62?", "cross_kg", "en-dest"),
+("What city is the destination airport of flight FR707?",        "cross_kg", "en-dest"),
+("What type of airport does flight KE567 land at?",              "cross_kg", "en-dest"),
+
+# English — origin airport property
+("What country is the departure airport of flight OS631?",       "cross_kg", "en-orig"),
+("What is the elevation of the origin airport of flight OS52?",  "cross_kg", "en-orig"),
+
+# French
+("Dans quel pays se trouve l'aéroport de destination du vol OS295?",  "cross_kg", "fr-dest"),
+("Quelle est l'élévation de l'aéroport de départ du vol BR62?",       "cross_kg", "fr-orig"),
+
+# Arabic
+("ما هي دولة مطار الوصول للرحلة FR707؟",                "cross_kg", "ar-dest"),
+("ما هو ارتفاع مطار المغادرة للرحلة OS295؟",            "cross_kg", "ar-orig"),
+
+
+# ─────────────────────────────────────────────────────
+# EMBEDDING / SEMANTIC FALLBACK (5 tests)
+# Property phrases not in lexicon — should reach tier 3
+# ─────────────────────────────────────────────────────
+
+("How high above sea level is Vienna airport?",          "single_kg2", "en-semantic"),
+("What nation is Frankfurt airport located in?",         "single_kg2", "en-semantic"),
+("Which town does Munich airport serve?",                "single_kg2", "en-semantic"),
+("What kind of facility is London Heathrow?",            "single_kg2", "en-semantic"),
+("What is the ground speed of flight OS295?",            "single_kg1", "en-semantic"),
+
+
+# ─────────────────────────────────────────────────────
+# EDGE CASES / ROBUSTNESS (5 tests)
+# ─────────────────────────────────────────────────────
+
+("Who won the FIFA World Cup?",                          "out_of_scope", "noise"),
+("What is the weather in Paris?",                        "out_of_scope", "noise"),
+("elevation",                                            "out_of_scope", "noise"),
+("flight",                                               "out_of_scope", "noise"),
+("OS295 VIE elevation country",                          "single_kg2",   "ambiguous"),
+
+]
+
+ALL_TESTS = [
+    ("FULL PIPELINE TEST", BRANCH_TESTS),
 ]
 
 
 ALL_TESTS = [
   #  ("BRANCH B — single_kg1", BRANCH_B_TESTS),
-    ("BRANCH C — single_kg2", BRANCH_C_TESTS),
+    ("BRANCH C — single_kg2", BRANCH_TESTS),
    # ("BRANCH D — cross_kg",   BRANCH_D_TESTS),
 ]
 
@@ -121,7 +211,10 @@ def run_single_test(question: str, expected_type: str) -> dict:
         result["routing_ok"] = (query_type == expected_type)
 
         if query_type == "out_of_scope":
-            result["failure_type"] = "out_of_scope"
+            if expected_type == "out_of_scope":
+                result["failure_type"] = "success"
+            else:
+                result["failure_type"] = "out_of_scope"
             return result
 
         # ── BRANCH B ──────────────────────────────────────────────────────────

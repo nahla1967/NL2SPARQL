@@ -36,7 +36,7 @@ CACHE_EMBEDDINGS_KG2 = "lexicon_airports_embeddings.npy"
 CACHE_PHRASES_KG2    = "lexicon_airports_phrases.json"
 
 FUZZY_THRESHOLD    = 80
-SEMANTIC_THRESHOLD = 0.75
+SEMANTIC_THRESHOLD = 0.72
 
 
 # ── TEXT NORMALISATION ────────────────────────────────────────────────────────

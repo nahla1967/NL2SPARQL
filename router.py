@@ -5,7 +5,7 @@ Deterministic rule-based router for KG selection.
 
 No LLM. Pure classification using regex + lexicon signals.
 """
-
+from rapidfuzz import process, fuzz
 import re
 import json
 from kg_registry import (
@@ -83,13 +83,15 @@ def _detect_flight_number(q: str):
 
 
 def _detect_cross_kg_signal(q: str):
-    q_norm = _normalise(q)
+    q_norm  = _normalise(q)
     q_lower = q.lower()
 
     direction = None
 
     for phrase, meta in _CROSS_KG_SIGNALS.items():
-        if _normalise(phrase) in q_norm:
+        phrase_norm  = _normalise(phrase)
+        phrase_lower = phrase.lower()
+        if phrase_norm in q_norm or phrase_lower in q_lower:
             direction = meta.get("direction")
             break
 
@@ -112,17 +114,52 @@ def _detect_airport_entity(q: str):
     q_norm = _normalise(q)
     tokens = q_norm.split()
 
-    # Sliding window — longest phrase first (handles "frankfurt airport", "مطار فيينا")
-    for size in range(4, 0, -1):
+    # ── Tier 1: sliding window exact match (longest phrase first) ─────────────
+    # Window extended to 6 to handle long names like "paris charles de gaulle airport"
+    for size in range(6, 0, -1):
         for i in range(len(tokens) - size + 1):
-            phrase = " ".join(tokens[i:i+size])
+            phrase = " ".join(tokens[i : i + size])
             if phrase in _AIRPORT_ENTITIES:
                 return _AIRPORT_ENTITIES[phrase]
 
-    # IATA code fallback — 3 uppercase letters as standalone word
+    # ── Tier 2: IATA code (3 uppercase letters as standalone word) ────────────
     for code in _IATA_RE.findall(q.upper()):
         if code in _AIRPORT_ENTITIES:
             return _AIRPORT_ENTITIES[code]
+
+    # ── Tier 3: fuzzy match on individual tokens ──────────────────────────────
+    # Stop words stripped so we don't fuzzy-match "airport" → some entity key.
+    # Threshold at 85 keeps it well-restricted while tolerating:
+    #   "francfort" → "frankfurt am main"
+    #   "ميونخ"     → "munich"
+    #   "vienne"    → "vienna"
+    STOP_WORDS = {
+        # English
+        "what", "is", "the", "of", "in", "at", "which", "where",
+        "airport", "how", "does", "do", "an", "a",
+        # French
+        "quel", "est", "le", "la", "de", "du", "quelle", "aéroport",
+        "dans", "quelle", "ville", "se", "trouve",
+        # Arabic
+        "ما", "هو", "في", "أي", "يقع", "مطار", "هي", "على",
+        "ارتفاع", "نوع", "بلد", "دولة", "يقع",
+    }
+
+    candidates = [
+        t for t in tokens
+        if t not in STOP_WORDS and len(t) > 2
+    ]
+
+    for candidate in candidates:
+        result = process.extractOne(
+            candidate,
+            list(_AIRPORT_ENTITIES.keys()),
+            scorer=fuzz.WRatio,
+        )
+        if result is not None:
+            match, score, _ = result
+            if score >= 85:
+                return _AIRPORT_ENTITIES[match]
 
     return None
 
