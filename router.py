@@ -112,13 +112,15 @@ def _detect_airport_entity(q: str):
     q_norm = _normalise(q)
     tokens = q_norm.split()
 
+    # Sliding window — longest phrase first (handles "frankfurt airport", "مطار فيينا")
     for size in range(4, 0, -1):
         for i in range(len(tokens) - size + 1):
             phrase = " ".join(tokens[i:i+size])
             if phrase in _AIRPORT_ENTITIES:
                 return _AIRPORT_ENTITIES[phrase]
 
-    for code in _IATA_RE.findall(q_norm.upper()):
+    # IATA code fallback — 3 uppercase letters as standalone word
+    for code in _IATA_RE.findall(q.upper()):
         if code in _AIRPORT_ENTITIES:
             return _AIRPORT_ENTITIES[code]
 

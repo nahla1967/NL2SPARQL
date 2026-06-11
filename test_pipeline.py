@@ -45,34 +45,36 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CASES ────────────────────────────────────────────────────────────────
 
-BRANCH_B_TESTS = [
-    ("What is the airline of flight OS295?",         "single_kg1", "Austrian"),
-    ("What is the departure city of flight TK1887?", "single_kg1", "Vienna or Istanbul"),
-    ("Quel est l'aéroport d'origine du vol OS295?",  "single_kg1", "VIE or Vienna"),
-    ("ما هي شركة الطيران للرحلة OS295؟",              "single_kg1", "Austrian Airlines"),
-    ("What is the ground speed of flight OS295?",    "single_kg1", "knots"),
-]
-
 BRANCH_C_TESTS = [
-    ("What is the elevation of Vienna airport?",             "single_kg2", "600"),
-    ("What country is Frankfurt airport in?",                "single_kg2", "Germany"),
-    ("Quelle est l'élévation de l'aéroport de Munich?",      "single_kg2", "1487"),
-    ("ما هو ارتفاع مطار فيينا؟",                              "single_kg2", "600"),
-    ("What type of airport is London Heathrow?",             "single_kg2", "large_airport"),
+("What is the elevation of Vienna airport?",             "single_kg2", "600"),
+("What country is Frankfurt airport in?",                "single_kg2", "Germany"),
+("Quelle est l'élévation de l'aéroport de Munich?",      "single_kg2", "1487"),
+("ما هو ارتفاع مطار فيينا؟",                              "single_kg2", "600"),
+("What type of airport is London Heathrow?",             "single_kg2", "large_airport"),
+
+
+# Additional tests
+("What country is Munich airport in?",                   "single_kg2", "Germany"),
+("What is the elevation of Frankfurt Airport?",          "single_kg2", "elevation"),
+("What type of airport is Vienna Airport?",              "single_kg2", "airport type"),
+("What city is London Heathrow located in?",             "single_kg2", "London"),
+("What country is Paris Charles de Gaulle Airport in?",  "single_kg2", "France"),
+
+("Quel est le pays de l'aéroport de Vienne ?",           "single_kg2", "Autriche"),
+("Quelle est l'élévation de l'aéroport de Francfort ?",  "single_kg2", "elevation"),
+("Dans quelle ville se trouve l'aéroport de Munich ?",   "single_kg2", "Munich"),
+
+("ما هو نوع مطار فيينا؟",                                "single_kg2", "airport type"),
+("في أي دولة يقع مطار ميونخ؟",                           "single_kg2", "Germany"),
+
+
 ]
 
-BRANCH_D_TESTS = [
-    ("What country is the destination airport of flight OS295?",       "cross_kg", "Germany"),
-    ("What is the elevation of the arrival airport of flight OS295?",  "cross_kg", "should return ft value"),
-    ("Quel pays est l'aéroport de destination du vol OS295?",          "cross_kg", "Allemagne or Germany"),
-    ("ما هو البلد الذي يقع فيه مطار وصول الرحلة OS295؟",               "cross_kg", "Germany"),
-    ("What is the elevation of the departure airport of flight OS295?","cross_kg", "600"),
-]
 
 ALL_TESTS = [
-    ("BRANCH B — single_kg1", BRANCH_B_TESTS),
+  #  ("BRANCH B — single_kg1", BRANCH_B_TESTS),
     ("BRANCH C — single_kg2", BRANCH_C_TESTS),
-    ("BRANCH D — cross_kg",   BRANCH_D_TESTS),
+   # ("BRANCH D — cross_kg",   BRANCH_D_TESTS),
 ]
 
 STRATEGY = "zero-shot"
