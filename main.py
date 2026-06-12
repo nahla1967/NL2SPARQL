@@ -49,7 +49,7 @@ from cross_kg_resolver import resolve_cross_kg
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "Who won the FIFA World Cup 2022?"
+question  = "ما هي الدولة التي تقع فيها مطار MUC؟"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────

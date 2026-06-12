@@ -124,9 +124,11 @@ CROSS_KG_CONFIG = {
 
 ROUTER_PRIORITY = [
     "cross_kg",
+   
     "single_kg1",
+    
     "single_kg2",
-    "template",
+     "template",
     "out_of_scope",
 ]
 
