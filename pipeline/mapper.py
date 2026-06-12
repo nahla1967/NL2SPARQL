@@ -239,8 +239,9 @@ def map_property_cascade(
         if isinstance(uri, list):
             return uri[0], uri[1]
         if isinstance(uri, dict):
-            # special_query entries (e.g. coordinates) — return as-is
-            return uri, None
+            # special_query entries like coordinates are not
+            # mappable to a single property URI — skip them
+            return None, None
         return uri, None
 
     uri, _ = _pre_map(property_text, lexicon)

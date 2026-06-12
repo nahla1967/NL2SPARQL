@@ -1,24 +1,26 @@
 """
-router.py  (v2 — flexible routing)
-------------------------------------
-WHAT CHANGED vs v1:
+router.py  (v4 — priority reorder + template disambiguation)
+-------------------------------------------------------------
+CHANGES vs v3:
 
-    Fix 1 — Minimum structure guard:
-        Single keywords like "elevation" or "flight" no longer trigger KG2.
-        A question must have at least 2 words and contain a flight number,
-        OR at least 3 words with at least one question/context signal.
-        This prevents noise inputs from producing mapping failures.
+    Change 1 — All templates now check at Priority 3, before airport entity detection.
+               Previously, only KG1 templates were at P3; all other templates came
+               after the airport entity detector at P4. This allowed fuzzy matching
+               on words like "Germany", "Vienna", "large" to steal questions that
+               should have gone to the template branch.
 
-    Fix 2 — Flexible cross-KG signal detection:
-        The old approach required an EXACT phrase from a fixed list.
-        New approach: checks for an airport-direction word (departure/origin/
-        destination/arrival/landing) AND a context word ("airport", "aéroport",
-        "مطار") anywhere in the question — no fixed phrase required.
-        This is more robust because natural language varies widely.
+    Change 2 — _detect_template now enforces an explicit priority order.
+               ranking_kg2 is checked before filter_string_kg2, so questions
+               containing both "airports with" and "top"/"highest" are
+               correctly resolved to ranking_kg2, not filter_string_kg2.
 
-    No changes to the routing priority order.
-    No changes to the entity detection logic.
+    Change 3 — Numeric template disambiguation by domain.
+               A small set of flight-property keywords (speed, knots, altitude,
+               vertical) is checked before falling through to filter_numeric_kg2.
+               If a flight-property word is present, the question resolves to
+               filter_numeric_kg1 instead of the airport numeric template.
 """
+
 from rapidfuzz import process, fuzz
 import re
 import json
@@ -37,18 +39,56 @@ _FLIGHT_RE = re.compile(r"\b([A-Z]{2,3}\d+)\b")
 _IATA_RE   = re.compile(r"\b([A-Z]{3})\b")
 
 # ─────────────────────────────────────────────
+# CHANGE 3 — flight-property keyword set
+# These words indicate a KG1 (flight) numeric question,
+# not a KG2 (airport) numeric question.
+# When any of these appear, filter_numeric_kg1 wins over
+# filter_numeric_kg2 for numeric operator questions.
+# ─────────────────────────────────────────────
+
+_FLIGHT_NUMERIC_KEYWORDS = {
+    # English
+    "speed", "knots", "altitude", "vertical", "ground speed",
+    "gspeed", "vspeed", "feet per minute",
+    "flying",        # ← add this
+    "flight level",
+    # French
+    "vitesse", "nœuds", "altitude",
+    # Arabic
+    "سرعة", "عقدة", "ارتفاع الطائرة",
+}
+
+# ─────────────────────────────────────────────
+# CHANGE 2 — explicit template priority order
+# This list defines the order in which _detect_template
+# checks template signals. First match wins, so more
+# specific templates must appear before generic ones.
+# ranking_kg2 must be before filter_string_kg2 because
+# ranking questions also contain "airports with".
+# cross_kg_filter must be early because its signals
+# (flights + airport property) overlap with KG1 templates.
+# ─────────────────────────────────────────────
+
+_TEMPLATE_PRIORITY_ORDER = [
+    "cross_kg_filter",        # most specific: flights + airport property
+    "compare_two_airports",   # two IATA codes present
+    "ranking_kg2",            # top/bottom/highest/lowest
+    "filter_numeric_kg2",     # numeric threshold on airport property
+    "filter_string_kg2",      # categorical filter on airport property
+    "count_kg1",              # how many flights
+    "filter_numeric_kg1",     # numeric threshold on flight property
+]
+
+# ─────────────────────────────────────────────
 # AIRPORT PROPERTY SIGNALS (cross-KG only)
 # ─────────────────────────────────────────────
 
 _AIRPORT_PROPERTY_WORDS = {
-    # English
     "country", "nation", "elevation", "altitude", "runway", "surface",
     "length", "region", "continent", "type", "city", "name", "coordinates",
     "latitude", "longitude", "lighted", "width", "town", "municipality",
-    # French
     "pays", "piste", "longueur", "région", "ville", "nom", "coordonnées",
     "élévation", "altitude",
-    # Arabic
     "بلد", "دولة", "ارتفاع", "مدرج", "سطح", "طول", "منطقة",
     "قارة", "نوع", "مدينة", "اسم", "إحداثيات",
 }
@@ -56,25 +96,15 @@ _AIRPORT_PROPERTY_WORDS = {
 # ─────────────────────────────────────────────
 # CROSS-KG FLEXIBLE DETECTION
 # ─────────────────────────────────────────────
-# Instead of requiring an exact phrase, we check for:
-#   - A direction word (departure/origin/destination/arrival)
-#   - AND an airport-context word (airport/aéroport/مطار)
-# This matches many more natural phrasings.
 
 _DIRECTION_WORDS = {
-    # English — origin
     "departure", "departing", "departs", "origin", "originating",
     "take off", "takeoff", "taking off", "leaves from", "departs from",
-    # English — destination
     "destination", "arrival", "arriving", "arrives", "landing",
     "lands at", "land at", "lands in", "arriving at",
-    # French — origin
     "départ", "décolle", "provenance",
-    # French — destination
     "arrivée", "atterrit", "destination",
-    # Arabic — origin
     "مغادرة", "إقلاع", "انطلاق",
-    # Arabic — destination
     "وصول", "هبوط", "وجهة",
 }
 
@@ -82,7 +112,6 @@ _AIRPORT_CONTEXT_WORDS = {
     "airport", "aéroport", "مطار",
 }
 
-# Maps direction words to their direction value
 _DIRECTION_TO_VALUE = {
     "departure": "origin",    "departing": "origin",  "departs": "origin",
     "origin": "origin",       "originating": "origin", "take off": "origin",
@@ -117,12 +146,6 @@ _TEMPLATE_SIGNALS  = {
 }
 _AIRPORT_TRIGGERS = KG_REGISTRY["airports"].get("triggers", [])
 
-_KG1_TEMPLATES = {
-    "count_kg1",
-    "filter_numeric_kg1",
-    "cross_kg_filter",
-}
-
 # ─────────────────────────────────────────────
 # NORMALIZATION
 # ─────────────────────────────────────────────
@@ -136,40 +159,21 @@ def _normalise(text: str) -> str:
     return text.strip()
 
 # ─────────────────────────────────────────────
-# MINIMUM STRUCTURE GUARD (Fix 1)
+# MINIMUM STRUCTURE GUARD
 # ─────────────────────────────────────────────
 
 def _has_minimum_structure(question: str) -> bool:
-    """
-    Returns False for questions that are too vague to route meaningfully.
-
-    WHY THIS EXISTS:
-        Without this guard, a single word like "elevation" triggers the
-        airport keyword detector and routes to single_kg2, causing a
-        mapping failure because there is no entity.
-
-        We allow short inputs only when they contain a flight number
-        (e.g. "airline FR9005" is a valid short query).
-
-    Rules:
-        1. Single word → always False
-        2. Two words with a flight number pattern → True (valid short query)
-        3. Three or more words → True (let later stages decide)
-    """
     words = question.strip().split()
-
-    # Rule 1: single word
     if len(words) < 2:
         return False
-
-    # Rule 2: two words but has flight number → valid short query
     if len(words) == 2:
         flight_re = re.compile(r'[A-Za-z]{2,3}\d+')
+        iata_re   = re.compile(r'\b[A-Z]{3}\b')
         if flight_re.search(question):
             return True
+        if iata_re.search(question.upper()):
+            return True
         return False
-
-    # Rule 3: three or more words → proceed normally
     return True
 
 # ─────────────────────────────────────────────
@@ -182,33 +186,10 @@ def _detect_flight_number(q: str):
 
 
 def _detect_cross_kg_signal(q: str):
-    """
-    Flexible cross-KG detection.
-
-    OLD approach (v1): required an exact phrase from a fixed list.
-    NEW approach (v2): checks independently for:
-        - Any direction word (departure / destination / arrival / etc.)
-        - Any airport context word (airport / aéroport / مطار)
-        - Any airport property word (country / elevation / etc.)
-
-    All three must be present. This catches:
-        "What type of airport does flight KE567 land at?"
-            → "land" (direction) + "airport" (context) + "type" (property)
-
-        "Quelle est l'élévation de l'aéroport de départ du vol BR62?"
-            → "départ" (direction) + "aéroport" (context) + "élévation" (property)
-
-    Returns (True, direction_value) or (False, None).
-    """
-    q_lower  = q.lower()
-    q_norm   = _normalise(q)
-
-    # Check for airport context word
+    q_lower = q.lower()
     has_airport_context = any(ctx in q_lower for ctx in _AIRPORT_CONTEXT_WORDS)
     if not has_airport_context:
         return False, None
-
-    # Check for airport property word
     has_property = any(
         (pw in q_lower) if any(ord(c) > 127 for c in pw)
         else bool(re.search(rf"\b{re.escape(pw)}\b", q_lower))
@@ -216,45 +197,33 @@ def _detect_cross_kg_signal(q: str):
     )
     if not has_property:
         return False, None
-
-    # Check for direction word and capture which direction
     direction = None
     for dword, dval in sorted(_DIRECTION_TO_VALUE.items(), key=lambda x: -len(x[0])):
         dword_lower = dword.lower()
         if any(ord(c) > 127 for c in dword_lower):
-            # Arabic/French: substring match
             if dword_lower in q_lower:
                 direction = dval
                 break
         else:
-            # English: word boundary match
             if re.search(rf"\b{re.escape(dword_lower)}\b", q_lower):
                 direction = dval
                 break
-
     if not direction:
         return False, None
-
     return True, direction
 
 
 def _detect_airport_entity(q: str):
     q_norm = _normalise(q)
     tokens = q_norm.split()
-
-    # Tier 1: sliding window exact match (longest phrase first)
     for size in range(6, 0, -1):
         for i in range(len(tokens) - size + 1):
             phrase = " ".join(tokens[i : i + size])
             if phrase in _AIRPORT_ENTITIES:
                 return _AIRPORT_ENTITIES[phrase]
-
-    # Tier 2: IATA code (3 uppercase letters as standalone word)
     for code in _IATA_RE.findall(q.upper()):
         if code in _AIRPORT_ENTITIES:
             return _AIRPORT_ENTITIES[code]
-
-    # Tier 3: fuzzy match on individual tokens
     STOP_WORDS = {
         "what", "is", "the", "of", "in", "at", "which", "where",
         "airport", "how", "does", "do", "an", "a", "nation", "town",
@@ -263,10 +232,21 @@ def _detect_airport_entity(q: str):
         "ما", "هو", "في", "أي", "يقع", "مطار", "هي", "على",
         "ارتفاع", "نوع", "بلد", "دولة",
     }
-
     candidates = [t for t in tokens if t not in STOP_WORDS and len(t) > 2]
-
+    GEOGRAPHIC_NOISE = {
+        "france", "italy", "history", "aviation", "naples",
+        "pizza", "president", "book", "flight", "best",
+        # CHANGE 1 — added words that caused wrong_route:single_kg2
+        # These are common words in filter/ranking questions that
+        # should never match as airport entity names.
+        "germany", "large", "vienna", "airports", "runway",
+        "elevation", "municipality", "located", "show", "list",
+        "all", "highest", "lowest", "top", "longest", "shorter",
+        "exceeds", "above", "below", "whose",
+    }
     for candidate in candidates:
+        if candidate.lower() in GEOGRAPHIC_NOISE:
+            continue
         result = process.extractOne(
             candidate,
             list(_AIRPORT_ENTITIES.keys()),
@@ -274,9 +254,8 @@ def _detect_airport_entity(q: str):
         )
         if result is not None:
             match, score, _ = result
-            if score >= 85:
+            if score >= 92:
                 return _AIRPORT_ENTITIES[match]
-
     return None
 
 
@@ -285,17 +264,44 @@ def _detect_airport_keyword(q: str):
     return any(k.lower() in q_lower for k in _AIRPORT_TRIGGERS)
 
 
+# CHANGE 2 + CHANGE 3 — rewritten _detect_template
+# Now iterates in _TEMPLATE_PRIORITY_ORDER, not dict order.
+# For numeric templates, domain disambiguation runs first:
+# if flight-property keywords are present, skip filter_numeric_kg2
+# and return filter_numeric_kg1 directly.
+
 def _detect_template(q: str):
     q_lower = q.lower()
 
-    for name, signals in _TEMPLATE_SIGNALS.items():
+    # CHANGE 3 — check for flight numeric keywords before looping
+    # If the question is about flight speed / altitude, we resolve
+    # filter_numeric_kg1 immediately without risking filter_numeric_kg2
+    # stealing the match via generic signals like "above" or "below".
+    has_flight_numeric = any(
+        (kw in q_lower) if " " in kw
+        else bool(re.search(rf"\b{re.escape(kw)}\b", q_lower))
+        for kw in _FLIGHT_NUMERIC_KEYWORDS
+    )
+    if has_flight_numeric:
+        # Only apply if there are also numeric operator signals present.
+        # This prevents bare mentions of "speed" routing here without a filter.
+        numeric_operator_signals = ["above", "below", "more than", "less than",
+                                    "greater than", "exceeds", "over", "under",
+                                    "faster than", "slower than"]
+        has_operator = any(sig in q_lower for sig in numeric_operator_signals)
+        if has_operator:
+            return "filter_numeric_kg1"
+
+    # CHANGE 2 — iterate in explicit priority order, not dict insertion order
+    for template_name in _TEMPLATE_PRIORITY_ORDER:
+        signals = _TEMPLATE_SIGNALS.get(template_name, [])
         for sig in sorted(signals, key=len, reverse=True):
             s = sig.lower()
             if " " in s:
                 if s in q_lower:
-                    return name
+                    return template_name
             elif re.search(rf"\b{re.escape(s)}\b", q_lower):
-                return name
+                return template_name
 
     return None
 
@@ -306,7 +312,6 @@ def _detect_template(q: str):
 
 def route(question: str) -> dict:
 
-    # Fix 1: Reject questions that are too short/vague to route
     if not _has_minimum_structure(question):
         return {
             "query_type": "out_of_scope",
@@ -317,13 +322,13 @@ def route(question: str) -> dict:
             "config":     None,
         }
 
-    flight   = _detect_flight_number(question)
-    cross, direction = _detect_cross_kg_signal(question)   # Fix 2: flexible
-    airport  = _detect_airport_entity(question)
-    keyword  = _detect_airport_keyword(question)
-    template = _detect_template(question)
+    flight            = _detect_flight_number(question)
+    cross, direction  = _detect_cross_kg_signal(question)
+    template          = _detect_template(question)    # CHANGE 1 — moved up
+    airport           = None                          # CHANGE 1 — deferred
+    keyword           = None                          # CHANGE 1 — deferred
 
-    # Priority 1: cross-KG
+    # Priority 1: cross-KG (flight number + airport property + direction)
     if flight and cross:
         return {
             "query_type": "cross_kg",
@@ -334,7 +339,7 @@ def route(question: str) -> dict:
             "config":     CROSS_KG_CONFIG,
         }
 
-    # Priority 2: KG1 flight
+    # Priority 2: KG1 single flight lookup
     if flight:
         return {
             "query_type": "single_kg1",
@@ -345,8 +350,11 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["flights"],
         }
 
-    # Priority 3: KG1 templates
-    if template in _KG1_TEMPLATES:
+    # CHANGE 1 — Priority 3: ALL templates, before any entity detection.
+    # Previously this was split: KG1 templates at P3, KG2 templates at P5.
+    # Merging them here means fuzzy entity matching never steals template
+    # questions, regardless of which domain the template targets.
+    if template:
         cfg = TEMPLATE_REGISTRY[template]
         return {
             "query_type": "template",
@@ -356,6 +364,11 @@ def route(question: str) -> dict:
             "template":   template,
             "config":     cfg,
         }
+
+    # CHANGE 1 — entity detection now runs only after templates failed.
+    # This is the key structural fix.
+    airport = _detect_airport_entity(question)
+    keyword = _detect_airport_keyword(question)
 
     # Priority 4: KG2 airport entity
     if airport:
@@ -368,19 +381,7 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["airports"],
         }
 
-    # Priority 5: general templates
-    if template:
-        cfg = TEMPLATE_REGISTRY[template]
-        return {
-            "query_type": "template",
-            "kg":         cfg["kg"],
-            "entity":     None,
-            "direction":  None,
-            "template":   template,
-            "config":     cfg,
-        }
-
-    # Priority 6: airport keyword fallback
+    # Priority 5: airport keyword fallback
     if keyword:
         return {
             "query_type": "single_kg2",

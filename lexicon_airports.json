@@ -248,7 +248,17 @@
         "يزيد عن",
         "يقل عن",
         "فوق",
-        "تحت"
+        "تحت",
+        "airports located in",
+        "airports whose municipality",
+        "all large airports",
+        "large airports",
+        "located in",
+        "show all",
+        "exceeds",
+        "exceed",
+        "more than",
+        "greater than"
       ]
     },
     "filter_string_kg2": {
@@ -259,6 +269,8 @@
         "Which airports are large airports?",
         "Quels aéroports sont en France?",
         "ما هي المطارات الموجودة في إيطاليا؟"
+        
+
       ],
       "signals": [
         "which airports are in",
@@ -270,7 +282,13 @@
         "aéroports qui ont",
         "مطارات في",
         "مطارات تمتلك",
-        "أي مطارات"
+        "أي مطارات",
+        "airports located in",
+        "airports whose municipality",
+        "all large airports",
+        "large airports",
+        "located in",
+        "show all"
       ]
     },
     "ranking_kg2": {
@@ -290,8 +308,8 @@
         "most",
         "least",
         "top",
-        "best",
-        "worst",
+       
+        
         "le plus long",
         "le plus court",
         "le plus haut",
@@ -384,7 +402,11 @@
         "flights go to airports",
         "vols qui atterrissent dans des aéroports",
         "رحلات تهبط في مطارات",
-        "رحلات تصل إلى مطارات"
+        "رحلات تصل إلى مطارات",
+        "flights land at large",
+        "flights arriving at large",
+        "land at large airports",
+        "land at airports"
       ]
     }
   },

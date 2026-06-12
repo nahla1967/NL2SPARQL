@@ -72,6 +72,8 @@ KG2_STRING_PROPS = {
 KG1_NUMERIC_PROPS = {
     "gspeed": {"uri": f"{KG1}gspeed",  "label": "ground speed", "unit": "knots"},
     "vspeed": {"uri": f"{KG1}vspeed",  "label": "vertical speed","unit": "ft/min"},
+    "alt":    {"uri": f"{KG1}alt",     "label": "altitude",       "unit": "feet"},
+    "altitude":  {"uri": f"{KG1}alt",     "label": "altitude",       "unit": "feet"}, 
 }
 
 KG1_STRING_PROPS = {
@@ -127,11 +129,17 @@ Return ONLY the JSON. No explanation.""",
 
         "filter_string_kg2": f"""Extract parameters from this airport question.
 Question: "{question}"
-Return ONLY a JSON object with these keys:
-- "property": one of [airportType, surface, continent, countryName, municipality, lighted]
-- "value": the filter value as a string
-- "limit": number of results (default 10)
-Example: {{"property": "countryName", "value": "Germany", "limit": 10}}
+
+Rules:
+- If the question asks about airports "in [country]" or "located in [country]", 
+  set property = "countryName" and value = the country name.
+- If the question asks about airport type (large, small, medium), 
+  set property = "airportType" and value = e.g. "large_airport".
+- If the question asks about a city/municipality, 
+  set property = "municipality" and value = the city name.
+
+Return ONLY a JSON object with keys: "property", "value", "limit" (default 10).
+Example: {{"property": "countryName", "value": "France", "limit": 10}}
 Return ONLY the JSON. No explanation.""",
 
         "ranking_kg2": f"""Extract parameters from this airport ranking question.
@@ -143,14 +151,21 @@ Return ONLY a JSON object with these keys:
 Example: {{"property": "elevationFt", "order": "DESC", "limit": 5}}
 Return ONLY the JSON. No explanation.""",
 
-        "compare_two_airports": f"""Extract two airport IATA codes from this comparison question.
+       "compare_two_airports": f"""Extract two airport IATA codes and the comparison property.
 Question: "{question}"
-Return ONLY a JSON object with these keys:
-- "airport1": IATA code of first airport (3 uppercase letters)
-- "airport2": IATA code of second airport (3 uppercase letters)
-- "property": one of [elevationFt, lengthFt, widthFt, airportType]
-Example: {{"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}
-Return ONLY the JSON. No explanation.""",
+
+Step 1 — find two IATA codes (3 uppercase letters each).
+Step 2 — identify the property being compared using this mapping:
+  "elevation" or "altitude" or "height"  → "elevationFt"
+  "runway length" or "length" or "longer" or "longest" → "lengthFt"
+  "runway width" or "width" or "wider" or "widest" → "widthFt"
+  "type" or "airport type" or "kind"     → "airportType"
+
+Return ONLY a JSON object:
+{{"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}
+
+Question to parse: "{question}"
+Return ONLY the JSON. No explanation. No text before or after.""",
 
         "count_kg1": f"""Extract parameters from this flight count/list question.
 Question: "{question}"
@@ -161,25 +176,42 @@ Return ONLY a JSON object with these keys:
 Example: {{"filter_property": "hasDestinationCity", "filter_value": "Munich", "mode": "count"}}
 Return ONLY the JSON. No explanation.""",
 
-        "filter_numeric_kg1": f"""Extract parameters from this flight speed filter question.
+       "filter_numeric_kg1": f"""Extract parameters from this flight numeric filter question.
 Question: "{question}"
+
+Property mapping rules:
+- "ground speed", "speed", "knots", "gspeed" → "gspeed"
+- "vertical speed", "vspeed", "feet per minute" → "vspeed"
+- "altitude", "alt", "flying at", "above X feet" (for flights) → "alt"
+
 Return ONLY a JSON object with these keys:
-- "property": one of [gspeed, vspeed]
+- "property": one of [gspeed, vspeed, alt]
 - "operator": one of [>, <, >=, <=]
 - "threshold": numeric value
 - "limit": number of results (default 10)
-Example: {{"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}
+Example: {{"property": "alt", "operator": ">", "threshold": 30000, "limit": 10}}
 Return ONLY the JSON. No explanation.""",
 
-        "cross_kg_filter": f"""Extract parameters from this cross-KG flight filter question.
+       "cross_kg_filter": f"""Extract parameters from this cross-KG flight filter question.
 Question: "{question}"
-Return ONLY a JSON object with these keys:
+
+Airport property mapping rules:
+- "elevation", "altitude", "above X feet" → airport_property = "elevationFt"
+- "runway length", "runway longer than" → airport_property = "lengthFt"
+- "country", "in Germany", "in France" → airport_property = "countryName"
+- "large airport", "large airports", "airport type" → airport_property = "airportType"
+- "continent" → airport_property = "continent"
+
+For string comparisons (country, type), set operator = "=" and threshold = the value.
+For "large airports", set threshold = "large_airport".
+
+Return ONLY a JSON object with keys:
 - "direction": "destination" or "origin"
 - "airport_property": one of [elevationFt, lengthFt, countryName, airportType, continent]
-- "operator": one of [>, <, >=, <=, =] (use = for string comparisons)
+- "operator": one of [>, <, >=, <=, =]
 - "threshold": the filter value (number or string)
 - "limit": number of results (default 10)
-Example: {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 1000, "limit": 10}}
+Example: {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}
 Return ONLY the JSON. No explanation.""",
     }
 
@@ -195,7 +227,12 @@ Return ONLY the JSON. No explanation.""",
         raw  = response["message"]["content"].strip()
         # Strip markdown code fences if present
         raw  = re.sub(r"```json|```", "", raw).strip()
-        return json.loads(raw)
+        # Find the first {...} block even if the LLM added surrounding text
+        match = re.search(r"\{.*?\}", raw, re.DOTALL)
+        if not match:
+            print(f"[template] No JSON object found in LLM output: {repr(raw[:100])}")
+            return {}
+        return json.loads(match.group())                # ← replaces json.loads(raw)
     except Exception as e:
         print(f"[template] Parameter extraction failed: {e}")
         return {}
@@ -331,10 +368,10 @@ def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     """
     a1   = params.get("airport1", "").upper()
     a2   = params.get("airport2", "").upper()
-    prop = params.get("property", "elevationFt")
+    prop = (params.get("property") or "").strip()
 
-    if not a1 or not a2:
-        return None
+    if not prop:
+        prop = "elevationFt"
 
     prop_info = KG2_NUMERIC_PROPS.get(prop) or KG2_STRING_PROPS.get(prop)
     if not prop_info:
@@ -366,7 +403,7 @@ def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
 
     label = f"comparison: {a1} vs {a2} by {prop}"
     return sparql, label
-
+    
 
 def _build_count_kg1(params: dict) -> tuple[str, str] | None:
     """

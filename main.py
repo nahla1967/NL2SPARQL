@@ -46,10 +46,11 @@ from pipeline.executor  import (
     format_answer,
 )
 from cross_kg_resolver import resolve_cross_kg
+from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "ما هي الدولة التي تقع فيها مطار MUC؟"
+question  = "Where is Berlin Brandenburg airport physically located?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────
@@ -320,9 +321,35 @@ elif query_type == "cross_kg":
 # BRANCH E — TEMPLATE (filter / ranking / comparison / count)
 # ─────────────────────────────────────────────────────────────────────────────
 elif query_type == "template":
-    print(f"Template query detected: {routing['template']}")
-    print("Template resolver not yet implemented — coming next.")
-    log["failure_type"] = "template_not_implemented"
+
+    template_name = routing["template"]
+    print(f"[2] Template : {template_name}")
+
+    # Delegate entirely to the template resolver.
+    # It handles: param extraction (LLM), SPARQL building, execution,
+    # and natural-language formatting — all in one call.
+    result = resolve_template(question, template_name, lang)
+
+    # Enrich the shared log with template-specific fields so the
+    # evaluation JSONL stays consistent across all branches.
+    log.update({
+        "template_params": result.get("params"),
+        "sparql":          result.get("sparql"),
+        "raw_answer":      result.get("raw_data"),
+        "final_answer":    result.get("final_answer"),
+        "failure_type":    result.get("failure_type"),   # success | param_extraction_failure
+                                                          # | sparql_build_failure | execution_failure
+        "sparql_valid":    result.get("success", False),
+    })
+
+    if result["success"]:
+        print(f"\nFinal answer: {result['final_answer']}")
+    else:
+        # Print a meaningful diagnostic rather than a silent failure.
+        print(f"Template resolution failed: {result['failure_type']}")
+        print(f"  Template   : {template_name}")
+        print(f"  Params     : {result.get('params')}")
+        print(f"  SPARQL     : {result.get('sparql')}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6: SAVE LOG
