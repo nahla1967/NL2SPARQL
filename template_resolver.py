@@ -72,8 +72,7 @@ KG2_STRING_PROPS = {
 KG1_NUMERIC_PROPS = {
     "gspeed": {"uri": f"{KG1}gspeed",  "label": "ground speed", "unit": "knots"},
     "vspeed": {"uri": f"{KG1}vspeed",  "label": "vertical speed","unit": "ft/min"},
-    "alt":    {"uri": f"{KG1}alt",     "label": "altitude",       "unit": "feet"},
-    "altitude":  {"uri": f"{KG1}alt",     "label": "altitude",       "unit": "feet"}, 
+    
 }
 
 KG1_STRING_PROPS = {
