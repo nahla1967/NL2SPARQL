@@ -48,7 +48,7 @@ from pipeline.executor  import (
 from cross_kg_resolver import resolve_cross_kg
 from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
-
+from pipeline.generator import inject_and_generate, generate_open_kg_sparql
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
 question  = "ما طول مدرج مطار VIE؟"
 condition = "zero-shot"   # zero-shot | few-shot | cot
@@ -350,7 +350,46 @@ elif query_type == "template":
         print(f"  Template   : {template_name}")
         print(f"  Params     : {result.get('params')}")
         print(f"  SPARQL     : {result.get('sparql')}")
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH F — OPEN KG
+# ─────────────────────────────────────────────────────────────────────────────
+elif query_type == "open_kg":
 
+    print("[Branch F] open_kg — LLM-generated SPARQL from schema")
+
+    from kg_registry import get_open_kg_schema
+    schema = get_open_kg_schema()
+
+    # Step 1: generate SPARQL from schema
+    sparql_query = generate_open_kg_sparql(question, lang, schema)
+    log["sparql"] = sparql_query
+    print(f"\nGenerated SPARQL:\n{sparql_query}")
+
+    if not sparql_query or not sparql_query.strip().startswith("SELECT"):
+        log["failure_type"] = "generation_failure"
+    else:
+        # Step 2: validate syntax
+        is_valid = validate_sparql(sparql_query)
+        log["sparql_valid"] = is_valid
+
+        if not is_valid:
+            log["failure_type"] = "generation_failure"
+        else:
+            # Step 3: try KG1 first, then KG2 if empty
+            raw = execute_sparql(sparql_query, endpoint=get_endpoint("flights"))
+            if not raw:
+                raw = execute_sparql(sparql_query, endpoint=get_endpoint("airports"))
+
+            log["raw_answer"] = raw
+            print(f"\nRaw answer: {raw}")
+
+            if raw:
+                answer = format_answer(question, raw, lang)
+                log["final_answer"] = answer
+                log["failure_type"] = "success"
+                print(f"Final answer: {answer}")
+            else:
+                log["failure_type"] = "execution_failure"
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6: SAVE LOG
 # ─────────────────────────────────────────────────────────────────────────────

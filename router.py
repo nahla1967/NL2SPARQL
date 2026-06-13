@@ -120,7 +120,7 @@ _KG1_ONLY_SIGNALS = {
     "flying to",               # "What country is flight LO225 flying to?"
     "vole vers",               # French equivalent
     "تغادر",                   # Arabic: departs
-    "وجهة الرحلة", 
+    "وجهة الرحلة",
 }
 
 # ─────────────────────────────────────────────
@@ -205,7 +205,17 @@ Classify the question into exactly one of these query types and extract its para
 
 9. out_of_scope — cannot be answered from this database
    params: {}
-
+10. open_kg — the question is about aviation data but does not fit any
+    template above. It asks about a specific property or relationship
+    that requires a custom query.
+    params: {}
+    
+    Examples:
+    - "Which flight has the highest ground speed?" → ranking, use ranking_kg2 or filter_numeric_kg1
+    - "How many airports are in the dataset?" → open_kg
+    - "Which airports have a grass runway?" → open_kg
+    - "What is the registration number of the aircraft on flight BR62?" → open_kg
+    - "Quel vol a la vitesse verticale la plus basse?" → open_kg
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
 
 Airport numeric properties:
@@ -257,7 +267,14 @@ CROSS_KG_FILTER: Use when a specific flight number is mentioned AND the
 COUNT_KG1: Use when the question counts or lists flights.
   "how many flights" / "combien de vols" / "كم رحلة" → always count_kg1,
   even if a city name is present.
-
+OPEN_KG: Use when the question asks about aviation data that exists in the
+  KG but does not fit filter_numeric, filter_string, ranking, compare,
+  count, or cross_kg_filter patterns. Specifically:
+  - Questions about aircraft registration or specific aircraft details
+  - Questions asking for a count of a KG class (airports, runways)
+  - Questions about runway surface types (grass, concrete)
+  - Questions about closed runways
+  Do NOT use open_kg when filter_numeric_kg1 or ranking_kg2 would work.
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
 Q: "Which airports have an elevation above 1000 feet?"
@@ -335,6 +352,14 @@ A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "a
 Q: "Which flights land at large airports?"
 A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}}}
 
+Q: "Which flight has the highest ground speed?"
+A: {{"query_type": "open_kg", "params": {{}}}}
+
+Q: "What is the callsign of the fastest flight?"
+A: {{"query_type": "open_kg", "params": {{}}}}
+
+Q: "ما هي الرحلة ذات أعلى سرعة أرضية؟"
+A: {{"query_type": "open_kg", "params": {{}}}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -480,6 +505,48 @@ def _llm_classify(question: str) -> dict:
         print(f"[router] LLM classification failed: {e}")
         return {}
 
+
+def _is_kg_answerable(question: str) -> bool:
+    """
+    Asks the LLM whether the question can be answered from the specific
+    data model of the deployed knowledge graphs.
+
+    WHY THIS IS BETTER THAN A KEYWORD LIST:
+        A keyword list catches aviation vocabulary but cannot judge
+        answerability. "Can I eat pizza on the airline?" contains the
+        word "airline" yet cannot be answered from our KG.
+        This prompt grounds the check in the actual data model.
+
+    Returns True if the LLM says YES, False otherwise.
+    """
+    from kg_registry import get_open_kg_schema
+    schema = get_open_kg_schema()
+
+    prompt = f"""You are a scope classifier for an aviation knowledge graph system.
+
+The knowledge graph contains:
+- Flights: flight number, airline, origin city, destination city,
+  aircraft type, gate, terminal, callsign, ground speed, vertical speed
+- Airports: name, type, elevation, country, region, city,
+  IATA code, ICAO code, coordinates
+- Runways: length, width, surface, lighting, identifier
+
+Answer only YES or NO:
+Can this question be answered using only the data described above?
+
+Question: "{question}"
+"""
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        answer = response["message"]["content"].strip().upper()
+        return answer.startswith("YES")
+    except Exception as e:
+        print(f"[router] _is_kg_answerable failed: {e}")
+        return False
+
 # ─────────────────────────────────────────────
 # ROUTER
 # ─────────────────────────────────────────────
@@ -490,6 +557,14 @@ def route(question: str) -> dict:
 
     Returns a routing dict consumed by main.py and test_pipeline.py.
     Keys: query_type, kg, entity, direction, template, config, params.
+
+    Final structure:
+        Priority 1 → structure guard
+        Priority 2 → flight number → single_kg1 or cross_kg
+        Priority 2.5 → airport entity → single_kg2
+        Priority 3 → LLM classifies → template / single_kg2 / open_kg
+                     (with smart reroute for known misclassification patterns)
+        Clean gate → _is_kg_answerable() → open_kg or out_of_scope
     """
 
     # ── Priority 1: Structure guard ───────────────────────────────────────────
@@ -559,6 +634,8 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["flights"],
         }
+
+    # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
     if airport:
         return {
@@ -569,16 +646,70 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["airports"],
         }
+
     # ── Priority 3: No flight number — LLM classifies everything else ─────────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
     params     = classified.get("params", {})
 
-    # Template branch — covers all 7 template types including cross_kg_filter
-    # for aggregate questions without a specific flight number
-    # (e.g. "Which flights land at large airports?").
+    # ── Template branch ───────────────────────────────────────────────────────
     if query_type in TEMPLATE_REGISTRY:
         cfg = TEMPLATE_REGISTRY[query_type]
+
+        KG1_FLIGHT_PROPS = {"gspeed", "vspeed", "alt", "groundSpeed", "speed"}
+        RANKING_SIGNALS  = [
+            "highest", "lowest", "fastest", "slowest",
+            "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
+            "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
+        ]
+
+        # Case 1: KG2 template received a KG1 flight property
+        if query_type in ("ranking_kg2", "filter_numeric_kg2"):
+            prop = params.get("property", "")
+            if prop in KG1_FLIGHT_PROPS:
+                print(f"[router] Smart reroute: KG1 property in KG2 template → open_kg")
+                return {
+                    "query_type": "open_kg",
+                    "kg":         "cross",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   None,
+                    "config":     None,
+                }
+
+        # Case 2: filter_numeric_kg1 with ranking intent and no real threshold
+        if query_type == "filter_numeric_kg1":
+            prop      = params.get("property", "")
+            threshold = params.get("threshold")
+            if prop in KG1_FLIGHT_PROPS and (
+                threshold is None or
+                any(sig in question.lower() for sig in RANKING_SIGNALS)
+            ):
+                print(f"[router] Smart reroute: ranking signal in filter → open_kg")
+                return {
+                    "query_type": "open_kg",
+                    "kg":         "cross",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   None,
+                    "config":     None,
+                }
+
+        # Case 3: filter_string_kg2 with runway surface or closed runway
+        if query_type == "filter_string_kg2":
+            value = params.get("value", "")
+            if any(v in str(value).lower() for v in
+                   ["grass", "closed", "grs", "closed_runway", "fermée", "مغلق"]):
+                print(f"[router] Smart reroute: runway property → open_kg")
+                return {
+                    "query_type": "open_kg",
+                    "kg":         "cross",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   None,
+                    "config":     None,
+                }
+
         return {
             "query_type": "template",
             "kg":         cfg["kg"],
@@ -589,7 +720,7 @@ def route(question: str) -> dict:
             "params":     params,
         }
 
-    # Single airport branch — LLM identified a specific airport entity.
+    # ── Single airport branch ─────────────────────────────────────────────────
     if query_type == "single_kg2":
         entity = params.get("entity")
         if entity:
@@ -609,32 +740,44 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["airports"],
         }
 
-    # ── Priority 4: Deterministic airport entity fallback ─────────────────────
-    # Reached only if the LLM failed or returned out_of_scope.
-    # Provides robustness against LLM crashes or timeouts.
-    airport = _detect_airport_entity(question)
-    if airport:
+    # ── open_kg branch — LLM identified custom KG question ───────────────────
+    if query_type == "open_kg":
         return {
-            "query_type": "single_kg2",
-            "kg":         "airports",
-            "entity":     airport,
-            "direction":  None,
-            "template":   None,
-            "config":     KG_REGISTRY["airports"],
-        }
-
-    # ── Priority 5: Airport keyword fallback ──────────────────────────────────
-    if _detect_airport_keyword(question):
-        return {
-            "query_type": "single_kg2",
-            "kg":         "airports",
+            "query_type": "open_kg",
+            "kg":         "cross",
             "entity":     None,
             "direction":  None,
             "template":   None,
-            "config":     KG_REGISTRY["airports"],
+            "config":     None,
         }
 
-    # ── Default ───────────────────────────────────────────────────────────────
+    # ── CLEAN GATE ────────────────────────────────────────────────────────────
+    # Everything that reached here has:
+    #   - no flight number
+    #   - no specific airport entity
+    #   - no template match
+    #   - no direct open_kg classification
+    #
+    # One single question decides the fate:
+    # Can this question be answered from our KG data model?
+    #
+    # YES → open_kg  (free SPARQL generation, schema-grounded)
+    # NO  → out_of_scope
+    #
+    # This replaces all previous Priority 4, Priority 5, keyword fallbacks,
+    # and smart reroutes. The _is_kg_answerable() function is the only
+    # intelligence needed here.
+
+    if _is_kg_answerable(question):
+        return {
+            "query_type": "open_kg",
+            "kg":         "cross",
+            "entity":     None,
+            "direction":  None,
+            "template":   None,
+            "config":     None,
+        }
+
     return {
         "query_type": "out_of_scope",
         "kg":         None,

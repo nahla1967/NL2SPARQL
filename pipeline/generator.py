@@ -269,3 +269,82 @@ Return only the SPARQL query. No explanation. No markdown."""
         messages=[{"role": "user", "content": prompt}]
     )
     return extract_sparql(response["message"]["content"])
+
+# ── OPEN KG SPARQL GENERATOR ──────────────────────────────────────────────────
+
+def generate_open_kg_sparql(question: str, lang: str, schema: str) -> str:
+    """
+    Generates a free SPARQL query for unanticipated aviation questions.
+
+    Unlike inject_and_generate(), this function does NOT receive pre-resolved
+    URIs. Instead, it injects the full ontology schema into the prompt and
+    asks the LLM to generate a query constrained to what actually exists.
+
+    This is the open_kg branch — Branch F in the thesis.
+
+    Args:
+        question : the original user question
+        lang     : detected language (en / fr / ar)
+        schema   : the OPEN_KG_SCHEMA string from kg_registry.py
+
+    Returns:
+        A SPARQL SELECT query string, or empty string on failure.
+    """
+    prompt = f"""You are a SPARQL expert for an aviation knowledge graph system.
+
+The knowledge graphs have the following structure:
+{schema}
+
+The user asked: "{question}"
+
+Write a valid SPARQL SELECT query that answers this question using ONLY
+the classes and properties described above.
+
+STRICT RULES:
+- Use full URIs with angle brackets. Never use PREFIX declarations.
+- The query must start with SELECT
+- Use ?value as the main result variable when retrieving a single value.
+- For KG1 (flights), query endpoint: http://localhost:3030/flights/sparql
+- For KG2 (airports), query endpoint: http://localhost:3030/airports/sparql
+- If the question requires data from both KGs, write a query for KG2 only
+  (airports endpoint) since cross-KG joins are handled separately.
+- Triple order is always: subject property object.
+  CORRECT:   <uri> <property> ?value .
+  WRONG:     <uri> ?value <property> .
+- Do not invent properties that are not listed above.
+- If multiple results are possible, add LIMIT 10.
+
+EXAMPLES of correct queries:
+
+Q: "Which airports have a grass runway?"
+SELECT ?name WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#airportName> ?name .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> "GRS" .
+}} LIMIT 10
+
+Q: "How many airports are in the dataset?"
+SELECT (COUNT(?airport) AS ?count) WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+}}
+
+Q: "Which flight has the highest ground speed?"
+SELECT ?number ?value WHERE {{
+  ?flight a <http://www.semanticweb.org/ontologies/flight_ontology#Flight> .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#flightNumber> ?number .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasFlightEvent> ?event .
+  ?event <http://www.semanticweb.org/ontologies/flight_ontology#gspeed> ?value .
+}} ORDER BY DESC(?value) LIMIT 1
+
+Return ONLY the SPARQL query. No explanation. No markdown."""
+
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return extract_sparql(response["message"]["content"])
+    except Exception as e:
+        print(f"[generator] generate_open_kg_sparql failed: {e}")
+        return ""

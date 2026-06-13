@@ -358,6 +358,9 @@ def execute_sparql(
                 return None
 
             def _resolve_binding(binding: dict) -> str:
+                if len(binding) > 1:
+                    parts = [binding[k]["value"] for k in binding]
+                    return ", ".join(parts)
                 first_key = list(binding.keys())[0]
                 raw       = binding[first_key]["value"]
                 if "airport_ontology" in raw:

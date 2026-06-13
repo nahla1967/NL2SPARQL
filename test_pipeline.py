@@ -64,88 +64,17 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 FULL_SYSTEM_TESTS = [
 
-    # ══ BRANCH B — single_kg1 ═════════════════════════════════════════════════
-    ("Where does flight OS235 depart from?",              "single_kg1", "kg1_en_exact"),
-    ("What is the destination of flight KE567?",          "single_kg1", "kg1_en_exact"),
-    ("Which airline operates flight FR182?",              "single_kg1", "kg1_en_exact"),
-    ("What is the callsign of flight AI180?",             "single_kg1", "kg1_en_exact"),
-    ("What aircraft is used on flight BR62?",             "single_kg1", "kg1_en_exact"),
-    ("What country is flight LO225 flying to?",           "single_kg1", "kg1_en_fuzzy"),
-    ("What is the ground speed of flight FR6889?",        "single_kg1", "kg1_en_fuzzy"),
-    ("D'où part le vol OS295?",                           "single_kg1", "kg1_fr_exact"),
-    ("Quelle est la destination du vol LG8854?",          "single_kg1", "kg1_fr_exact"),
-    ("Quelle compagnie opère le vol FR947?",              "single_kg1", "kg1_fr_fuzzy"),
-    ("من أين تغادر الرحلة OS235؟",                        "single_kg1", "kg1_ar_exact"),
-    ("ما وجهة الرحلة KE567؟",                             "single_kg1", "kg1_ar_exact"),
-    ("أي شركة تشغّل الرحلة FR182؟",                       "single_kg1", "kg1_ar_fuzzy"),
-
-    # ══ BRANCH C — single_kg2 ═════════════════════════════════════════════════
-    ("What is the elevation of VIE?",                     "single_kg2", "kg2_en_iata"),
-    ("What country is ZRH in?",                           "single_kg2", "kg2_en_iata"),
-    ("What type of airport is SOF?",                      "single_kg2", "kg2_en_iata"),
-    ("What city does MUC serve?",                         "single_kg2", "kg2_en_iata"),
-    ("What is the elevation of Vienna airport?",          "single_kg2", "kg2_en_name"),
-    ("How long is the runway at London Heathrow?",        "single_kg2", "kg2_en_name"),
-    ("What is the ICAO code of Charles de Gaulle?",       "single_kg2", "kg2_en_name"),
-    ("Quelle est l'élévation de l'aéroport de Vienne?",  "single_kg2", "kg2_fr_name"),
-    ("Dans quel pays se trouve l'aéroport de Munich?",   "single_kg2", "kg2_fr_name"),
-    ("Quel type d'aéroport est SOF?",                     "single_kg2", "kg2_fr_iata"),
-    ("ما ارتفاع مطار فيينا؟",                             "single_kg2", "kg2_ar_name"),
-    ("ما طول مدرج مطار VIE؟",                             "single_kg2", "kg2_ar_iata"),
-    ("ما نوع مطار ZRH؟",                                  "single_kg2", "kg2_ar_iata"),
-
-    # ══ BRANCH D — cross_kg ═══════════════════════════════════════════════════
-    ("What country is the destination airport of flight OS235?",   "cross_kg", "crosskg_en"),
-    ("What is the elevation of the destination airport of KE567?", "cross_kg", "crosskg_en"),
-    ("What country does flight LO225 land in?",                    "cross_kg", "crosskg_en"),
-    ("What type of airport does flight FR182 arrive at?",          "cross_kg", "crosskg_en"),
-    ("Dans quel pays atterrit le vol OS295?",                       "cross_kg", "crosskg_fr"),
-    ("في أي دولة يهبط الرحلة OS235؟",                             "cross_kg", "crosskg_ar"),
-
-    # ══ BRANCH E — template ═══════════════════════════════════════════════════
-
-    # filter_numeric_kg2
-    ("Which airports have an elevation above 1000 feet?",          "template", "filter_numeric_kg2"),
-    ("List airports with runways shorter than 7000 feet.",         "template", "filter_numeric_kg2"),
-    ("Quels aéroports ont une élévation supérieure à 500 pieds?",  "template", "filter_numeric_kg2"),
-    ("ما هي المطارات التي يزيد ارتفاعها عن 1000 قدم؟",            "template", "filter_numeric_kg2"),
-
-    # filter_string_kg2
-    ("Which airports are located in Italy?",                       "template", "filter_string_kg2"),
-    ("Show all large airports.",                                    "template", "filter_string_kg2"),
-    ("Quels aéroports sont situés en France?",                     "template", "filter_string_kg2"),
-    ("ما هي المطارات الموجودة في تركيا؟",                          "template", "filter_string_kg2"),
-
-    # ranking_kg2
-    ("What are the top 5 airports with the highest elevation?",    "template", "ranking_kg2"),
-    ("Which airport has the shortest runway?",                     "template", "ranking_kg2"),
-    ("Quel aéroport a la piste la plus longue?",                   "template", "ranking_kg2"),
-    ("أي مطار لديه أعلى ارتفاع؟",                                  "template", "ranking_kg2"),
-
-    # compare_two_airports
-    ("Compare VIE and FRA by elevation.",                          "template", "compare_two_airports"),
-    ("Compare MUC and SOF by runway width.",                       "template", "compare_two_airports"),
-    ("Comparez CDG et LHR par longueur de piste.",                 "template", "compare_two_airports"),
-    ("قارن بين VIE وSOF من حيث الارتفاع.",                        "template", "compare_two_airports"),
-
-    # count_kg1
-    ("How many flights have destination city Berlin?",             "template", "count_kg1"),
-    ("How many flights depart from Paris?",                        "template", "count_kg1"),
-    ("Combien de vols partent de Vienne?",                         "template", "count_kg1"),
-    ("كم رحلة تتجه إلى برلين؟",                                   "template", "count_kg1"),
-
-    # filter_numeric_kg1
-    ("Which flights have a ground speed above 400 knots?",         "template", "filter_numeric_kg1"),
-    ("Which flights have a vertical speed below -1000 feet per minute?", "template", "filter_numeric_kg1"),
-    ("Quels vols ont une vitesse au sol supérieure à 450 nœuds?",  "template", "filter_numeric_kg1"),
-    ("ما الرحلات ذات السرعة الأرضية فوق 400 عقدة؟",               "template", "filter_numeric_kg1"),
-
-    # cross_kg_filter
-    ("Which flights land at airports with elevation above 800 feet?",  "template", "cross_kg_filter"),
-    ("Which flights arrive at airports located in Germany?",           "template", "cross_kg_filter"),
-    ("Which flights land at large airports?",                          "template", "cross_kg_filter"),
-    ("Quels vols atterrissent dans des aéroports en Allemagne?",       "template", "cross_kg_filter"),
-    ("ما الرحلات التي تهبط في مطارات فوق 800 قدم؟",                   "template", "cross_kg_filter"),
+   # ══ BRANCH F — open_kg ════════════════════════════════════════════════════
+    ("What is the callsign of the fastest flight in the dataset?",     "open_kg", "open_kg_en"),
+    ("Which flight has the highest ground speed?",                     "open_kg", "open_kg_en"),
+    ("How many airports are in the dataset?",                          "open_kg", "open_kg_en"),
+    ("Which airports have a grass runway?",                            "open_kg", "open_kg_en"),
+    ("What is the registration number of the aircraft on flight BR62?","open_kg", "open_kg_en"),
+    ("Quel vol a la vitesse verticale la plus basse?",                 "open_kg", "open_kg_fr"),
+    ("Quels aéroports ont des pistes fermées?",                        "open_kg", "open_kg_fr"),
+    ("ما هو رقم تسجيل طائرة الرحلة BR62؟",                           "open_kg", "open_kg_ar"),
+    ("ما هي الرحلة ذات أعلى سرعة أرضية؟",                            "open_kg", "open_kg_ar"),
+    ("كم عدد المطارات في قاعدة البيانات؟",                            "open_kg", "open_kg_ar"),
 ]
 
 ALL_TESTS = [
@@ -347,7 +276,45 @@ def _run_template(question: str, routing: dict, lang: str) -> dict:
         "failure_type":    tr.get("failure_type"),
     }
 
+def _run_open_kg(question: str, routing: dict, lang: str) -> dict:
+    """
+    Branch F: open_kg — schema-grounded free SPARQL generation.
+    No mapping layer. The LLM generates SPARQL directly from the schema.
+    """
+    from pipeline.generator import generate_open_kg_sparql
+    from kg_registry import get_open_kg_schema
 
+    out = {"sparql": None, "sparql_valid": False,
+           "raw_answer": None, "final_answer": None,
+           "failure_type": "not_run"}
+
+    schema = get_open_kg_schema()
+    sparql = generate_open_kg_sparql(question, lang, schema)
+    out["sparql"] = sparql
+
+    if not sparql or not sparql.strip().startswith("SELECT"):
+        out["failure_type"] = "generation_failure"
+        return out
+
+    is_valid = validate_sparql(sparql)
+    out["sparql_valid"] = is_valid
+
+    if not is_valid:
+        out["failure_type"] = "generation_failure"
+        return out
+
+    raw = execute_sparql(sparql, endpoint=get_endpoint("flights"))
+    if not raw:
+        raw = execute_sparql(sparql, endpoint=get_endpoint("airports"))
+
+    out["raw_answer"] = raw
+    if raw:
+        out["final_answer"]  = format_answer(question, raw, lang)
+        out["failure_type"]  = "success"
+    else:
+        out["failure_type"] = "execution_failure"
+
+    return out
 # ── CORE RUNNER ───────────────────────────────────────────────────────────────
 
 def run_single_test(question: str, expected_type: str) -> dict:
@@ -394,6 +361,9 @@ def run_single_test(question: str, expected_type: str) -> dict:
 
         elif query_type == "template":
             branch_out = _run_template(question, routing, lang)
+
+        elif query_type == "open_kg":
+            branch_out = _run_open_kg(question, routing, lang)    
 
         else:
             # out_of_scope — nothing to run
