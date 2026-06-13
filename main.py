@@ -353,6 +353,9 @@ elif query_type == "template":
 # ─────────────────────────────────────────────────────────────────────────────
 # BRANCH F — OPEN KG
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH F — OPEN KG
+# ─────────────────────────────────────────────────────────────────────────────
 elif query_type == "open_kg":
 
     print("[Branch F] open_kg — LLM-generated SPARQL from schema")
@@ -360,10 +363,20 @@ elif query_type == "open_kg":
     from kg_registry import get_open_kg_schema
     schema = get_open_kg_schema()
 
-    # Step 1: generate SPARQL from schema
-    sparql_query = generate_open_kg_sparql(question, lang, schema)
+    # Step 1: generate SPARQL and detect target endpoint from namespace markers.
+    # generate_open_kg_sparql returns a tuple (sparql, endpoint).
+    # The endpoint is determined by inspecting which ontology namespace
+    # appears in the generated query:
+    #   flight_ontology   → KG1 (flights endpoint)
+    #   airport_ontology  → KG2 (airports endpoint)
+    # This replaces the previous blind sequential fallback (try KG1, then KG2
+    # if empty), which was unreliable and architecturally incorrect.
+    sparql_query, endpoint = generate_open_kg_sparql(question, lang, schema)
+
     log["sparql"] = sparql_query
+    log["kg"]     = "kg1" if "flights" in endpoint else "kg2"
     print(f"\nGenerated SPARQL:\n{sparql_query}")
+    print(f"[Branch F] Target endpoint: {endpoint}")
 
     if not sparql_query or not sparql_query.strip().startswith("SELECT"):
         log["failure_type"] = "generation_failure"
@@ -375,21 +388,19 @@ elif query_type == "open_kg":
         if not is_valid:
             log["failure_type"] = "generation_failure"
         else:
-            # Step 3: try KG1 first, then KG2 if empty
-            raw = execute_sparql(sparql_query, endpoint=get_endpoint("flights"))
-            if not raw:
-                raw = execute_sparql(sparql_query, endpoint=get_endpoint("airports"))
-
+            # Step 3: execute against the detected endpoint only — no fallback.
+            # If the query returns empty, the failure is logged as
+            # execution_failure rather than silently retrying the wrong KG.
+            raw = execute_sparql(sparql_query, endpoint=endpoint, multiple=True)
             log["raw_answer"] = raw
             print(f"\nRaw answer: {raw}")
 
             if raw:
-                answer = format_answer(question, raw, lang)
+                from pipeline.executor import format_answer_list
+                answer = format_answer_list(question, raw, lang)
                 log["final_answer"] = answer
                 log["failure_type"] = "success"
                 print(f"Final answer: {answer}")
-            else:
-                log["failure_type"] = "execution_failure"
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6: SAVE LOG
 # ─────────────────────────────────────────────────────────────────────────────

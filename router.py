@@ -523,6 +523,7 @@ def _is_kg_answerable(question: str) -> bool:
     schema = get_open_kg_schema()
 
     prompt = f"""You are a scope classifier for an aviation knowledge graph system.
+The question may be in English, French, or Arabic.
 
 The knowledge graph contains:
 - Flights: flight number, airline, origin city, destination city,

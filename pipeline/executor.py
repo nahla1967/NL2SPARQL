@@ -18,6 +18,7 @@ CHANGES vs v2:
 import json
 import urllib.parse
 import urllib.request
+from altair import binding
 import ollama
 from datetime import datetime
 from rdflib.plugins.sparql import prepareQuery
@@ -347,10 +348,14 @@ def execute_sparql(
         "format": "application/sparql-results+json"
     }).encode()
     req = urllib.request.Request(endpoint, data=data)
+    print(f"[debug] sending query:\n{sparql_query}")  # ← add this
+    print(f"[debug] encoded data: {data[:200]}")  
 
     try:
         with urllib.request.urlopen(req) as response:
-            result   = json.loads(response.read())
+            raw_response = response.read()
+            print(f"[debug] fuseki raw response: {raw_response[:500]}")
+            result = json.loads(raw_response)
             if "results" not in result:
                 return None
             bindings = result["results"]["bindings"]
@@ -373,7 +378,7 @@ def execute_sparql(
                     resolved = COUNTRY_CODES.get(resolved, resolved)
                 if resolved and resolved.upper() in SURFACE_CODES:
                     resolved = SURFACE_CODES[resolved.upper()]
-                return resolved
+                return resolved          # ← Change 1 goes HERE, one line above this return.
 
             if multiple:
                 return [_resolve_binding(b) for b in bindings]
@@ -391,7 +396,8 @@ def execute_sparql(
         print(f"[execute_sparql] Fuseki unreachable ({endpoint}): {e}")
     except Exception as e:
         print(f"[execute_sparql] Unexpected error: {e}")
-
+        import traceback
+        traceback.print_exc() 
     return None
 
 # ── ANSWER FORMATTING ─────────────────────────────────────────────────────────

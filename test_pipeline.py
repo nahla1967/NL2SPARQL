@@ -126,9 +126,12 @@ def _run_single_kg1(question: str, routing: dict, lang: str) -> dict:
     full_prop2_uri = (BASE + property2_uri) if property2_uri else None
 
     sparql = inject_and_generate(
+        
         flight_uri, full_prop_uri, question,
         strategy=STRATEGY, property2_uri=full_prop2_uri
     )
+    print(f"[debug] sparql=\n{sparql}")  # ← add this
+
     out["sparql"] = sparql
 
     is_valid = (
@@ -279,17 +282,24 @@ def _run_template(question: str, routing: dict, lang: str) -> dict:
 def _run_open_kg(question: str, routing: dict, lang: str) -> dict:
     """
     Branch F: open_kg — schema-grounded free SPARQL generation.
-    No mapping layer. The LLM generates SPARQL directly from the schema.
+    No mapping layer. The LLM generates SPARQL directly from the schema
+    and also determines the correct target endpoint by inspecting which
+    ontology namespace appears in the generated query.
+
+    execute_sparql is called with multiple=True because open_kg questions
+    are aggregate or exploratory — they return lists of results, not a
+    single value for a known entity. format_answer_list is used accordingly.
     """
     from pipeline.generator import generate_open_kg_sparql
-    from kg_registry import get_open_kg_schema
+    from pipeline.executor  import format_answer_list
+    from kg_registry        import get_open_kg_schema
 
     out = {"sparql": None, "sparql_valid": False,
            "raw_answer": None, "final_answer": None,
            "failure_type": "not_run"}
 
     schema = get_open_kg_schema()
-    sparql = generate_open_kg_sparql(question, lang, schema)
+    sparql, endpoint = generate_open_kg_sparql(question, lang, schema)
     out["sparql"] = sparql
 
     if not sparql or not sparql.strip().startswith("SELECT"):
@@ -303,14 +313,13 @@ def _run_open_kg(question: str, routing: dict, lang: str) -> dict:
         out["failure_type"] = "generation_failure"
         return out
 
-    raw = execute_sparql(sparql, endpoint=get_endpoint("flights"))
-    if not raw:
-        raw = execute_sparql(sparql, endpoint=get_endpoint("airports"))
-
+    raw = execute_sparql(sparql, endpoint=endpoint, multiple=True)
+    print(f"[debug] raw={raw}")
     out["raw_answer"] = raw
+
     if raw:
-        out["final_answer"]  = format_answer(question, raw, lang)
-        out["failure_type"]  = "success"
+        out["final_answer"] = format_answer_list(question, raw, lang)
+        out["failure_type"] = "success"
     else:
         out["failure_type"] = "execution_failure"
 

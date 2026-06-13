@@ -272,9 +272,22 @@ Return only the SPARQL query. No explanation. No markdown."""
 
 # ── OPEN KG SPARQL GENERATOR ──────────────────────────────────────────────────
 
-def generate_open_kg_sparql(question: str, lang: str, schema: str) -> str:
+# ── OPEN KG SPARQL GENERATOR ──────────────────────────────────────────────────
+
+FLIGHT_ONTOLOGY_NS  = "flight_ontology"
+AIRPORT_ONTOLOGY_NS = "airport_ontology"
+
+KG1_ENDPOINT = "http://localhost:3030/flights/sparql"
+KG2_ENDPOINT = "http://localhost:3030/airports/sparql"
+
+def generate_open_kg_sparql(
+    question: str,
+    lang: str,
+    schema: str,
+) -> tuple[str, str]:
     """
-    Generates a free SPARQL query for unanticipated aviation questions.
+    Generates a free SPARQL query for unanticipated aviation questions
+    and determines which endpoint to execute it against.
 
     Unlike inject_and_generate(), this function does NOT receive pre-resolved
     URIs. Instead, it injects the full ontology schema into the prompt and
@@ -282,13 +295,29 @@ def generate_open_kg_sparql(question: str, lang: str, schema: str) -> str:
 
     This is the open_kg branch — Branch F in the thesis.
 
+    ENDPOINT DETECTION:
+        After generation, the query is inspected for namespace markers.
+        This is more reliable than asking the LLM to declare the endpoint,
+        because namespace URIs are structurally present in any valid query
+        that uses the schema — they cannot be omitted.
+
+        Rules:
+          - flight_ontology namespace only   → KG1 (flights endpoint)
+          - airport_ontology namespace only  → KG2 (airports endpoint)
+          - both namespaces present          → KG2 (cross-KG joins are
+                                               handled separately; airport
+                                               data is the outer query)
+          - neither namespace detected       → KG2 (safe default)
+
     Args:
         question : the original user question
         lang     : detected language (en / fr / ar)
         schema   : the OPEN_KG_SCHEMA string from kg_registry.py
 
     Returns:
-        A SPARQL SELECT query string, or empty string on failure.
+        A tuple (sparql: str, endpoint: str).
+        sparql   : the generated SPARQL SELECT query, or "" on failure.
+        endpoint : the full URL of the target Fuseki endpoint.
     """
     prompt = f"""You are a SPARQL expert for an aviation knowledge graph system.
 
@@ -304,8 +333,6 @@ STRICT RULES:
 - Use full URIs with angle brackets. Never use PREFIX declarations.
 - The query must start with SELECT
 - Use ?value as the main result variable when retrieving a single value.
-- For KG1 (flights), query endpoint: http://localhost:3030/flights/sparql
-- For KG2 (airports), query endpoint: http://localhost:3030/airports/sparql
 - If the question requires data from both KGs, write a query for KG2 only
   (airports endpoint) since cross-KG joins are handled separately.
 - Triple order is always: subject property object.
@@ -344,7 +371,29 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
             model="llama3",
             messages=[{"role": "user", "content": prompt}]
         )
-        return extract_sparql(response["message"]["content"])
+        sparql = extract_sparql(response["message"]["content"])
+
+        # ── Endpoint detection from namespace markers ──────────────────────────
+        # The generated query will contain full URIs from whichever ontology
+        # it targets. We inspect those URIs to determine the correct endpoint
+        # rather than guessing or trying both sequentially.
+        has_kg1 = FLIGHT_ONTOLOGY_NS  in sparql
+        has_kg2 = AIRPORT_ONTOLOGY_NS in sparql
+
+        if has_kg1 and not has_kg2:
+            endpoint = KG1_ENDPOINT
+            print(f"[generator] open_kg → KG1 (flights endpoint)")
+        elif has_kg2:
+            # covers KG2-only and both-KG cases
+            endpoint = KG2_ENDPOINT
+            print(f"[generator] open_kg → KG2 (airports endpoint)")
+        else:
+            # no namespace detected — LLM may have generated a malformed query
+            endpoint = KG2_ENDPOINT
+            print(f"[generator] open_kg → no namespace detected, defaulting to KG2")
+
+        return sparql, endpoint
+
     except Exception as e:
         print(f"[generator] generate_open_kg_sparql failed: {e}")
-        return ""
+        return "", KG2_ENDPOINT
