@@ -1,40 +1,80 @@
 """
-router.py  (v5 — LLM-based classification)
--------------------------------------------
-DESIGN CHANGE vs v4:
+router.py  (v9 — final with word boundary fix)
+------------------------------------------------
+WHAT CHANGED vs v8:
 
-    v4 used a lexicon of hand-crafted signal words to detect which template
-    a question belongs to. Every new phrasing or synonym required editing
-    the lexicon. This was fragile and did not scale.
+    Fix — _has_kg1_signal() now uses word boundaries for single-word signals.
 
-    v5 replaces the signal-word matching with a single LLM call that
-    classifies the question AND extracts its parameters in one step.
-    The lexicon is no longer needed for routing — only the airport_entities
-    dictionary is kept for deterministic IATA code lookup.
+    In v8, the fast pre-check used `sig in q_lower`, which performs a
+    substring match. This means the word "gate" would match inside "navigate",
+    "aggregate", or any other word containing that substring. While unlikely
+    to cause real failures in aviation queries, it is a formal correctness
+    issue: a false positive here causes the router to skip the LLM for a
+    question that might be cross-KG, routing it silently to single_kg1
+    with no fallback.
 
-WHAT STAYS THE SAME:
-    - Flight number detection (regex, deterministic, fast)
-    - Airport entity detection (dictionary lookup + fuzzy match)
-    - The output dict structure — identical to v4, so nothing else changes
-    - CROSS_KG_CONFIG, KG_REGISTRY, TEMPLATE_REGISTRY usage
+    The fix uses re.search(r"\b{sig}\b") for single-word signals, which
+    requires the signal to appear as a standalone word. Multi-word signals
+    like "ground speed" still use substring matching, which is correct
+    because the space itself prevents partial matches inside compound words.
 
-WHAT CHANGES:
-    - _detect_template() is replaced by _llm_classify()
-    - _detect_cross_kg_signal() is replaced by LLM classification
-    - The lexicon's template_triggers section is no longer read
-    - No more signal word lists to maintain
+    This makes the fast pre-check formally correct, not just empirically
+    correct — an important distinction for a thesis defense.
 
-HOW IT WORKS:
-    Priority 1: flight number regex → single_kg1
-    Priority 2: LLM classification → template (covers all 7 template types
-                including cross_kg_filter, which previously needed
-                _detect_cross_kg_signal)
-    Priority 3: airport entity lookup → single_kg2
-    Priority 4: nothing matched → out_of_scope
+ARCHITECTURE OVERVIEW
+---------------------
+The router is the front door of the NL2SPARQL pipeline. Its sole job is
+to decide which branch handles a given question. It does NOT extract
+properties, generate SPARQL, or query any endpoint.
 
-    The LLM returns a JSON object with "query_type" and "params".
-    If classification fails or returns out_of_scope, we fall through
-    to deterministic entity detection as a safety net.
+Four branches exist:
+    single_kg1  → a specific flight is asked about (flight number present,
+                  question asks about the flight itself)
+    single_kg2  → a specific airport is asked about by name or IATA code
+    cross_kg    → a specific flight is asked about, but the question asks
+                  about a property of its airport (country, elevation, etc.)
+    template    → an aggregate question with no specific entity
+                  (filter, ranking, comparison, count)
+
+ROUTING LOGIC
+-------------
+Priority 1 — Minimum structure guard
+    Rejects single-word or meaningless inputs immediately.
+
+Priority 2 — Flight number detected (regex)
+    2a. FAST PATH: question contains a KG1-only signal word.
+        These concepts only exist in KG1, never in KG2. The question
+        cannot possibly be cross-KG. Return single_kg1 immediately
+        without calling the LLM, saving ~2 seconds of Ollama latency.
+        Word boundaries are used for single-word signals to prevent
+        false matches inside longer words (e.g. "gate" in "navigate").
+
+    2b. SLOW PATH: question is ambiguous.
+        "What is the airline of flight X?" and "What country does
+        flight X land in?" both contain a flight number but require
+        different pipelines. The LLM is the only component that can
+        distinguish them reliably across all languages.
+        If LLM returns cross_kg_filter → route cross_kg.
+        Otherwise → route single_kg1.
+
+Priority 3 — No flight number → LLM classifies everything else.
+    Template branch, single_kg2, or out_of_scope.
+    If LLM fails, deterministic fallbacks provide a safety net.
+
+WHY THE LLM RUNS FOR AMBIGUOUS FLIGHT QUESTIONS
+-------------------------------------------------
+Cross-KG questions always contain a flight number — that is how the
+system identifies the flight in KG1. But plain KG1 questions also
+contain a flight number. At the surface level they are indistinguishable.
+Only semantic understanding separates them. The LLM provides that.
+
+WHAT THE ROUTER DOES NOT DO
+-----------------------------
+The router does not extract property URIs, entities, or SPARQL.
+For cross_kg questions it only determines the flight number and
+direction (origin/destination). The actual property is extracted
+downstream by the hybrid mapping layer (extract_airport_entities +
+map_property_cascade), which is the core thesis contribution.
 """
 
 from rapidfuzz import process, fuzz
@@ -56,23 +96,80 @@ _FLIGHT_RE = re.compile(r"\b([A-Z]{2,3}\d+)\b")
 _IATA_RE   = re.compile(r"\b([A-Z]{3})\b")
 
 # ─────────────────────────────────────────────
-# LEXICON — only airport_entities is still used
+# KG1-ONLY SIGNAL WORDS
+# ─────────────────────────────────────────────
+# These words refer exclusively to flight properties that exist only in KG1.
+# If any of them appear in a question that also contains a flight number,
+# the question cannot be cross-KG — return single_kg1 without the LLM.
+#
+# "destination" and "departure" are intentionally excluded: they appear in
+# both KG1 questions ("What is the destination of flight X?") and cross-KG
+# questions ("What country does the destination airport of flight X serve?").
+# Including them would cause false positives.
+
+_KG1_ONLY_SIGNALS = {
+    # English
+    "gate", "terminal", "callsign", "squawk",
+    "ground speed", "vertical speed",
+    # French
+    "porte", "indicatif", "vitesse sol", "vitesse verticale",
+    # Arabic
+    "بوابة", "مبنى", "الإشارة", "سرعة أرضية", "سرعة عمودية",
+     "destination of flight",   # "What is the destination of flight X?"
+    "depart from",             # "Where does flight OS235 depart from?"
+    "flying to",               # "What country is flight LO225 flying to?"
+    "vole vers",               # French equivalent
+    "تغادر",                   # Arabic: departs
+    "وجهة الرحلة", 
+}
+
+# ─────────────────────────────────────────────
+# KG1 SIGNAL DETECTOR (word-boundary safe)
+# ─────────────────────────────────────────────
+
+def _has_kg1_signal(q_lower: str) -> bool:
+    """
+    Returns True if the question contains any KG1-only signal word.
+
+    Uses two matching strategies depending on signal length:
+      - Multi-word signals (e.g. "ground speed"):
+          Simple substring match. The space character naturally prevents
+          partial matches inside compound words like "groundspeed".
+      - Single-word signals (e.g. "gate"):
+          Word-boundary regex (\b). Prevents matching "gate" inside
+          "navigate" or "aggregate". This is the formally correct approach
+          for single tokens.
+
+    This distinction matters for thesis correctness: a false positive here
+    causes the router to skip the LLM for a question that might be cross-KG,
+    routing it silently to single_kg1 with no fallback.
+    """
+    for sig in _KG1_ONLY_SIGNALS:
+        if " " in sig:
+            # Multi-word: substring match is sufficient and correct
+            if sig in q_lower:
+                return True
+        else:
+            # Single word: require word boundary to avoid partial matches
+            if re.search(rf"\b{re.escape(sig)}\b", q_lower):
+                return True
+    return False
+
+# ─────────────────────────────────────────────
+# LEXICON LOAD
 # ─────────────────────────────────────────────
 
 def _load_airport_lexicon():
     with open(get_lexicon("airports"), encoding="utf-8") as f:
         return json.load(f)
 
-_airport_lex     = _load_airport_lexicon()
+_airport_lex      = _load_airport_lexicon()
 _AIRPORT_ENTITIES = _airport_lex.get("airport_entities", {})
 _AIRPORT_TRIGGERS = KG_REGISTRY["airports"].get("triggers", [])
 
 # ─────────────────────────────────────────────
 # LLM CLASSIFICATION PROMPT
 # ─────────────────────────────────────────────
-# This single prompt replaces the entire signal-word system.
-# The LLM classifies the question AND extracts parameters in one call.
-# Adding support for a new phrasing requires zero code changes.
 
 _CLASSIFICATION_PROMPT = """You are a query classifier for an airport and flight database.
 
@@ -98,14 +195,15 @@ Classify the question into exactly one of these query types and extract its para
 6. filter_numeric_kg1 — flights filtered by a numeric flight property
    params: property, operator, threshold, limit (default 10)
 
-7. cross_kg_filter — flights filtered by a property of their origin or destination airport
-   params: direction (origin or destination), airport_property, operator, threshold, limit (default 10)
+7. cross_kg_filter — a specific flight is mentioned AND the question asks
+   about a property of its origin or destination airport.
+   params: direction (origin or destination), airport_property,
+           operator, threshold, limit (default 10)
 
 8. single_kg2 — one specific airport asked about by name or IATA code
    params: entity (IATA code or airport name)
 
-9. out_of_scope — the question cannot be answered from this database
-   Examples: flight altitude questions (altitude data is not stored)
+9. out_of_scope — cannot be answered from this database
    params: {}
 
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
@@ -125,7 +223,9 @@ Airport string properties:
 Flight numeric properties:
   "ground speed", "speed", "knots"             → gspeed
   "vertical speed", "feet per minute"          → vspeed
-  "altitude" (for flights), "flying at"        → alt
+
+  NOTE: flight altitude is NOT stored in this database. Classify
+  altitude-threshold questions for flights as out_of_scope.
 
 Flight string properties:
   "destination city", "going to", "land in"    → hasDestinationCity
@@ -138,24 +238,25 @@ Operator mapping:
   "below", "less than", "under"                → <
   "at least"                                   → >=
   "at most"                                    → <=
-  "in", "is", "equal to"                       → =
+  "in", "is", "equal to", "located in"         → =
 
 Ranking direction:
   "highest", "longest", "widest", "most"       → DESC
   "lowest", "shortest", "narrowest", "least"   → ASC
 
-── IMPORTANT DISAMBIGUATION RULES ────────────────────────────────────────────
+── DISAMBIGUATION RULES ──────────────────────────────────────────────────────
 
-- If the question mentions both FLIGHTS and an AIRPORT PROPERTY (elevation,
-  country, runway length, type), classify as cross_kg_filter.
-- If the question asks about FLIGHT speed, altitude, or vertical speed with
-  a numeric threshold, classify as filter_numeric_kg1.
-- If the question asks about AIRPORT elevation/length/width with a threshold,
-  classify as filter_numeric_kg2.
-- "altitude" for FLIGHTS → property = "alt"
-- "altitude" for AIRPORTS → property = "elevationFt"
-- If two IATA codes are present and a property is mentioned, classify as
-  compare_two_airports.
+CROSS_KG_FILTER: Use when a specific flight number is mentioned AND the
+  question asks about a property of that flight's airport (country,
+  elevation, runway, type). Examples:
+    "What country does flight LO225 land in?"           → cross_kg_filter
+    "What type of airport does flight FR182 arrive at?" → cross_kg_filter
+    "Dans quel pays atterrit le vol OS295?"             → cross_kg_filter
+    "في أي دولة يهبط الرحلة OS235؟"                   → cross_kg_filter
+
+COUNT_KG1: Use when the question counts or lists flights.
+  "how many flights" / "combien de vols" / "كم رحلة" → always count_kg1,
+  even if a city name is present.
 
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
@@ -168,29 +269,59 @@ A: {{"query_type": "filter_string_kg2", "params": {{"property": "airportType", "
 Q: "Which airports are located in Germany?"
 A: {{"query_type": "filter_string_kg2", "params": {{"property": "countryName", "value": "Germany", "limit": 10}}}}
 
-Q: "Show airports whose municipality is Vienna."
-A: {{"query_type": "filter_string_kg2", "params": {{"property": "municipality", "value": "Vienna", "limit": 10}}}}
-
 Q: "What are the top 5 airports with the highest elevation?"
 A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 5}}}}
 
 Q: "Which airport has the shortest runway?"
 A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "ASC", "limit": 1}}}}
 
+Q: "Quel aéroport a la piste la plus longue?"
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "DESC", "limit": 1}}}}
+
+Q: "Quel aéroport a la plus haute élévation?"
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
+
+Q: "أي مطار لديه أعلى ارتفاع؟"
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
+
 Q: "Compare VIE and FRA by elevation."
 A: {{"query_type": "compare_two_airports", "params": {{"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}}}
 
-Q: "Compare LHR and MAD by runway width."
-A: {{"query_type": "compare_two_airports", "params": {{"airport1": "LHR", "airport2": "MAD", "property": "widthFt"}}}}
+Q: "Comparez CDG et LHR par longueur de piste."
+A: {{"query_type": "compare_two_airports", "params": {{"airport1": "CDG", "airport2": "LHR", "property": "lengthFt"}}}}
 
 Q: "How many flights are operated by Lufthansa?"
 A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasAirline", "filter_value": "Lufthansa", "mode": "count"}}}}
 
+Q: "Combien de vols partent de Vienne?"
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasOriginCity", "filter_value": "Vienna", "mode": "count"}}}}
+
+Q: "كم رحلة تتجه إلى برلين؟"
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}}}
+
 Q: "Which flights have a ground speed above 400 knots?"
 A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}}}
 
-Q: "List flights with altitude above 30000 feet."
-A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "alt", "operator": ">", "threshold": 30000, "limit": 10}}}}
+Q: "Which flights have a vertical speed below -1000 feet per minute?"
+A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "vspeed", "operator": "<", "threshold": -1000, "limit": 10}}}}
+
+Q: "What country does flight LO225 land in?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Poland", "limit": 1}}}}
+
+Q: "What type of airport does flight FR182 arrive at?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 1}}}}
+
+Q: "What is the elevation of the destination airport of KE567?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 0, "limit": 1}}}}
+
+Q: "Dans quel pays atterrit le vol OS295?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Austria", "limit": 1}}}}
+
+Q: "في أي دولة يهبط الرحلة OS235؟"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 1}}}}
+
+Q: "What is the runway length at the destination of OS214?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "lengthFt", "operator": ">", "threshold": 0, "limit": 1}}}}
 
 Q: "Which flights land at airports with elevation above 800 feet?"
 A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 800, "limit": 10}}}}
@@ -198,20 +329,12 @@ A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "a
 Q: "Which flights arrive at airports located in Germany?"
 A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}}}
 
+Q: "Quels vols atterrissent dans des aéroports en Allemagne?"
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}}}
+
 Q: "Which flights land at large airports?"
 A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}}}
 
-Q: "Quel aéroport a la piste la plus longue?"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
-
-Q: "أي مطار لديه أعلى ارتفاع؟"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
-
-Q: "كم رحلة تتجه إلى برلين؟"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}
-
-Q: "Combien de vols partent de Vienne?"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasOriginCity", "filter_value": "Vienna", "mode": "count"}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -249,36 +372,37 @@ def _has_minimum_structure(question: str) -> bool:
     return True
 
 # ─────────────────────────────────────────────
-# DETERMINISTIC DETECTORS (kept as safety net)
+# DETERMINISTIC DETECTORS (fallback only)
 # ─────────────────────────────────────────────
 
 def _detect_flight_number(q: str):
-    """Regex-based flight number detection. Fast and reliable."""
+    """Regex-based. Fast and deterministic. Called before any LLM."""
     m = _FLIGHT_RE.findall(q.upper())
     return max(m, key=len) if m else None
 
 
 def _detect_airport_entity(q: str):
     """
-    Dictionary lookup + fuzzy match for airport names and IATA codes.
-    This is deterministic and does not call the LLM.
+    Dictionary lookup and fuzzy match for airport names and IATA codes.
+    Only called when the LLM fails or returns out_of_scope.
+    Represents Tier 1 (exact) and Tier 3 (fuzzy) of the hybrid mapping layer.
     """
     q_norm = _normalise(q)
     tokens = q_norm.split()
 
-    # Exact phrase match (longest first)
+    # Tier 1: exact phrase match, longest phrase first
     for size in range(6, 0, -1):
         for i in range(len(tokens) - size + 1):
             phrase = " ".join(tokens[i: i + size])
             if phrase in _AIRPORT_ENTITIES:
                 return _AIRPORT_ENTITIES[phrase]
 
-    # IATA code match
+    # Tier 2: IATA code (3 uppercase letters as standalone token)
     for code in _IATA_RE.findall(q.upper()):
         if code in _AIRPORT_ENTITIES:
             return _AIRPORT_ENTITIES[code]
 
-    # Fuzzy match on remaining candidates
+    # Tier 3: fuzzy match on individual tokens
     STOP_WORDS = {
         "what", "is", "the", "of", "in", "at", "which", "where",
         "airport", "how", "does", "do", "an", "a", "nation", "town",
@@ -322,12 +446,16 @@ def _detect_airport_keyword(q: str) -> bool:
 
 def _llm_classify(question: str) -> dict:
     """
-    Calls the LLM once to classify the question and extract parameters.
-    Returns a dict with "query_type" and "params", or {} on failure.
+    Sends the question to the LLM for intent classification.
 
-    This replaces the entire signal-word matching system from v4.
-    The LLM handles all phrasing variations, synonyms, and languages
-    naturally — no lexicon maintenance required.
+    Called in two situations:
+      1. A flight number is present but the question is ambiguous —
+         the LLM decides between cross_kg_filter and single_kg1.
+      2. No flight number — the LLM classifies the full question
+         into one of the 9 query types.
+
+    Returns a dict with "query_type" and "params", or {} on failure.
+    The caller always handles the {} case with a safe fallback.
     """
     prompt = _CLASSIFICATION_PROMPT.replace("{question}", question)
     try:
@@ -336,19 +464,16 @@ def _llm_classify(question: str) -> dict:
             messages=[{"role": "user", "content": prompt}]
         )
         raw = response["message"]["content"].strip()
-
-        # Strip markdown fences if present
         raw = re.sub(r"```json|```", "", raw).strip()
 
-        # Extract the first {...} block even if the LLM added surrounding text.
-        # re.DOTALL makes "." match newlines, so nested objects are captured.
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             print(f"[router] LLM returned no JSON: {repr(raw[:80])}")
             return {}
 
         result = json.loads(match.group())
-        print(f"[router] LLM classified as: {result.get('query_type')} | params: {result.get('params')}")
+        print(f"[router] LLM classified as: {result.get('query_type')} "
+              f"| params: {result.get('params')}")
         return result
 
     except Exception as e:
@@ -361,46 +486,60 @@ def _llm_classify(question: str) -> dict:
 
 def route(question: str) -> dict:
     """
-    Routes a question to the correct handler.
+    Routes a natural language question to the correct pipeline branch.
 
-    Priority order:
-      1. Minimum structure guard  → out_of_scope
-      2. Flight number regex      → single_kg1
-      3. LLM classification       → template | single_kg2 | out_of_scope
-      4. Airport entity fallback  → single_kg2  (if LLM fails)
-      5. Airport keyword fallback → single_kg2  (last resort)
-      6. Default                  → out_of_scope
+    Returns a routing dict consumed by main.py and test_pipeline.py.
+    Keys: query_type, kg, entity, direction, template, config, params.
     """
 
-    # ── Guard ─────────────────────────────────────────────────────────────────
+    # ── Priority 1: Structure guard ───────────────────────────────────────────
     if not _has_minimum_structure(question):
         return {
             "query_type": "out_of_scope",
-            "kg": None, "entity": None,
-            "direction": None, "template": None, "config": None,
+            "kg":         None,
+            "entity":     None,
+            "direction":  None,
+            "template":   None,
+            "config":     None,
         }
 
-    # ── Priority 1: Flight number (regex — fast, no LLM needed) ───────────────
-    # A flight number like "KE567" or "OS214" is unambiguous.
-    # We keep this deterministic because flight numbers have a strict format.
+    q_lower = question.lower()
+
+    # ── Priority 2: Flight number detected ────────────────────────────────────
     flight = _detect_flight_number(question)
-    
-    # Priority 2: flight number present
+
     if flight:
-        _AIRPORT_OF_PHRASES = [
-            "destination airport", "arrival airport", "landing airport",
-            "origin airport", "departure airport",
-            "aéroport de destination", "aéroport d'arrivée", "aéroport de départ",
-            "مطار الوصول", "مطار الهبوط", "مطار المغادرة",
-        ]
-        q_lower = question.lower()
-        if any(ph in q_lower for ph in _AIRPORT_OF_PHRASES):
-            dest_phrases = {
-                "destination airport", "arrival airport", "landing airport",
-                "aéroport de destination", "aéroport d'arrivée",
-                "مطار الوصول", "مطار الهبوط",
+
+        # ── Fast path (2a): KG1-only signal word present ──────────────────────
+        # If the question contains a word that can only refer to a flight
+        # property (gate, callsign, squawk, ground speed, vertical speed),
+        # it cannot be a cross-KG question. Skip the LLM entirely.
+        # _has_kg1_signal uses word boundaries for single tokens to avoid
+        # false matches inside longer words (e.g. "gate" inside "navigate").
+        if _has_kg1_signal(q_lower):
+            return {
+                "query_type": "single_kg1",
+                "kg":         "flights",
+                "entity":     flight,
+                "direction":  None,
+                "template":   None,
+                "config":     KG_REGISTRY["flights"],
             }
-            direction = "destination" if any(p in q_lower for p in dest_phrases) else "origin"
+
+        # ── Slow path (2b): Ambiguous — ask the LLM ──────────────────────────
+        # The question contains a flight number but no KG1-only signal.
+        # It could ask about the flight ("What is the airline of X?") or
+        # about the flight's airport ("What country does X land in?").
+        # Only the LLM can distinguish these reliably across all languages
+        # and phrasings.
+        classified = _llm_classify(question)
+        query_type = classified.get("query_type", "")
+        params     = classified.get("params", {})
+
+        if query_type == "cross_kg_filter":
+            # The question asks about the airport property, not the flight.
+            # direction tells the cross_kg_resolver which airport to look up.
+            direction = params.get("direction", "destination")
             return {
                 "query_type": "cross_kg",
                 "kg":         "cross",
@@ -409,6 +548,9 @@ def route(question: str) -> dict:
                 "template":   None,
                 "config":     CROSS_KG_CONFIG,
             }
+
+        # LLM returned anything other than cross_kg_filter, or failed.
+        # Treat as a plain KG1 flight question.
         return {
             "query_type": "single_kg1",
             "kg":         "flights",
@@ -418,35 +560,34 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["flights"],
         }
 
-    # ── Priority 3: LLM classification ───────────────────────────────────────
+    # ── Priority 3: No flight number — LLM classifies everything else ─────────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
     params     = classified.get("params", {})
 
-    # ── Template branch ───────────────────────────────────────────────────────
+    # Template branch — covers all 7 template types including cross_kg_filter
+    # for aggregate questions without a specific flight number
+    # (e.g. "Which flights land at large airports?").
     if query_type in TEMPLATE_REGISTRY:
         cfg = TEMPLATE_REGISTRY[query_type]
         return {
             "query_type": "template",
             "kg":         cfg["kg"],
             "entity":     None,
-            "direction":  params.get("direction"),   # used by cross_kg_filter
+            "direction":  params.get("direction"),
             "template":   query_type,
             "config":     cfg,
-            "params":     params,                    # pass params downstream
+            "params":     params,
         }
 
-    # ── Single airport branch (LLM detected a specific airport) ───────────────
+    # Single airport branch — LLM identified a specific airport entity.
     if query_type == "single_kg2":
         entity = params.get("entity")
-        # Resolve the entity string to an IATA code if possible
         if entity:
             entity_upper = entity.upper().strip()
-            # Direct IATA lookup first
             if entity_upper in _AIRPORT_ENTITIES:
                 entity = _AIRPORT_ENTITIES[entity_upper]
             else:
-                # Try normalised name lookup
                 entity_norm = _normalise(entity)
                 if entity_norm in _AIRPORT_ENTITIES:
                     entity = _AIRPORT_ENTITIES[entity_norm]
@@ -459,9 +600,9 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["airports"],
         }
 
-    # ── Priority 3: Airport entity fallback ───────────────────────────────────
-    # If the LLM failed or returned out_of_scope, try deterministic detection.
-    # This preserves backward compatibility with the v4 behavior.
+    # ── Priority 4: Deterministic airport entity fallback ─────────────────────
+    # Reached only if the LLM failed or returned out_of_scope.
+    # Provides robustness against LLM crashes or timeouts.
     airport = _detect_airport_entity(question)
     if airport:
         return {
@@ -473,7 +614,7 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["airports"],
         }
 
-    # ── Priority 4: Airport keyword fallback ──────────────────────────────────
+    # ── Priority 5: Airport keyword fallback ──────────────────────────────────
     if _detect_airport_keyword(question):
         return {
             "query_type": "single_kg2",
