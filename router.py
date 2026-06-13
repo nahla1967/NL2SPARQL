@@ -559,7 +559,16 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["flights"],
         }
-
+    airport = _detect_airport_entity(question)
+    if airport:
+        return {
+            "query_type": "single_kg2",
+            "kg":         "airports",
+            "entity":     airport,
+            "direction":  None,
+            "template":   None,
+            "config":     KG_REGISTRY["airports"],
+        }
     # ── Priority 3: No flight number — LLM classifies everything else ─────────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")

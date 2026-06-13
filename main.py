@@ -50,7 +50,7 @@ from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "Where is Berlin Brandenburg airport physically located?"
+question  = "ما طول مدرج مطار VIE؟"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────

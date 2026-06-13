@@ -27,7 +27,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer, util
 from rapidfuzz import process, fuzz
 from kg_registry import get_endpoint, get_base_uri
-
+from kg_registry import get_endpoint, get_base_uri, get_property_hop
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
 FUSEKI_URL           = "http://localhost:3030/flights/sparql"
 CACHE_EMBEDDINGS_KG1 = "lexicon_embeddings.npy"
@@ -219,7 +219,28 @@ def map_property_with_embeddings(
         return lexicon["properties"][best_full_phrase]
     return None
 
+def _apply_hop(prop1: str | None, prop2: str | None, lexicon_path: str) -> tuple:
+    """
+    Checks the KG2 hop table for prop1.
+    If prop1 is a KG2 property that requires an intermediate node,
+    and prop2 has not already been set by the lexicon array syntax,
+    this function fills in the correct hop automatically.
 
+    WHY prop2 is only filled when None:
+        The lexicon array syntax like ["locatedInCountry", "countryName"]
+        already sets prop2 explicitly. We respect that and never override it.
+        The hop table only activates when the lexicon returned a flat string
+        and the property happens to need a hop.
+    """
+    if prop1 is None:
+        return prop1, prop2
+    if prop2 is not None:
+        # Already resolved by lexicon array syntax — do not override
+        return prop1, prop2
+    if "airport" in lexicon_path:
+        from kg_registry import get_property_hop
+        prop1, prop2 = get_property_hop(prop1, kg_name="airports")
+    return prop1, prop2
 # ── FULL CASCADE ──────────────────────────────────────────────────────────────
 
 def map_property_cascade(
@@ -229,7 +250,8 @@ def map_property_cascade(
 ) -> tuple:
     """
     Returns (prop1, tier, prop2).
-    lexicon_path is used to select the correct embedding cache.
+    lexicon_path is used to select the correct embedding cache
+    and to determine whether to apply KG2 hop resolution.
     Defaults to KG1 for backward compatibility.
     """
     if not property_text:
@@ -239,29 +261,31 @@ def map_property_cascade(
         if isinstance(uri, list):
             return uri[0], uri[1]
         if isinstance(uri, dict):
-            # special_query entries like coordinates are not
-            # mappable to a single property URI — skip them
             return None, None
         return uri, None
 
     uri, _ = _pre_map(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
         return prop1, "pre-norm", prop2
 
     uri = map_property(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
         return prop1, "exact", prop2
 
     uri = map_property_fuzzy(property_text, lexicon)
     if uri:
         prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
         return prop1, "fuzzy", prop2
 
     uri = map_property_with_embeddings(property_text, lexicon, lexicon_path)
     if uri:
         prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
         return prop1, "semantic", prop2
 
     return None, None, None

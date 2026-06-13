@@ -193,7 +193,99 @@ TEMPLATE_REGISTRY = {
     },
 }
 
+# ── KG2 PROPERTY HOP TABLE ────────────────────────────────────────────────────
+# Describes which KG2 properties require an intermediate node.
+# Structure: short_property_name → (hop_property, target_property)
+#
+# WHY THIS EXISTS HERE AND NOT IN THE LEXICON:
+#   The lexicon maps language expressions to concept names.
+#   This table maps concept names to ontology structure.
+#   These are two different concerns and must stay separate.
+#   Adding a new language → edit lexicon only.
+#   Adding a new ontology property → edit this table only.
 
+KG2_PROPERTY_HOPS = {
+    # Runway properties — must go through hasRunway first
+    "lengthFt":    ("hasRunway", "lengthFt"),
+    "widthFt":     ("hasRunway", "widthFt"),
+    "surface":     ("hasRunway", "surface"),
+    "lighted":     ("hasRunway", "lighted"),
+    "closed":      ("hasRunway", "closed"),
+    "runwayIdent": ("hasRunway", "runwayIdent"),
+    # Country properties — must go through locatedInCountry first
+    "countryName": ("locatedInCountry", "countryName"),
+    "continent":   ("locatedInCountry", "continent"),
+    # Region properties — must go through locatedInRegion first
+    "regionName":  ("locatedInRegion", "regionName"),
+}
+# ── OPEN KG SCHEMA DESCRIPTION ───────────────────────────────────────────────
+# Human-readable schema injected into LLM prompts for the open_kg branch.
+# Describes exactly what data exists in both KGs — nothing more, nothing less.
+# If the ontology changes, update this block to keep prompts accurate.
+
+OPEN_KG_SCHEMA = """
+KNOWLEDGE GRAPH 1 — Flights (endpoint: http://localhost:3030/flights/sparql)
+Base URI: http://www.semanticweb.org/ontologies/flight_ontology#
+
+Classes and properties:
+  Flight:
+    flightNumber (string)        — e.g. "OS235"
+    hasAirline → Airline
+    hasAircraft → Aircraft
+    hasOriginCity → City         — city has orig_city (string)
+    hasDestinationCity → City    — city has dest_city (string)
+    hasOriginCountry → Country   — country has orig_country (string)
+    hasDestinationCountry → Country — country has dest_country (string)
+    hasGate (string)
+    hasTerminal (string)
+    hasCallsign (string)
+    hasRunway (string)
+    hasRoute → Route             — route has orig_iata, dest_iata (strings)
+    hasAirportDetails → AirportDetails — has orig_iata, dest_iata (strings)
+    hasFlightEvent → FlightEvent — event has gspeed, vspeed, alt (numbers)
+    hasWeatherCondition (string)
+    hasPilot → Pilot
+    hasFlightAttendant → FlightAttendant
+    hasTimeInstant → TimeInstant — has eta (datetime)
+
+  Airline: operating_as (string)
+  Aircraft: type (string), reg (string)
+
+KNOWLEDGE GRAPH 2 — Airports (endpoint: http://localhost:3030/airports/sparql)
+Base URI: http://www.semanticweb.org/ontologies/airport_ontology#
+
+Classes and properties:
+  Airport:
+    airportName (string)
+    airportType (string)         — "large_airport" or "medium_airport"
+    iataCode (string)            — 3-letter code e.g. "VIE"
+    icaoCode (string)            — 4-letter code e.g. "LOWW"
+    elevationFt (integer)
+    latitude (decimal)
+    longitude (decimal)
+    municipality (string)
+    hasRunway → Runway
+    locatedInCountry → Country
+    locatedInRegion → Region
+
+  Runway:
+    lengthFt (integer)
+    widthFt (integer)
+    surface (string)             — "ASP", "CON", "GRS"
+    lighted (boolean)
+    closed (boolean)
+    runwayIdent (string)
+    belongsToAirport → Airport
+
+  Country:
+    countryName (string)
+    isoCode (string)
+    continent (string)
+
+  Region:
+    regionName (string)
+    regionCode (string)
+"""
 # ── CONVENIENCE ACCESSORS ─────────────────────────────────────────────────────
 # Use these in router.py, extractor.py, mapper.py, executor.py
 # instead of writing KG_REGISTRY["airports"]["endpoint"] every time.
@@ -229,3 +321,17 @@ def get_template_config(template_name: str) -> dict:
 def get_all_template_names() -> list:
     """All registered template names."""
     return list(TEMPLATE_REGISTRY.keys())
+def get_property_hop(property_short: str, kg_name: str = "airports"):
+    """
+    Returns (prop1, prop2) if the property requires an intermediate hop,
+    or (property_short, None) if it is a direct property on the entity node.
+    Only applies to KG2 currently — KG1 handles hops via the lexicon array syntax.
+    """
+    if kg_name == "airports":
+        hop = KG2_PROPERTY_HOPS.get(property_short)
+        if hop:
+            return hop[0], hop[1]
+    return property_short, None
+def get_open_kg_schema() -> str:
+    """Returns the schema description for open_kg SPARQL generation."""
+    return OPEN_KG_SCHEMA
