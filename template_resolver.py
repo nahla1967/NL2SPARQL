@@ -194,23 +194,23 @@ Return ONLY the JSON. No explanation.""",
        "cross_kg_filter": f"""Extract parameters from this cross-KG flight filter question.
 Question: "{question}"
 
-Airport property mapping rules:
-- "elevation", "altitude", "above X feet" → airport_property = "elevationFt"
-- "runway length", "runway longer than" → airport_property = "lengthFt"
-- "country", "in Germany", "in France" → airport_property = "countryName"
-- "large airport", "large airports", "airport type" → airport_property = "airportType"
-- "continent" → airport_property = "continent"
+Step 1 — direction: landing/arriving/destination → "destination", departing/origin → "origin"
+Step 2 — airport_property:
+  elevation/altitude/above X feet → "elevationFt"
+  runway length/longer than       → "lengthFt"
+  country/located in              → "countryName"
+  large airport/airport type      → "airportType"
+Step 3 — operator and threshold:
+  Numeric: "above X" → operator=">", threshold=X (integer)
+           "below X" → operator="<", threshold=X (integer)
+  String:  always operator="=", threshold=English value.
+  ALWAYS translate to English: Allemagne→Germany, France→France,
+  Italie→Italy, Turquie→Turkey, ألمانيا→Germany, فرنسا→France.
+  For large airports: threshold="large_airport"
 
-For string comparisons (country, type), set operator = "=" and threshold = the value.
-For "large airports", set threshold = "large_airport".
-
-Return ONLY a JSON object with keys:
-- "direction": "destination" or "origin"
-- "airport_property": one of [elevationFt, lengthFt, countryName, airportType, continent]
-- "operator": one of [>, <, >=, <=, =]
-- "threshold": the filter value (number or string)
-- "limit": number of results (default 10)
-Example: {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}
+Return ALL five keys. No missing fields.
+Example: {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}
+Example: {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 800, "limit": 10}}
 Return ONLY the JSON. No explanation.""",
     }
 
@@ -249,9 +249,17 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
     } ORDER BY DESC(?value) LIMIT 10
     """
     prop      = params.get("property", "elevationFt")
-    operator  = params.get("operator", ">")
-    threshold = params.get("threshold", 0)
-    limit     = int(params.get("limit", 10))
+    operator  = params.get("operator") or ""
+    threshold = params.get("threshold")
+    limit     = int(params.get("limit") or 10)
+
+    VALID_OPERATORS = {">", "<", ">=", "<=", "="}
+    if operator not in VALID_OPERATORS or threshold is None:
+        return None   # triggers sparql_build_failure instead of HTTP 400
+
+    VALID_OPERATORS = {">", "<", ">=", "<=", "="}
+    if operator not in VALID_OPERATORS or threshold is None:
+        return None   # triggers sparql_build_failure instead of HTTP 400
 
     # Runway properties need a hop through hasRunway
     prop_info = KG2_NUMERIC_PROPS.get(prop)

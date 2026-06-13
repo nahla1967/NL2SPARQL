@@ -201,6 +201,17 @@ A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "a
 Q: "Which flights land at large airports?"
 A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}}}
 
+Q: "Quel aéroport a la piste la plus longue?"
+A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+
+Q: "أي مطار لديه أعلى ارتفاع؟"
+A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+
+Q: "كم رحلة تتجه إلى برلين؟"
+A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}
+
+Q: "Combien de vols partent de Vienne?"
+A: {"query_type": "count_kg1", "params": {"filter_property": "hasOriginCity", "filter_value": "Vienna", "mode": "count"}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -373,7 +384,31 @@ def route(question: str) -> dict:
     # A flight number like "KE567" or "OS214" is unambiguous.
     # We keep this deterministic because flight numbers have a strict format.
     flight = _detect_flight_number(question)
+    
+    # Priority 2: flight number present
     if flight:
+        _AIRPORT_OF_PHRASES = [
+            "destination airport", "arrival airport", "landing airport",
+            "origin airport", "departure airport",
+            "aéroport de destination", "aéroport d'arrivée", "aéroport de départ",
+            "مطار الوصول", "مطار الهبوط", "مطار المغادرة",
+        ]
+        q_lower = question.lower()
+        if any(ph in q_lower for ph in _AIRPORT_OF_PHRASES):
+            dest_phrases = {
+                "destination airport", "arrival airport", "landing airport",
+                "aéroport de destination", "aéroport d'arrivée",
+                "مطار الوصول", "مطار الهبوط",
+            }
+            direction = "destination" if any(p in q_lower for p in dest_phrases) else "origin"
+            return {
+                "query_type": "cross_kg",
+                "kg":         "cross",
+                "entity":     flight,
+                "direction":  direction,
+                "template":   None,
+                "config":     CROSS_KG_CONFIG,
+            }
         return {
             "query_type": "single_kg1",
             "kg":         "flights",
@@ -383,9 +418,7 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["flights"],
         }
 
-    # ── Priority 2: LLM classification ────────────────────────────────────────
-    # The LLM handles all template types, cross-KG filters, and single airport
-    # lookups. It is the core of the new routing logic.
+    # ── Priority 3: LLM classification ───────────────────────────────────────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
     params     = classified.get("params", {})
