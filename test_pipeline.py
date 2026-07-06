@@ -64,17 +64,30 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 FULL_SYSTEM_TESTS = [
 
-   # ══ BRANCH F — open_kg ════════════════════════════════════════════════════
-    ("What is the callsign of the fastest flight in the dataset?",     "open_kg", "open_kg_en"),
-    ("Which flight has the highest ground speed?",                     "open_kg", "open_kg_en"),
-    ("How many airports are in the dataset?",                          "open_kg", "open_kg_en"),
-    ("Which airports have a grass runway?",                            "open_kg", "open_kg_en"),
-    ("What is the registration number of the aircraft on flight BR62?","open_kg", "open_kg_en"),
-    ("Quel vol a la vitesse verticale la plus basse?",                 "open_kg", "open_kg_fr"),
-    ("Quels aéroports ont des pistes fermées?",                        "open_kg", "open_kg_fr"),
-    ("ما هو رقم تسجيل طائرة الرحلة BR62؟",                           "open_kg", "open_kg_ar"),
-    ("ما هي الرحلة ذات أعلى سرعة أرضية؟",                            "open_kg", "open_kg_ar"),
-    ("كم عدد المطارات في قاعدة البيانات؟",                            "open_kg", "open_kg_ar"),
+    # ══ BRANCH A — SINGLE KG1 (Flight Properties) ═══════════════════════════
+    ("What is the gate of flight OS529?",                         "single_kg1",  "kg1_fast_path_en"),
+    ("Quelle est la compagnie aérienne du vol OS295?",            "single_kg1",  "kg1_french_airline"),
+
+    # ══ BRANCH B — SINGLE KG2 (Airport Properties) ════════════════════════════
+    ("What is the elevation of Vienna airport?",                    "single_kg2",  "kg2_english_elevation"),
+    ("ما هو ارتفاع مطار فرانكفورت؟",                               "single_kg2",  "kg2_arabic_elevation"),
+
+    # ══ BRANCH C — CROSS-KG (Flight → Airport) ══════════════════════════════
+    ("What country does flight LO225 land in?",                   "cross_kg",    "cross_kg_english_country"),
+    ("Dans quel pays atterrit le vol OS295?",                     "cross_kg",    "cross_kg_french_country"),
+
+    # ══ BRANCH D — TEMPLATE (Aggregates) ════════════════════════════════════
+    ("Which airports have an elevation above 1000 feet?",         "template",    "template_filter_numeric_kg2"),
+    ("How many flights are operated by Lufthansa?",               "template",    "template_count_kg1"),
+
+    # ══ BRANCH E — OPEN KG (Unanticipated) ════════════════════════════════════
+    ("Which flight has the highest ground speed?",                "open_kg",     "open_kg_ranking"),
+    ("How many airports are in the dataset?",                     "open_kg",     "open_kg_class_count"),
+        # ══ BONUS EDGE CASES ══════════════════════════════════════════════════════
+    ("Compare VIE and FRA by elevation.",                         "template",    "template_compare_kg2"),
+    ("Which flights land at large airports?",                       "template",    "template_cross_kg_filter"),
+    ("What is the runway surface at Munich airport?",             "single_kg2",  "kg2_property_hop"),
+
 ]
 
 ALL_TESTS = [

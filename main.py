@@ -50,7 +50,7 @@ from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 from pipeline.generator import inject_and_generate, generate_open_kg_sparql
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "ما طول مدرج مطار VIE؟"
+question  = "In which country is the destination airport of OS295?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────
