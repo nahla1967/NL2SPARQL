@@ -410,7 +410,15 @@ def format_answer(question: str, raw_value: str, lang: str) -> str:
 The user asked this question in {language_name}: "{question}"
 The answer from the database is: "{raw_value}"
 
-Write a short, natural sentence answering the question.
+Write a short, natural sentence answering the question, using ONLY the
+value given above. Do not use any outside knowledge about what the
+entities in the question might mean.
+
+If the database value does not fully answer what was asked (for example,
+the question asks about two things but only one value was given), say
+that you only have partial information, and state only what the value
+actually shows. Do not invent missing data.
+
 You MUST write the answer in {language_name} only.
 Do not translate. Do not switch language.
 Return only the sentence."""
@@ -428,27 +436,18 @@ Return only the sentence."""
 def format_answer_list(question: str, values: list, lang: str) -> str:
     """
     Formats a list of values into a natural language answer.
-    Used by template queries that return multiple results.
+    Count and listing are built in Python — never left to the LLM to restate.
     """
     lang_map      = {"en": "English", "fr": "French", "ar": "Arabic"}
     language_name = lang_map.get(lang, "English")
-    joined        = ", ".join(str(v) for v in values)
+    count         = len(values)
 
-    prompt = f"""You are an answer formatter.
+    # Built in plain Python — guaranteed correct, no matter what the LLM does.
+    listed_items = "\n".join(f"{i+1}. {v}" for i, v in enumerate(values))
+    intro = {
+        "en": f"There are {count} result(s):",
+        "fr": f"Il y a {count} résultat(s) :",
+        "ar": f"يوجد {count} نتيجة/نتائج:",
+    }.get(lang, f"There are {count} result(s):")
 
-The user asked this question in {language_name}: "{question}"
-The results from the database are: {joined}
-
-Write a short, natural sentence or short list answering the question.
-You MUST write the answer in {language_name} only.
-Return only the answer."""
-
-    try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response["message"]["content"].strip()
-    except Exception as e:
-        print(f"[format_answer_list] Ollama error: {e}")
-        return joined
+    return f"{intro}\n\n{listed_items}"

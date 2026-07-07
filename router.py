@@ -364,6 +364,10 @@ A: {{"query_type": "open_kg", "params": {{}}}}
 
 Question: "{question}"
 
+- Use double quotes " for every key and every string value. Never use single quotes.
+- Do not add comments, trailing commas, or any text outside the JSON object.
+- Output exactly one JSON object and nothing else — no markdown, no bullet points.
+
 Return ONLY a JSON object with keys "query_type" and "params".
 No explanation. No text before or after the JSON.
 """
@@ -469,43 +473,40 @@ def _detect_airport_keyword(q: str) -> bool:
 # LLM CLASSIFIER
 # ─────────────────────────────────────────────
 
-def _llm_classify(question: str) -> dict:
-    """
-    Sends the question to the LLM for intent classification.
-
-    Called in two situations:
-      1. A flight number is present but the question is ambiguous —
-         the LLM decides between cross_kg_filter and single_kg1.
-      2. No flight number — the LLM classifies the full question
-         into one of the 9 query types.
-
-    Returns a dict with "query_type" and "params", or {} on failure.
-    The caller always handles the {} case with a safe fallback.
-    """
+def _llm_classify(question: str, max_attempts: int = 2) -> dict:
     prompt = _CLASSIFICATION_PROMPT.replace("{question}", question)
-    try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        raw = response["message"]["content"].strip()
-        raw = re.sub(r"```json|```", "", raw).strip()
 
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            print(f"[router] LLM returned no JSON: {repr(raw[:80])}")
-            return {}
+    for attempt in range(max_attempts):
+        try:
+            response = ollama.chat(
+                model="llama3",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw = response["message"]["content"].strip()
+            raw = re.sub(r"```json|```", "", raw).strip()
 
-        result = json.loads(match.group())
-        print(f"[router] LLM classified as: {result.get('query_type')} "
-              f"| params: {result.get('params')}")
-        return result
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            candidate = match.group() if match else raw
 
-    except Exception as e:
-        print(f"[router] LLM classification failed: {e}")
-        return {}
+            result = json.loads(candidate)
+            print(f"[router] LLM classified as: {result.get('query_type')} "
+                  f"| params: {result.get('params')}")
+            return result
 
+        except Exception as e:
+            print(f"[router] Attempt {attempt+1}: classification failed: {e}")
 
+            # Build a repair prompt using the model's own broken output
+            prompt = (
+                f"Your previous response was not valid JSON:\n\n"
+                f"{raw}\n\n"
+                f"Error: {e}\n\n"
+                f"Return ONLY the corrected JSON object. "
+                f"Use double quotes for all keys and values. "
+                f"No explanation, no text before or after."
+            )
+
+    return {}
 def _is_kg_answerable(question: str) -> bool:
     """
     Asks the LLM whether the question can be answered from the specific
