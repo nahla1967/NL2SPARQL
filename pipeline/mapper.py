@@ -35,7 +35,7 @@ CACHE_PHRASES_KG1    = "lexicon_phrases.json"
 CACHE_EMBEDDINGS_KG2 = "lexicon_airports_embeddings.npy"
 CACHE_PHRASES_KG2    = "lexicon_airports_phrases.json"
 
-FUZZY_THRESHOLD    = 80
+FUZZY_THRESHOLD    = 90
 SEMANTIC_THRESHOLD = 0.72
 
 
@@ -130,16 +130,13 @@ def _get_model():
 def _load_or_build_cache(lexicon: dict, lexicon_path: str):
     """
     Returns (phrases, embedding_matrix).
-    Uses separate cache files for KG1 and KG2 lexicons.
+    Cache filename is derived generically from lexicon_path, so any
+    number of KGs work without editing this function again.
     """
     import os
-    # Choose cache file based on lexicon path
-    if "airport" in lexicon_path:
-        emb_cache   = CACHE_EMBEDDINGS_KG2
-        phrase_cache = CACHE_PHRASES_KG2
-    else:
-        emb_cache   = CACHE_EMBEDDINGS_KG1
-        phrase_cache = CACHE_PHRASES_KG1
+    stem         = os.path.splitext(os.path.basename(lexicon_path))[0]
+    emb_cache    = f"{stem}_embeddings.npy"
+    phrase_cache = f"{stem}_phrases.json"
 
     if emb_cache in _cached_embeddings:
         return _cached_phrases[emb_cache], _cached_embeddings[emb_cache]
@@ -164,11 +161,11 @@ def _load_or_build_cache(lexicon: dict, lexicon_path: str):
     _cached_phrases[emb_cache]    = phrases
     _cached_embeddings[emb_cache] = embeddings
     return phrases, embeddings
-
 _ARABIC_RE = re.compile(r'^[\u0600-\u06FF\s\?]+$')
 
 def _is_arabic_phrase(phrase: str) -> bool:
     return bool(_ARABIC_RE.match(phrase))
+
 
 def _detect_script(text: str) -> str:
     arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')

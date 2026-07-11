@@ -76,6 +76,21 @@ KG_REGISTRY = {
             "مطار", "مدرج", "ارتفاع",
         ],
     },
+
+    "university": {
+        # SPARQL endpoint
+        "endpoint":    "http://localhost:3030/university/sparql",
+
+        # Multilingual university lexicon
+        "lexicon":     "lexicon_university.json",
+
+        # What the extractor looks for as the main entity.
+        "entity_type": "person_name",
+
+        # Base URI prefix for this KG
+        "base_uri":    "http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#",
+    },
+
 }
 
 
