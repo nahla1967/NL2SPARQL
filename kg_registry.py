@@ -213,6 +213,13 @@ TEMPLATE_REGISTRY = {
         "base_uri":    KG_REGISTRY["university"]["base_uri"],
         "description": "Count or list university entities linked to a known entity",
     },
+
+    "filter_string_kg3": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Filter university people by department membership",
+    },
 }
 
 # ── KG2 PROPERTY HOP TABLE ────────────────────────────────────────────────────

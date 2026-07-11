@@ -222,6 +222,12 @@ Classify the question into exactly one of these query types and extract its para
     question BOTH names a specific entity (e.g. "FullProfessor0",
     "Department0") AND asks "how many" / "list all", not a single fact.
     params: property, direction, mode    
+12. filter_string_kg3 — list university people (professors/students)
+    belonging to a specific NAMED department, filtered by relationship
+    type. Use when the question asks "which/who" belongs to a department
+    by name, not about one already-named person.
+    params: property, value, limit
+
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
 
 Airport numeric properties:
@@ -294,6 +300,8 @@ OPEN_KG: Use when the question asks about aviation data that exists in the
   "how many courses does X teach" / "combien de cours enseigne X" / "كم مادة يدرّس X"
   → always count_kg3, even though X is a specific entity — the count/list
   intent takes priority over single-entity lookup. 
+
+  
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
 Q: "Which airports have an elevation above 1000 feet?"
@@ -388,6 +396,12 @@ A: {{"query_type": "count_kg3", "params": {{"property": "takesCourse", "directio
 
 Q: "How many students are in Department0?"
 A: {{"query_type": "count_kg3", "params": {{"property": "memberOf", "direction": "incoming", "mode": "count"}}}}
+
+Q: "Which professors work for Department3?"
+A: {{"query_type": "filter_string_kg3", "params": {{"property": "worksFor", "value": "Department3", "limit": 10}}}}
+
+Q: "List students who are members of Department1."
+A: {{"query_type": "filter_string_kg3", "params": {{"property": "memberOf", "value": "Department1", "limit": 10}}}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -493,7 +507,7 @@ def _detect_airport_entity(q: str):
     return None
 
 _UNIVERSITY_ENTITY_RE = re.compile(
-    r'\b([A-Z][a-zA-Z]*(?:Professor|Student|Course|Department|Group|'
+    r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
     r'University|Lecturer|Publication)\d+)\b'
 )
 
@@ -777,7 +791,7 @@ def route(question: str) -> dict:
                     "template":   None,
                     "config":     None,
                 }
-
+        
         return {
             "query_type": "template",
             "kg":         cfg["kg"],

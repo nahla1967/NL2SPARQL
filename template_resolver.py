@@ -90,7 +90,7 @@ KG1_STRING_PROPS = {
     "hasOriginCountry":      {"uri": f"{KG1}hasOriginCountry"},
 }
 _UNIVERSITY_ENTITY_RE = re.compile(
-    r'\b([A-Z][a-zA-Z]*(?:Professor|Student|Course|Department|Group|'
+    r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
     r'University|Lecturer|Publication)\d+)\b'
 )
 
@@ -696,30 +696,30 @@ def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
 
 
 def _format_answer(question: str, raw_data: str, lang: str) -> str:
-    """Uses LLM to format the raw result as a natural language answer."""
+    """
+    Formats the raw result as a natural language answer.
+    Counting and numbering are computed in Python — never left to the
+    LLM to restate — after the duplicate-numbering bug found in KG3
+    testing (e.g. two entries both labeled '9.').
+    """
     lang_map = {"en": "English", "fr": "French", "ar": "Arabic"}
     language = lang_map.get(lang, "English")
 
-    prompt = f"""You are an answer formatter.
+    lines = [ln.strip() for ln in raw_data.strip().split("\n") if ln.strip()]
+    count = len(lines)
 
-The user asked in {language}: "{question}"
-The database returned these results:
-{raw_data}
+    if count == 0:
+        return "No results found." if lang == "en" else raw_data
 
-Write a clear, natural answer in {language} only.
-If it is a list, present it as a numbered list.
-If it is a count, state it as a simple sentence.
-If it is a comparison, state which is higher/lower/better.
-Return only the answer. Do not explain your reasoning."""
+    if count == 1 and lines[0].replace(".", "", 1).isdigit():
+        # A bare number — e.g. a count_kg1 / count_kg3 result.
+        return f"The answer is {lines[0]}."
 
-    try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response["message"]["content"].strip()
-    except Exception as e:
-        return f"[format_error] {raw_data}"
+    if count == 1:
+        return lines[0]
+
+    listed = "\n".join(f"{i+1}. {ln}" for i, ln in enumerate(lines))
+    return f"There are {count} result(s):\n\n{listed}"
 
 
 # ── MAIN RESOLVER ─────────────────────────────────────────────────────────────

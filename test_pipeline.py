@@ -106,12 +106,32 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CASES ────────────────────────────────────────────────────────────────
 
-FULL_SYSTEM_TESTS = [
-    ("What is the callsign of flight OS235?",                        "single_kg1", "single_kg1_en_2"),
-    ("What is the elevation of FRA?",                                 "single_kg2", "single_kg2_en_2"),
-    ("What country is the destination airport of flight OS295?",      "cross_kg",   "cross_kg_en_2"),
-    ("Which airports are located in Germany?",                        "template",   "filter_string_kg2_en_2"),
-    ("List the airlines operating flights in the dataset.",           "open_kg",    "open_kg_en"),
+FULL_SYSTEM_TESTS =[
+    # ── single_kg3 (direct lookups) ──────────────────────────────────────────
+    ("What courses does FullProfessor0 teach?",
+     "single_kg3", "kg3_single_001"),
+    ("Where did GraduateStudent0 get their undergraduate degree?",
+     "single_kg3", "kg3_single_002"),
+    ("What is Lecturer0's name?",
+     "single_kg3", "kg3_single_003"),
+    ("What department does GraduateStudent0 belong to?",
+     "single_kg3", "kg3_single_004"),  # first test of object-URI resolution
+
+    # ── count_kg3 (count / list linked entities) ─────────────────────────────
+    ("How many courses does FullProfessor0 teach?",
+     "template", "kg3_count_001"),
+    ("How many courses does GraduateStudent0 take?",
+     "template", "kg3_count_002"),
+    ("List the courses that Lecturer0 teaches.",
+     "template", "kg3_count_003"),
+    ("How many students are members of Department0?",
+     "template", "kg3_count_004"),  # stress test — large number (678)
+
+    # ── filter_string_kg3 (department membership) ────────────────────────────
+    ("Which professors work for Department3?",
+     "template", "kg3_filter_001"),  # regression check on formatter fix
+    ("Which professors work for Department0?",
+     "template", "kg3_filter_002"),  # larger list (41)
 ]
 
 ALL_TESTS = [
