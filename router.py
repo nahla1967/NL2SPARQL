@@ -216,6 +216,12 @@ Classify the question into exactly one of these query types and extract its para
     - "Which airports have a grass runway?" → open_kg
     - "What is the registration number of the aircraft on flight BR62?" → open_kg
     - "Quel vol a la vitesse verticale la plus basse?" → open_kg
+
+11. count_kg3 — count or list university entities linked to a specific
+    named entity (professor, student, department). Only applies when the
+    question BOTH names a specific entity (e.g. "FullProfessor0",
+    "Department0") AND asks "how many" / "list all", not a single fact.
+    params: property, direction, mode    
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
 
 Airport numeric properties:
@@ -254,6 +260,14 @@ Ranking direction:
   "highest", "longest", "widest", "most"       → DESC
   "lowest", "shortest", "narrowest", "least"   → ASC
 
+University properties (only when a LUBM entity name like "FullProfessor0",
+"Department0", "GraduateStudent3" appears in the question):
+  "teach", "courses taught"                    → property=teacherOf, direction=outgoing
+  "take", "enrolled in", "courses taken"       → property=takesCourse, direction=outgoing
+  "students", "members" (of a department)      → property=memberOf, direction=incoming
+  "professors", "faculty", "staff" (of a dept) → property=worksFor, direction=incoming
+  "departments" (of a university)              → property=subOrganizationOf, direction=incoming  
+
 ── DISAMBIGUATION RULES ──────────────────────────────────────────────────────
 
 CROSS_KG_FILTER: Use when a specific flight number is mentioned AND the
@@ -275,6 +289,11 @@ OPEN_KG: Use when the question asks about aviation data that exists in the
   - Questions about runway surface types (grass, concrete)
   - Questions about closed runways
   Do NOT use open_kg when filter_numeric_kg1 or ranking_kg2 would work.
+ COUNT_KG3: Use when the question names a specific university entity AND
+  counts or lists something linked to it.
+  "how many courses does X teach" / "combien de cours enseigne X" / "كم مادة يدرّس X"
+  → always count_kg3, even though X is a specific entity — the count/list
+  intent takes priority over single-entity lookup. 
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
 Q: "Which airports have an elevation above 1000 feet?"
@@ -360,6 +379,15 @@ A: {{"query_type": "open_kg", "params": {{}}}}
 
 Q: "ما هي الرحلة ذات أعلى سرعة أرضية؟"
 A: {{"query_type": "open_kg", "params": {{}}}}
+
+Q: "How many courses does FullProfessor0 teach?"
+A: {{"query_type": "count_kg3", "params": {{"property": "teacherOf", "direction": "outgoing", "mode": "count"}}}}
+
+Q: "List the courses that GraduateStudent3 takes."
+A: {{"query_type": "count_kg3", "params": {{"property": "takesCourse", "direction": "outgoing", "mode": "list"}}}}
+
+Q: "How many students are in Department0?"
+A: {{"query_type": "count_kg3", "params": {{"property": "memberOf", "direction": "incoming", "mode": "count"}}}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -479,6 +507,12 @@ def _detect_university_entity(q: str):
     """
     m = _UNIVERSITY_ENTITY_RE.search(q)
     return m.group(1) if m else None
+
+_COUNT_SIGNALS = ["how many", "combien de", "كم", "list all", "count"]
+
+def _has_count_signal(q: str) -> bool:
+    q_lower = q.lower()
+    return any(sig in q_lower for sig in _COUNT_SIGNALS)
 
 def _detect_airport_keyword(q: str) -> bool:
     q_lower = q.lower()
@@ -667,8 +701,14 @@ def route(question: str) -> dict:
     # ── Priority 3: No flight number — LLM classifies everything else ─────────
     
     # ── Priority 2.7: University entity detected (deterministic) ──────────────
+    # ── Priority 2.7: University entity detected (deterministic) ──────────────
+    # Only short-circuits to single_kg3 for single-value lookups. Count/list
+    # questions ("how many courses does X teach") fall through to the LLM
+    # classifier so they can reach count_kg3 instead — same pattern already
+    # used for count_kg1 (see COUNT_KG1 rule below: count signals win even
+    # when a specific entity is named).
     university_entity = _detect_university_entity(question)
-    if university_entity:
+    if university_entity and not _has_count_signal(question):
         return {
             "query_type": "single_kg3",
             "kg":         "university",

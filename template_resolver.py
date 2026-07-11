@@ -39,12 +39,15 @@ from kg_registry import (
     get_endpoint, get_base_uri, get_lexicon,
     TEMPLATE_REGISTRY, CROSS_KG_CONFIG
 )
+from pipeline.mapper import map_university_entity
 
 # ── BASE URIs ─────────────────────────────────────────────────────────────────
 KG1   = get_base_uri("flights")
 KG2   = get_base_uri("airports")
+KG3   = get_base_uri("university")
 KG1_EP = get_endpoint("flights")
 KG2_EP = get_endpoint("airports")
+KG3_EP = get_endpoint("university")
 
 # ── PROPERTY MAPS ─────────────────────────────────────────────────────────────
 # Maps short property names to full URIs + metadata.
@@ -82,7 +85,14 @@ KG1_STRING_PROPS = {
     "hasDestinationCountry": {"uri": f"{KG1}hasDestinationCountry"},
     "hasOriginCountry":      {"uri": f"{KG1}hasOriginCountry"},
 }
+_UNIVERSITY_ENTITY_RE = re.compile(
+    r'\b([A-Z][a-zA-Z]*(?:Professor|Student|Course|Department|Group|'
+    r'University|Lecturer|Publication)\d+)\b'
+)
 
+def _detect_university_entity_for_template(q: str):
+    m = _UNIVERSITY_ENTITY_RE.search(q)
+    return m.group(1) if m else None
 # ── SPARQL HELPER ─────────────────────────────────────────────────────────────
 
 def _run_sparql(endpoint: str, query: str, multiple: bool = True):
@@ -211,6 +221,23 @@ Step 3 — operator and threshold:
 Return ALL five keys. No missing fields.
 Example: {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}
 Example: {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 800, "limit": 10}}
+Return ONLY the JSON. No explanation.""",
+
+"count_kg3": f"""Extract parameters from this university count/list question.
+Question: "{question}"
+
+Property mapping rules:
+- "teach", "courses taught" → property="teacherOf", direction="outgoing"
+- "take", "enrolled in", "courses taken" → property="takesCourse", direction="outgoing"
+- "students", "members" (of a department) → property="memberOf", direction="incoming"
+- "professors", "faculty", "staff" (of a department) → property="worksFor", direction="incoming"
+- "departments" (of a university) → property="subOrganizationOf", direction="incoming"
+
+Return ONLY a JSON object with these keys:
+- "property": one of [teacherOf, takesCourse, memberOf, worksFor, subOrganizationOf]
+- "direction": "outgoing" (entity is subject) or "incoming" (entity is object)
+- "mode": "count" or "list"
+Example: {{"property": "teacherOf", "direction": "outgoing", "mode": "count"}}
 Return ONLY the JSON. No explanation.""",
     }
 
@@ -484,7 +511,61 @@ def _build_count_kg1(params: dict) -> tuple[str, str] | None:
     label = f"{mode} of flights with {filter_prop} = {filter_value}"
     return sparql, label
 
+def _build_count_kg3(params: dict) -> tuple[str, str] | None:
+    """
+    Two shapes depending on direction:
 
+    OUTGOING (entity is subject, e.g. "how many courses does X teach"):
+        SELECT (COUNT(?obj) AS ?count) WHERE {
+          <entity_uri> ub:teacherOf ?obj .
+        }
+
+    INCOMING (entity is object, e.g. "how many students are in department X"):
+        SELECT (COUNT(?subj) AS ?count) WHERE {
+          ?subj ub:memberOf <entity_uri> .
+        }
+
+    List mode adds ?name via ub:name and orders by it, mirroring count_kg1's
+    list-mode pattern.
+    """
+    entity_name = params.get("entity_name", "")
+    property_short = params.get("property", "")
+    direction   = params.get("direction", "outgoing")
+    mode        = params.get("mode", "count")
+
+    VALID_PROPS = {"teacherOf", "takesCourse", "memberOf", "worksFor", "subOrganizationOf"}
+    if not entity_name or property_short not in VALID_PROPS:
+        return None
+
+    entity_uri = map_university_entity(entity_name)
+    if not entity_uri:
+        return None
+
+    prop_uri = f"{KG3}{property_short}"
+
+    if direction == "outgoing":
+        if mode == "count":
+            sparql = f"""SELECT (COUNT(?obj) AS ?count) WHERE {{
+  <{entity_uri}> <{prop_uri}> ?obj .
+}}"""
+        else:
+            sparql = f"""SELECT ?obj ?name WHERE {{
+  <{entity_uri}> <{prop_uri}> ?obj .
+  ?obj <{KG3}name> ?name .
+}} ORDER BY ?name LIMIT 50"""
+    else:  # incoming
+        if mode == "count":
+            sparql = f"""SELECT (COUNT(?subj) AS ?count) WHERE {{
+  ?subj <{prop_uri}> <{entity_uri}> .
+}}"""
+        else:
+            sparql = f"""SELECT ?subj ?name WHERE {{
+  ?subj <{prop_uri}> <{entity_uri}> .
+  ?subj <{KG3}name> ?name .
+}} ORDER BY ?name LIMIT 50"""
+
+    label = f"{mode} of {property_short} ({direction}) for {entity_name}"
+    return sparql, label
 def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?flight ?number ?value WHERE {
@@ -649,8 +730,17 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
         "count_kg1":            (_build_count_kg1,            KG1_EP, ["count"]),
         "filter_numeric_kg1":   (_build_filter_numeric_kg1,   KG1_EP, ["number", "value"]),
         "cross_kg_filter":      (_build_cross_kg_filter,      None,   None),
+        "count_kg3": (_build_count_kg3, KG3_EP, ["name"]),
     }
-
+    # KG3 templates need the entity name, detected deterministically —
+    # same regex the router uses, not extracted by the LLM (avoids the
+    # unreliability we saw with LLM-based entity extraction elsewhere).
+    if template_name == "count_kg3":
+        entity_name = _detect_university_entity_for_template(question)
+        if not entity_name:
+            result["failure_type"] = "param_extraction_failure"
+            return result
+        params["entity_name"] = entity_name
     if template_name not in builders:
         result["failure_type"] = "unknown_template"
         return result
@@ -754,7 +844,7 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
             return result
 
         # Handle count queries specially
-        if template_name == "count_kg1" and params.get("mode", "count") == "count":
+        if template_name in ("count_kg1", "count_kg3") and params.get("mode", "count") == "count":
             count_val = rows[0].get("count", {}).get("value", "0") if rows else "0"
             raw_data  = count_val
         else:

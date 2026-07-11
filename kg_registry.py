@@ -206,6 +206,13 @@ TEMPLATE_REGISTRY = {
         "base_uri":    None,
         "description": "Filter flights based on a property of their airport",
     },
+
+    "count_kg3": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Count or list university entities linked to a known entity",
+    },
 }
 
 # ── KG2 PROPERTY HOP TABLE ────────────────────────────────────────────────────

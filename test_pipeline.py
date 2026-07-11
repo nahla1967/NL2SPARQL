@@ -78,6 +78,29 @@ from pipeline.executor  import (
     execute_sparql,
     format_answer,
 )
+from pipeline.extractor import (
+    extract_entities,
+    validate_extraction,
+    is_flight_question,
+    extract_airport_entities,
+    validate_airport_extraction,
+    extract_university_entities,
+    validate_university_extraction,
+)
+from pipeline.mapper import (
+    load_lexicon,
+    map_property_cascade,
+    map_flight,
+    map_airport,
+    map_university_entity,
+)
+from pipeline.generator import inject_and_generate
+from pipeline.executor  import (
+    validate_sparql,
+    execute_sparql,
+    format_answer,
+    format_answer_list,
+)
 from cross_kg_resolver  import resolve_cross_kg
 from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
@@ -227,7 +250,61 @@ def _run_single_kg2(question: str, routing: dict, lang: str) -> dict:
         out["failure_type"] = "generation_failure"
 
     return out
+def _run_single_kg3(question: str, routing: dict, lang: str) -> dict:
+    """
+    Branch B (KG3): university entity is known (routing["entity"]).
+    Runs: extractor → mapper → generator → executor (university endpoint).
+    """
+    out = {"sparql": None, "sparql_valid": False,
+           "raw_answer": None, "final_answer": None,
+           "failure_type": "not_run"}
 
+    entities = extract_university_entities(question, lang, routing["entity"])
+    if not validate_university_extraction(entities):
+        out["failure_type"] = "extraction_failure"
+        return out
+
+    lexicon_path = get_lexicon("university")
+    lexicon      = load_lexicon(lexicon_path)
+    property_uri, mapping_layer, property2_uri = map_property_cascade(
+        entities["property"], lexicon, lexicon_path
+    )
+    entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
+
+    if not entity_uri or not property_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+
+    BASE           = get_base_uri("university")
+    full_prop_uri  = BASE + property_uri
+    full_prop2_uri = (BASE + property2_uri) if property2_uri else None
+
+    sparql = inject_and_generate(
+        entity_uri, full_prop_uri, question,
+        strategy=STRATEGY, property2_uri=full_prop2_uri
+    )
+    out["sparql"] = sparql
+
+    is_valid = (
+        validate_sparql(sparql)
+        and sparql.strip().startswith("SELECT")
+        and "PREFIX" not in sparql
+        and full_prop_uri in sparql
+    )
+    out["sparql_valid"] = is_valid
+
+    if is_valid:
+        raw = execute_sparql(sparql, endpoint=get_endpoint("university"), multiple=True)
+        out["raw_answer"] = raw
+        if raw:
+            out["final_answer"]  = format_answer_list(question, raw, lang)
+            out["failure_type"]  = "success"
+        else:
+            out["failure_type"] = "execution_failure"
+    else:
+        out["failure_type"] = "generation_failure"
+
+    return out
 
 def _run_cross_kg(question: str, routing: dict, lang: str) -> dict:
     """
@@ -378,16 +455,17 @@ def run_single_test(question: str, expected_type: str) -> dict:
 
         elif query_type == "single_kg2":
             branch_out = _run_single_kg2(question, routing, lang)
-
+        
         elif query_type == "cross_kg":
             branch_out = _run_cross_kg(question, routing, lang)
 
         elif query_type == "template":
             branch_out = _run_template(question, routing, lang)
-
+        elif query_type == "single_kg3":
+            branch_out = _run_single_kg3(question, routing, lang)
         elif query_type == "open_kg":
-            branch_out = _run_open_kg(question, routing, lang)    
-
+            branch_out = _run_open_kg(question, routing, lang)
+        
         else:
             # out_of_scope — nothing to run.
             # Success means the router correctly recognized this as out-of-scope.
