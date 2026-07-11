@@ -59,7 +59,7 @@ from pipeline.executor  import (
     format_answer_list,
 )
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "What courses does FullProfessor0 teach?"
+question  = "Which professors work for Department3?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────

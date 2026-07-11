@@ -45,6 +45,10 @@ from pipeline.mapper import map_university_entity
 KG1   = get_base_uri("flights")
 KG2   = get_base_uri("airports")
 KG3   = get_base_uri("university")
+KG3_STRING_PROPS = {
+    "worksFor": {"uri": f"{KG3}worksFor", "label": "works for", "hop": "department"},
+    "memberOf": {"uri": f"{KG3}memberOf", "label": "member of", "hop": "department"},
+}
 KG1_EP = get_endpoint("flights")
 KG2_EP = get_endpoint("airports")
 KG3_EP = get_endpoint("university")
@@ -238,6 +242,20 @@ Return ONLY a JSON object with these keys:
 - "direction": "outgoing" (entity is subject) or "incoming" (entity is object)
 - "mode": "count" or "list"
 Example: {{"property": "teacherOf", "direction": "outgoing", "mode": "count"}}
+Return ONLY the JSON. No explanation.""",
+
+"filter_string_kg3": f"""Extract parameters from this university filter question.
+Question: "{question}"
+
+Property mapping rules:
+- "professors who work for", "faculty in", "staff of" → property="worksFor"
+- "students who are members of", "students in" → property="memberOf"
+
+Return ONLY a JSON object with these keys:
+- "property": one of [worksFor, memberOf]
+- "value": the department name mentioned (e.g. "Department3")
+- "limit": integer, default 10 if not specified
+Example: {{"property": "worksFor", "value": "Department3", "limit": 10}}
 Return ONLY the JSON. No explanation.""",
     }
 
@@ -566,6 +584,32 @@ def _build_count_kg3(params: dict) -> tuple[str, str] | None:
 
     label = f"{mode} of {property_short} ({direction}) for {entity_name}"
     return sparql, label
+def _build_filter_string_kg3(params: dict) -> tuple[str, str] | None:
+    """
+    SELECT ?person ?name WHERE {
+      ?person ub:worksFor ?dept .
+      ?dept ub:name "Department3" .
+      ?person ub:name ?name .
+    } ORDER BY ?name LIMIT 10
+    """
+    prop  = params.get("property", "worksFor")
+    value = params.get("value", "")
+    limit = int(params.get("limit", 10))
+
+    prop_info = KG3_STRING_PROPS.get(prop)
+    if not prop_info or not value:
+        return None
+
+    prop_uri = prop_info["uri"]
+    sparql = f"""SELECT ?person ?name WHERE {{
+  ?person <{prop_uri}> ?dept .
+  ?dept <{KG3}name> "{value}" .
+  ?person <{KG3}name> ?name .
+}} ORDER BY ?name LIMIT {limit}"""
+
+    label = f"people where {prop} = {value}"
+    return sparql, label
+
 def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?flight ?number ?value WHERE {
@@ -731,6 +775,7 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
         "filter_numeric_kg1":   (_build_filter_numeric_kg1,   KG1_EP, ["number", "value"]),
         "cross_kg_filter":      (_build_cross_kg_filter,      None,   None),
         "count_kg3": (_build_count_kg3, KG3_EP, ["name"]),
+        "filter_string_kg3": (_build_filter_string_kg3, KG3_EP, ["name"]),
     }
     # KG3 templates need the entity name, detected deterministically —
     # same regex the router uses, not extracted by the LLM (avoids the
