@@ -194,3 +194,74 @@ def validate_airport_extraction(entities: dict) -> bool:
     if not entities.get("property"):
         return False
     return True
+
+def extract_university_entities(question: str, lang: str, entity_from_router: str | None) -> dict:
+    """
+    Extracts the requested property from a university (LUBM) question.
+
+    DESIGN: identical to extract_airport_entities — the entity itself is
+    already resolved deterministically by the router (_detect_university_entity).
+    Only the property phrase needs LLM extraction here.
+
+    Args:
+        question           : the user's original question
+        lang                : detected language code (en / fr / ar)
+        entity_from_router  : entity name already resolved by router
+                              (e.g. 'FullProfessor0'), None if not found
+
+    Returns:
+        {
+            "entity":   entity name string or None,
+            "property": raw property phrase from the question,
+        }
+    """
+    prompt = f"""You are a property phrase extractor for a university knowledge graph.
+
+TASK: Read the question and extract ONLY the words that describe
+what property or relationship is being asked about.
+
+RULES:
+- Extract the phrase AS IT APPEARS in the question (do not translate)
+- Return ONLY the extracted phrase — no labels, no extra explanation
+- Strip question framing ("What is the", "of FullProfessor0", "does he", etc.)
+
+EXAMPLES:
+"What courses does FullProfessor0 teach?"        → "courses taught"
+"Where did GraduateStudent5 get their masters?"  → "masters degree from"
+"Is Lecturer3 tenured?"                          → "tenured"
+"What is Department2's name?"                    → "name"
+"Quel est le titre de AssociateProfessor1?"      → "titre"
+"من كتب Publication12؟"                          → "كتب"
+
+Return ONLY a JSON object with key "property". No explanation. No extra text.
+
+Question: {question}
+"""
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw    = response["message"]["content"]
+        prop   = ""
+        parsed = safe_json_parse(raw)
+        if parsed:
+            prop = parsed.get("property", "")
+        prop = prop.strip().lower() if prop else ""
+        return {"entity": entity_from_router, "property": prop}
+    except Exception as e:
+        return {
+            "entity":   entity_from_router,
+            "property": "",
+            "reason":   f"ollama_error: {str(e)}"
+        }
+
+
+def validate_university_extraction(entities: dict) -> bool:
+    """
+    Validates university extraction result.
+    Mirrors validate_airport_extraction exactly.
+    """
+    if not entities.get("property"):
+        return False
+    return True

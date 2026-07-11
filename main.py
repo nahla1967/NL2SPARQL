@@ -32,12 +32,15 @@ from pipeline.extractor import (
     is_flight_question,
     extract_airport_entities,
     validate_airport_extraction,
+    extract_university_entities,
+    validate_university_extraction,
 )
 from pipeline.mapper import (
     load_lexicon,
     map_property_cascade,
     map_flight,
     map_airport,
+    map_university_entity,
 )
 from pipeline.generator import inject_and_generate
 from pipeline.executor  import (
@@ -49,8 +52,14 @@ from cross_kg_resolver import resolve_cross_kg
 from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 from pipeline.generator import inject_and_generate, generate_open_kg_sparql
+from pipeline.executor  import (
+    validate_sparql,
+    execute_sparql,
+    format_answer,
+    format_answer_list,
+)
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "In which country is the destination airport of OS295?"
+question  = "What courses does FullProfessor0 teach?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────
@@ -316,7 +325,83 @@ elif query_type == "cross_kg":
         print(f"Final answer: {answer}")
     else:
         print(f"Cross-KG resolution failed: {result['failure_type']}")
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH E — SINGLE KG3 (UNIVERSITY)
+# ─────────────────────────────────────────────────────────────────────────────
+elif query_type == "single_kg3":
 
+    # Step 1: extract property phrase (entity already resolved by router)
+    entities = extract_university_entities(question, lang, routing["entity"])
+    print(f"[2] Entities : {entities}")
+
+    if not validate_university_extraction(entities):
+        print("University extraction failed.")
+        log["failure_type"] = "extraction_failure"
+        with open("logs.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(log, ensure_ascii=False) + "\n")
+        exit()
+
+    # Step 2: map property and resolve entity URI
+    lexicon_path = get_lexicon("university")
+    lexicon      = load_lexicon(lexicon_path)
+
+    property_uri, mapping_layer, property2_uri = map_property_cascade(
+        entities["property"], lexicon, lexicon_path
+    )
+    entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
+
+    log.update({
+        "entity_uri":    entity_uri,
+        "property_uri":  property_uri,
+        "property2_uri": property2_uri,
+        "mapping_layer": mapping_layer,
+    })
+
+    if not entity_uri or not property_uri:
+        print("Mapping failed.")
+        log["failure_type"] = "mapping_failure"
+        with open("logs.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(log, ensure_ascii=False) + "\n")
+        exit()
+
+    # Step 3: generate
+    BASE = get_base_uri("university")
+    full_prop_uri  = BASE + property_uri
+    full_prop2_uri = (BASE + property2_uri) if property2_uri else None
+
+    sparql_query = inject_and_generate(
+        entity_uri, full_prop_uri, question,
+        strategy=condition, property2_uri=full_prop2_uri
+    )
+    log["sparql"] = sparql_query
+    print(f"\nGenerated SPARQL:\n{sparql_query}")
+
+    # Step 4: validate
+    is_valid = (
+        validate_sparql(sparql_query)
+        and sparql_query.strip().startswith("SELECT")
+        and "PREFIX" not in sparql_query
+        and full_prop_uri in sparql_query
+    )
+    log["sparql_valid"] = is_valid
+
+    # Step 5: execute against KG3
+   # Step 5: execute against KG3 (multiple=True — university properties
+    # like teacherOf/takesCourse are naturally one-to-many)
+    if is_valid:
+        raw = execute_sparql(sparql_query, endpoint=get_endpoint("university"), multiple=True)
+        log["raw_answer"] = raw
+        print(f"\nRaw answer: {raw}")
+        if raw:
+            answer = format_answer_list(question, raw, lang)
+            log["final_answer"]  = answer
+            log["failure_type"]  = "success"
+            print(f"Final answer: {answer}")
+        else:
+            log["failure_type"] = "execution_failure"
+    else:
+        print("Invalid SPARQL.")
+        log["failure_type"] = "generation_failure"
 # ─────────────────────────────────────────────────────────────────────────────
 # BRANCH E — TEMPLATE (filter / ranking / comparison / count)
 # ─────────────────────────────────────────────────────────────────────────────

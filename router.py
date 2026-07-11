@@ -464,6 +464,21 @@ def _detect_airport_entity(q: str):
                 return _AIRPORT_ENTITIES[match]
     return None
 
+_UNIVERSITY_ENTITY_RE = re.compile(
+    r'\b([A-Z][a-zA-Z]*(?:Professor|Student|Course|Department|Group|'
+    r'University|Lecturer|Publication)\d+)\b'
+)
+
+def _detect_university_entity(q: str):
+    """
+    Regex-based, like flight numbers. LUBM entity names are synthetic and
+    fully regular (TypeName + digits), so no fuzzy matching is needed.
+    Returns the matched name string (e.g. "FullProfessor0"), not a URI —
+    the actual URI (with its department) is resolved later, by querying
+    Fuseki for the entity whose ub:name equals this string.
+    """
+    m = _UNIVERSITY_ENTITY_RE.search(q)
+    return m.group(1) if m else None
 
 def _detect_airport_keyword(q: str) -> bool:
     q_lower = q.lower()
@@ -653,7 +668,17 @@ def route(question: str) -> dict:
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
     params     = classified.get("params", {})
-
+    # ── Priority 2.7: University entity detected (deterministic) ──────────────
+    university_entity = _detect_university_entity(question)
+    if university_entity:
+        return {
+            "query_type": "single_kg3",
+            "kg":         "university",
+            "entity":     university_entity,
+            "direction":  None,
+            "template":   None,
+            "config":     KG_REGISTRY["university"],
+        }
     # ── Template branch ───────────────────────────────────────────────────────
     if query_type in TEMPLATE_REGISTRY:
         cfg = TEMPLATE_REGISTRY[query_type]

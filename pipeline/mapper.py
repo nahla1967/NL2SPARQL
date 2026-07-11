@@ -367,3 +367,48 @@ LIMIT 1
     except Exception as e:
         print(f"[map_airport] Unexpected error: {e}")
     return None
+
+_university_uri_cache: dict[str, str] = {}
+
+def map_university_entity(entity_name: str) -> str | None:
+    """
+    Resolves a LUBM entity name (e.g. "FullProfessor0") to its full URI.
+    Queries the /university/sparql endpoint by the ub:name property,
+    since the URI itself embeds the department, which we can't know
+    from the question text alone.
+
+    Example: "FullProfessor0" -> "http://www.Department0.University0.edu/FullProfessor0"
+
+    Uses an in-memory cache — the KG is static.
+    """
+    entity_name = entity_name.strip()
+    endpoint    = get_endpoint("university")
+    base        = get_base_uri("university")
+
+    if entity_name in _university_uri_cache:
+        return _university_uri_cache[entity_name]
+
+    query = f"""
+SELECT ?entity WHERE {{
+  ?entity <{base}name> "{entity_name}" .
+}}
+LIMIT 1
+"""
+    data = urllib.parse.urlencode({
+        "query":  query,
+        "format": "application/sparql-results+json"
+    }).encode()
+    req = urllib.request.Request(endpoint, data=data)
+    try:
+        with urllib.request.urlopen(req) as response:
+            result   = json.loads(response.read())
+            bindings = result["results"]["bindings"]
+            if bindings:
+                uri = bindings[0]["entity"]["value"]
+                _university_uri_cache[entity_name] = uri
+                return uri
+    except urllib.error.URLError as e:
+        print(f"[map_university_entity] Fuseki unreachable: {e}")
+    except Exception as e:
+        print(f"[map_university_entity] Unexpected error: {e}")
+    return None
