@@ -21,7 +21,7 @@
     "undergraduateDegreeFrom":"BACHELOR'S DEGREE [SAFE]",
     "mastersDegreeFrom":      "MASTER'S DEGREE [SAFE]",
     "doctoralDegreeFrom":     "DOCTORAL DEGREE [SAFE]",
-    "hasAlumnus":             "ALUMNUS [SAFE]",
+    "hasAlumnus":             "ALUMNUS [UNSAFE - inference required, not queryable directly]",
     "member":                 "MEMBER [SAFE]",
     "orgPublication":         "ORG PUBLICATION [SAFE]",
     "publicationAuthor":      "AUTHORSHIP [SAFE]",
@@ -230,13 +230,7 @@
     "شهادة الدكتوراه من":             "doctoralDegreeFrom",
     "درجة الدكتوراه من":              "doctoralDegreeFrom",
 
-    "alumnus":                        "hasAlumnus",
-    "alumni of":                      "hasAlumnus",
-    "graduate of":                    "hasAlumnus",
-    "ancien étudiant de":             "hasAlumnus",
-    "diplômé de l'université":        "hasAlumnus",
-    "خريج":                           "hasAlumnus",
-    "من خريجي":                       "hasAlumnus",
+    
 
     "member":                         "member",
     "membre":                         "member",

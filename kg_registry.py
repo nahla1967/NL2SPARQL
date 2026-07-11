@@ -300,6 +300,34 @@ Classes and properties:
   Region:
     regionName (string)
     regionCode (string)
+
+KNOWLEDGE GRAPH 3 — University (endpoint: http://localhost:3030/university/sparql)
+Base URI: http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#
+
+Classes and properties:
+  FullProfessor / AssociateProfessor / AssistantProfessor / Lecturer:
+    name (string)
+    teacherOf → Course / GraduateCourse (one-to-many)
+    undergraduateDegreeFrom / mastersDegreeFrom / doctoralDegreeFrom → University
+    worksFor → Department
+    headOf → Department (some professors only)
+
+  GraduateStudent / UndergraduateStudent:
+    name (string)
+    takesCourse → Course / GraduateCourse (one-to-many)
+    advisor → Professor
+    memberOf → Department
+
+  Course / GraduateCourse:
+    name (string)
+
+  Department:
+    name (string)
+    subOrganizationOf → University
+
+  Publication:
+    name (string)
+    publicationAuthor → Professor / Student
 """
 # ── CONVENIENCE ACCESSORS ─────────────────────────────────────────────────────
 # Use these in router.py, extractor.py, mapper.py, executor.py

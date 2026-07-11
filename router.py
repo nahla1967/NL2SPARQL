@@ -665,9 +665,7 @@ def route(question: str) -> dict:
         }
 
     # ── Priority 3: No flight number — LLM classifies everything else ─────────
-    classified = _llm_classify(question)
-    query_type = classified.get("query_type", "")
-    params     = classified.get("params", {})
+    
     # ── Priority 2.7: University entity detected (deterministic) ──────────────
     university_entity = _detect_university_entity(question)
     if university_entity:
@@ -679,6 +677,9 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["university"],
         }
+    classified = _llm_classify(question)
+    query_type = classified.get("query_type", "")
+    params     = classified.get("params", {})
     # ── Template branch ───────────────────────────────────────────────────────
     if query_type in TEMPLATE_REGISTRY:
         cfg = TEMPLATE_REGISTRY[query_type]
