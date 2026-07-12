@@ -412,3 +412,33 @@ LIMIT 1
     except Exception as e:
         print(f"[map_university_entity] Unexpected error: {e}")
     return None
+
+def get_university_entity_type(entity_uri: str) -> str | None:
+    """
+    Returns the rdf:type local name for a university entity
+    (e.g. "Department", "FullProfessor"), or None if not found.
+    Used to disambiguate ambiguous phrases like "part of" between
+    memberOf (person -> department) and subOrganizationOf (department -> university).
+    """
+    endpoint = get_endpoint("university")
+    query = f"""
+SELECT ?type WHERE {{
+  <{entity_uri}> a ?type .
+}}
+LIMIT 1
+"""
+    data = urllib.parse.urlencode({
+        "query":  query,
+        "format": "application/sparql-results+json"
+    }).encode()
+    req = urllib.request.Request(endpoint, data=data)
+    try:
+        with urllib.request.urlopen(req) as response:
+            result   = json.loads(response.read())
+            bindings = result["results"]["bindings"]
+            if bindings:
+                type_uri = bindings[0]["type"]["value"]
+                return type_uri.split("#")[-1]
+    except Exception as e:
+        print(f"[get_university_entity_type] error: {e}")
+    return None

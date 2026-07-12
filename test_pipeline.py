@@ -67,6 +67,7 @@ from pipeline.extractor import (
     validate_airport_extraction,
 )
 from pipeline.mapper import (
+    get_university_entity_type,
     load_lexicon,
     map_property_cascade,
     map_flight,
@@ -108,30 +109,16 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 FULL_SYSTEM_TESTS =[
     # ── single_kg3 (direct lookups) ──────────────────────────────────────────
-    ("What courses does FullProfessor0 teach?",
-     "single_kg3", "kg3_single_001"),
-    ("Where did GraduateStudent0 get their undergraduate degree?",
-     "single_kg3", "kg3_single_002"),
-    ("What is Lecturer0's name?",
-     "single_kg3", "kg3_single_003"),
-    ("What department does GraduateStudent0 belong to?",
-     "single_kg3", "kg3_single_004"),  # first test of object-URI resolution
-
-    # ── count_kg3 (count / list linked entities) ─────────────────────────────
-    ("How many courses does FullProfessor0 teach?",
-     "template", "kg3_count_001"),
-    ("How many courses does GraduateStudent0 take?",
-     "template", "kg3_count_002"),
-    ("List the courses that Lecturer0 teaches.",
-     "template", "kg3_count_003"),
-    ("How many students are members of Department0?",
-     "template", "kg3_count_004"),  # stress test — large number (678)
-
-    # ── filter_string_kg3 (department membership) ────────────────────────────
-    ("Which professors work for Department3?",
-     "template", "kg3_filter_001"),  # regression check on formatter fix
-    ("Which professors work for Department0?",
-     "template", "kg3_filter_002"),  # larger list (41)
+    ("Who is the advisor of UndergraduateStudent4?",       "single_kg3", "kg3b_single_001"),
+    ("What courses does AssociateProfessor0 teach?",       "single_kg3", "kg3b_single_002"),
+    ("What university is Department5 part of?",            "single_kg3", "kg3b_single_003"),
+    ("What is AssociateProfessor0's name?",                 "single_kg3", "kg3b_single_004"),
+    ("How many courses does AssociateProfessor0 teach?",    "template",   "kg3b_count_001"),
+    ("How many courses does UndergraduateStudent4 take?",   "template",   "kg3b_count_002"),
+    ("List the courses that UndergraduateStudent4 takes.",  "template",   "kg3b_count_003"),
+    ("How many professors work for Department5?",           "template",   "kg3b_count_004"),
+    ("Which professors work for Department5?",               "template",   "kg3b_filter_001"),
+    ("Which professors work for Department3?",               "template",   "kg3b_filter_002"),
 ]
 
 ALL_TESTS = [
@@ -291,6 +278,15 @@ def _run_single_kg3(question: str, routing: dict, lang: str) -> dict:
     )
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
 
+    # Disambiguate "part of" style phrases: memberOf (person -> dept)
+    # vs subOrganizationOf (dept -> university) — same fix as main.py.
+    if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
+        entity_type = get_university_entity_type(entity_uri)
+        if entity_type == "Department" and property_uri == "memberOf":
+            property_uri = "subOrganizationOf"
+        elif entity_type != "Department" and property_uri == "subOrganizationOf":
+            property_uri = "memberOf"
+    
     if not entity_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
         return out

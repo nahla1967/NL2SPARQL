@@ -399,7 +399,28 @@ def execute_sparql(
         import traceback
         traceback.print_exc() 
     return None
-
+def execute_ask_sparql(query: str, endpoint: str) -> bool | None:
+    """
+    Executes a SPARQL ASK query and returns True/False.
+    Separate from execute_sparql() because Fuseki's response shape for
+    ASK is fundamentally different: {"boolean": true/false}, not
+    {"results": {"bindings": [...]}}.
+    """
+    data = urllib.parse.urlencode({
+        "query":  query,
+        "format": "application/sparql-results+json"
+    }).encode()
+    req = urllib.request.Request(endpoint, data=data)
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read())
+            print(f"[debug] ASK raw response: {result}")
+            return result.get("boolean")
+    except urllib.error.URLError as e:
+        print(f"[execute_ask_sparql] Fuseki unreachable: {e}")
+    except Exception as e:
+        print(f"[execute_ask_sparql] Unexpected error: {e}")
+    return None
 # ── ANSWER FORMATTING ─────────────────────────────────────────────────────────
 def format_answer(question: str, raw_value: str, lang: str) -> str:
     lang_map      = {"en": "English", "fr": "French", "ar": "Arabic"}

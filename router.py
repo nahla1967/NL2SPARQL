@@ -450,7 +450,14 @@ def _detect_flight_number(q: str):
     """Regex-based. Fast and deterministic. Called before any LLM."""
     m = _FLIGHT_RE.findall(q.upper())
     return max(m, key=len) if m else None
-
+def _detect_flight_number_first(q: str):
+    """
+    ASK-specific variant: returns the FIRST match, not the longest.
+    ASK questions naturally mention two entity-shaped strings (the
+    subject and the comparison value) — the subject always comes first.
+    """
+    m = _FLIGHT_RE.findall(q.upper())
+    return m[0] if m else None
 
 def _detect_airport_entity(q: str):
     """
@@ -523,10 +530,78 @@ def _detect_university_entity(q: str):
     return m.group(1) if m else None
 
 _COUNT_SIGNALS = ["how many", "combien de", "كم", "list all", "count"]
+_FILTER_SIGNALS = ["which professors", "which students", "who works for",
+                    "who is a member of", "list the professors", "list the students",
+                    "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب"]
+
+def _has_filter_signal(q: str) -> bool:
+    q_lower = q.lower()
+    return any(sig in q_lower for sig in _FILTER_SIGNALS)
 
 def _has_count_signal(q: str) -> bool:
     q_lower = q.lower()
     return any(sig in q_lower for sig in _COUNT_SIGNALS)
+_ASK_SIGNALS = ["is ", "are ", "does ", "do ", "was ", "were ",
+                "est-ce que", "est-ce", "y a-t-il",
+                "هل "]
+
+def _has_ask_signal(q: str) -> bool:
+    q_lower = q.lower().strip()
+    return any(q_lower.startswith(sig) for sig in _ASK_SIGNALS)
+
+def route(question: str) -> dict:
+    """
+    Routes a natural language question to the correct pipeline branch.
+
+    Returns a routing dict consumed by main.py and test_pipeline.py.
+    Keys: query_type, kg, entity, direction, template, config, params.
+
+    Final structure:
+        Priority 1 → structure guard
+        Priority 1.5 → ASK-style question + known entity → ask_query
+        Priority 2 → flight number → single_kg1 or cross_kg
+        Priority 2.5 → airport entity → single_kg2
+        Priority 3 → LLM classifies → template / single_kg2 / open_kg
+                     (with smart reroute for known misclassification patterns)
+        Clean gate → _is_kg_answerable() → open_kg or out_of_scope
+    """
+
+    # ── Priority 1: Structure guard ───────────────────────────────────────────
+    if not _has_minimum_structure(question):
+        return {
+            "query_type": "out_of_scope",
+            "kg":         None,
+            "entity":     None,
+            "direction":  None,
+            "template":   None,
+            "config":     None,
+        }
+
+    q_lower = question.lower()
+
+    # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
+    if _has_ask_signal(question):
+        flight_entity      = _detect_flight_number_first(question)
+        airport_entity     = _detect_airport_entity(question)
+        university_entity  = _detect_university_entity(question)
+
+        if flight_entity:
+            return {
+                "query_type": "ask_query", "kg": "flights",
+                "entity": flight_entity, "template": "ask_query",
+            }
+        elif airport_entity:
+            return {
+                "query_type": "ask_query", "kg": "airports",
+                "entity": airport_entity, "template": "ask_query",
+            }
+        elif university_entity:
+            return {
+                "query_type": "ask_query", "kg": "university",
+                "entity": university_entity, "template": "ask_query",
+            }
+
+    # ── Priority 2: Flight number detected ────────────────────────────────────
 
 def _detect_airport_keyword(q: str) -> bool:
     q_lower = q.lower()
@@ -722,7 +797,7 @@ def route(question: str) -> dict:
     # used for count_kg1 (see COUNT_KG1 rule below: count signals win even
     # when a specific entity is named).
     university_entity = _detect_university_entity(question)
-    if university_entity and not _has_count_signal(question):
+    if university_entity and not _has_count_signal(question) and not _has_filter_signal(question):
         return {
             "query_type": "single_kg3",
             "kg":         "university",

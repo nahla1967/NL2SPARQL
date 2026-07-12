@@ -36,6 +36,7 @@ from pipeline.extractor import (
     validate_university_extraction,
 )
 from pipeline.mapper import (
+    get_university_entity_type,
     load_lexicon,
     map_property_cascade,
     map_flight,
@@ -59,7 +60,7 @@ from pipeline.executor  import (
     format_answer_list,
 )
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "Which professors work for Department3?"
+question  = "What university is Department5 part of?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────
@@ -349,7 +350,17 @@ elif query_type == "single_kg3":
         entities["property"], lexicon, lexicon_path
     )
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
-
+    # Disambiguate "part of" style phrases: memberOf (person -> dept)
+    # vs subOrganizationOf (dept -> university) resolve to the same text
+    # but need different properties depending on the entity's real type.
+    if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
+        entity_type = get_university_entity_type(entity_uri)
+        if entity_type == "Department" and property_uri == "memberOf":
+            property_uri = "subOrganizationOf"
+            print(f"[disambiguation] Department entity — corrected memberOf → subOrganizationOf")
+        elif entity_type != "Department" and property_uri == "subOrganizationOf":
+            property_uri = "memberOf"
+            print(f"[disambiguation] Non-department entity — corrected subOrganizationOf → memberOf")
     log.update({
         "entity_uri":    entity_uri,
         "property_uri":  property_uri,
