@@ -1,0 +1,393 @@
+"""
+eval_runner.py
+---------------
+Reads NL2SPARQL_Evaluation_Dataset.xlsx, expands each row into the correct
+number of runs (x3 languages always, x3 strategies only where
+strategy_applicable=TRUE), executes each one through the REAL pipeline
+(same branch handlers as test_pipeline.py / main.py), and writes one JSON
+line per run to eval_results.jsonl.
+
+PLACE THIS FILE IN THE ROOT OF THE NL2SPARQL REPO (same level as router.py,
+main.py, kg_registry.py) — it imports those modules directly, exactly like
+test_pipeline.py does. It assumes Fuseki (all 3 endpoints) and Ollama are
+running locally, same prerequisites as test_pipeline.py.
+
+WHY THIS DOESN'T DUPLICATE test_pipeline.py:
+    test_pipeline.py is your fixed-suite pipeline smoke test — good for
+    "does every branch still work". This script is the thesis EVALUATION
+    run: it reads the versioned dataset (so results are reproducible and
+    the question set is auditable in the same file your supervisors see),
+    threads the strategy condition through correctly per-branch (only
+    single_kg1/2/3 actually vary by strategy — see kg_registry / generator.py),
+    and scores each run against a ground-truth expected_answer for
+    Exact Match / F1, which test_pipeline.py does not do at all.
+
+OUTPUT SCHEMA (one JSON object per line in eval_results.jsonl):
+    id, tier, category, kg, language, strategy, expected_type, query_type,
+    routing_ok, sparql, sparql_valid, raw_answer, final_answer,
+    failure_type, exact_match, f1, duration_s
+"""
+
+import json
+import re
+import time
+import pandas as pd
+
+DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
+OUTPUT_PATH  = "eval_results.jsonl"
+
+LANGUAGES = ["en", "fr", "ar"]
+STRATEGIES = ["zero-shot", "few-shot", "cot"]
+
+# ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
+from router import route
+from template_resolver import resolve_template, resolve_ask_query
+from pipeline.language import detect_language
+from pipeline.extractor import (
+    extract_entities, validate_extraction, is_flight_question,
+    extract_airport_entities, validate_airport_extraction,
+    extract_university_entities, validate_university_extraction,
+)
+from pipeline.mapper import (
+    get_university_entity_type, load_lexicon, map_property_cascade,
+    map_flight, map_airport, map_university_entity,
+)
+from pipeline.generator import inject_and_generate, generate_open_kg_sparql
+from pipeline.executor import (
+    validate_sparql, execute_sparql, format_answer, format_answer_list,
+)
+from cross_kg_resolver import resolve_cross_kg
+from kg_registry import get_base_uri, get_endpoint, get_lexicon, get_open_kg_schema
+
+
+# ── SCORING HELPERS ─────────────────────────────────────────────────────────
+
+def _normalise_for_scoring(text) -> str:
+    if text is None:
+        return ""
+    text = str(text).strip().lower()
+    text = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def exact_match(predicted, expected) -> bool:
+    if expected is None or (isinstance(expected, float) and pd.isna(expected)):
+        return None  # not scoreable — no ground truth provided
+    return _normalise_for_scoring(predicted) == _normalise_for_scoring(expected)
+
+
+def token_f1(predicted, expected) -> float | None:
+    if expected is None or (isinstance(expected, float) and pd.isna(expected)):
+        return None
+    pred_tokens = _normalise_for_scoring(predicted).split()
+    gold_tokens = _normalise_for_scoring(expected).split()
+    if not pred_tokens or not gold_tokens:
+        return 0.0
+    common = {}
+    for t in pred_tokens:
+        common[t] = common.get(t, 0) + 1
+    overlap = 0
+    gold_counts = {}
+    for t in gold_tokens:
+        gold_counts[t] = gold_counts.get(t, 0) + 1
+    for t, c in gold_counts.items():
+        overlap += min(c, common.get(t, 0))
+    if overlap == 0:
+        return 0.0
+    precision = overlap / len(pred_tokens)
+    recall = overlap / len(gold_tokens)
+    return round(2 * precision * recall / (precision + recall), 4)
+
+
+# ── BRANCH HANDLERS (strategy-parameterised versions of main.py's branches) ─
+
+def _run_single_kg1(question, entity_hint, strategy, lang):
+    out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+           "final_answer": None, "failure_type": "not_run"}
+    entities = extract_entities(question, lang)
+    if not validate_extraction(entities) or not is_flight_question(entities):
+        out["failure_type"] = "extraction_failure"
+        return out
+    lexicon = load_lexicon(get_lexicon("flights"))
+    property_uri, _, property2_uri = map_property_cascade(
+        entities["property"], lexicon, get_lexicon("flights"))
+    flight_uri = map_flight(entities["entity"])
+    if not flight_uri or not property_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+    base = get_base_uri("flights")
+    full_prop = base + property_uri
+    full_prop2 = (base + property2_uri) if property2_uri else None
+    sparql = inject_and_generate(flight_uri, full_prop, question,
+                                  strategy=strategy, property2_uri=full_prop2)
+    out["sparql"] = sparql
+    is_valid = (validate_sparql(sparql) and sparql.strip().startswith("SELECT")
+                and "PREFIX" not in sparql and full_prop in sparql)
+    if full_prop2:
+        is_valid = is_valid and (full_prop2 in sparql)
+    out["sparql_valid"] = is_valid
+    if is_valid:
+        raw = execute_sparql(sparql, endpoint=get_endpoint("flights"))
+        out["raw_answer"] = raw
+        if raw:
+            out["final_answer"] = format_answer(question, raw, lang)
+            out["failure_type"] = "success"
+        else:
+            out["failure_type"] = "execution_failure"
+    else:
+        out["failure_type"] = "generation_failure"
+    return out
+
+
+def _run_single_kg2(question, entity_hint, strategy, lang):
+    out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+           "final_answer": None, "failure_type": "not_run"}
+    entities = extract_airport_entities(question, lang, entity_hint)
+    if not validate_airport_extraction(entities):
+        out["failure_type"] = "extraction_failure"
+        return out
+    lexicon_path = get_lexicon("airports")
+    lexicon = load_lexicon(lexicon_path)
+    property_uri, _, property2_uri = map_property_cascade(
+        entities["property"], lexicon, lexicon_path)
+    airport_uri = map_airport(entities["entity"]) if entities["entity"] else None
+    if not airport_uri or not property_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+    base = get_base_uri("airports")
+    full_prop = base + property_uri
+    full_prop2 = (base + property2_uri) if property2_uri else None
+    sparql = inject_and_generate(airport_uri, full_prop, question,
+                                  strategy=strategy, property2_uri=full_prop2)
+    out["sparql"] = sparql
+    is_valid = (validate_sparql(sparql) and sparql.strip().startswith("SELECT")
+                and "PREFIX" not in sparql and full_prop in sparql)
+    out["sparql_valid"] = is_valid
+    if is_valid:
+        raw = execute_sparql(sparql, endpoint=get_endpoint("airports"))
+        out["raw_answer"] = raw
+        if raw:
+            out["final_answer"] = format_answer(question, raw, lang)
+            out["failure_type"] = "success"
+        else:
+            out["failure_type"] = "execution_failure"
+    else:
+        out["failure_type"] = "generation_failure"
+    return out
+
+
+def _run_single_kg3(question, routing, strategy, lang):
+    """
+    Branch: university entity is known (routing["entity"]).
+    Mirrors test_pipeline.py's _run_single_kg3 — added here because the
+    original eval_runner.py dispatch table was missing this case entirely,
+    which meant any property_ambiguity or single-entity KG3 question would
+    have silently fallen to 'unhandled_branch' instead of actually running.
+    """
+    out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+           "final_answer": None, "failure_type": "not_run"}
+    entities = extract_university_entities(question, lang, routing["entity"])
+    if not validate_university_extraction(entities):
+        out["failure_type"] = "extraction_failure"
+        return out
+    lexicon_path = get_lexicon("university")
+    lexicon = load_lexicon(lexicon_path)
+    property_uri, _, property2_uri = map_property_cascade(
+        entities["property"], lexicon, lexicon_path)
+    entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
+
+    # Disambiguate "part of" style phrases — same fix as main.py / test_pipeline.py.
+    if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
+        entity_type = get_university_entity_type(entity_uri)
+        if entity_type == "Department" and property_uri == "memberOf":
+            property_uri = "subOrganizationOf"
+        elif entity_type != "Department" and property_uri == "subOrganizationOf":
+            property_uri = "memberOf"
+
+    if not entity_uri or not property_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+    base = get_base_uri("university")
+    full_prop = base + property_uri
+    full_prop2 = (base + property2_uri) if property2_uri else None
+    sparql = inject_and_generate(entity_uri, full_prop, question,
+                                  strategy=strategy, property2_uri=full_prop2)
+    out["sparql"] = sparql
+    is_valid = (validate_sparql(sparql) and sparql.strip().startswith("SELECT")
+                and "PREFIX" not in sparql and full_prop in sparql)
+    out["sparql_valid"] = is_valid
+    if is_valid:
+        raw = execute_sparql(sparql, endpoint=get_endpoint("university"), multiple=True)
+        out["raw_answer"] = raw
+        if raw:
+            out["final_answer"] = format_answer_list(question, raw, lang)
+            out["failure_type"] = "success"
+        else:
+            out["failure_type"] = "execution_failure"
+    else:
+        out["failure_type"] = "generation_failure"
+    return out
+
+
+def _run_cross_kg(question, routing, lang):
+    out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+           "final_answer": None, "failure_type": "not_run"}
+    flight_uri = map_flight(routing["entity"])
+    if not flight_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+    entities = extract_airport_entities(question, lang, iata_from_router=None)
+    lexicon_path = get_lexicon("airports")
+    lexicon = load_lexicon(lexicon_path)
+    property_uri, _, _ = map_property_cascade(entities["property"], lexicon, lexicon_path)
+    if not property_uri:
+        out["failure_type"] = "mapping_failure"
+        return out
+    full_prop = get_base_uri("airports") + property_uri
+    result = resolve_cross_kg(flight_uri=flight_uri, direction=routing["direction"],
+                               property_uri=full_prop, property_short=property_uri)
+    out["raw_answer"] = result.get("raw_value")
+    out["failure_type"] = result.get("failure_type")
+    out["sparql_valid"] = result.get("success", False)
+    if result["success"]:
+        out["final_answer"] = format_answer(question, result["raw_value"], lang)
+        out["failure_type"] = "success"
+    return out
+
+
+def _run_open_kg(question, lang):
+    out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+           "final_answer": None, "failure_type": "not_run"}
+    schema = get_open_kg_schema()
+    sparql, endpoint = generate_open_kg_sparql(question, lang, schema)
+    out["sparql"] = sparql
+    if not sparql or not sparql.strip().startswith("SELECT"):
+        out["failure_type"] = "generation_failure"
+        return out
+    is_valid = validate_sparql(sparql)
+    out["sparql_valid"] = is_valid
+    if not is_valid:
+        out["failure_type"] = "generation_failure"
+        return out
+    raw = execute_sparql(sparql, endpoint=endpoint, multiple=True)
+    out["raw_answer"] = raw
+    if raw:
+        out["final_answer"] = format_answer_list(question, raw, lang)
+        out["failure_type"] = "success"
+    else:
+        out["failure_type"] = "execution_failure"
+    return out
+
+
+def _run_template(question, routing, lang):
+    tr = resolve_template(question, routing["template"], lang)
+    return {
+        "sparql": tr.get("sparql"), "sparql_valid": tr.get("success", False),
+        "raw_answer": tr.get("raw_data"), "final_answer": tr.get("final_answer"),
+        "failure_type": tr.get("failure_type"),
+    }
+
+
+def _run_ask_query(question, routing, lang):
+    ar = resolve_ask_query(question, routing, lang)
+    return {
+        "sparql": ar.get("sparql"), "sparql_valid": ar.get("success", False),
+        "raw_answer": ar.get("raw_answer"), "final_answer": ar.get("final_answer"),
+        "failure_type": ar.get("failure_type"),
+    }
+
+
+def _dispatch(question, lang, strategy):
+    """Routes the question, then calls the matching branch handler."""
+    routing = route(question)
+    query_type = routing["query_type"]
+
+    if query_type == "single_kg1":
+        out = _run_single_kg1(question, routing["entity"], strategy, lang)
+    elif query_type == "single_kg2":
+        out = _run_single_kg2(question, routing["entity"], strategy, lang)
+    elif query_type == "single_kg3":
+        out = _run_single_kg3(question, routing, strategy, lang)
+    elif query_type == "cross_kg":
+        out = _run_cross_kg(question, routing, lang)
+    elif query_type == "open_kg":
+        out = _run_open_kg(question, lang)
+    elif query_type == "template":
+        out = _run_template(question, routing, lang)
+    elif query_type == "ask_query":
+        out = _run_ask_query(question, routing, lang)
+    else:  # out_of_scope or anything unrecognised
+        out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+               "final_answer": None,
+               "failure_type": "success" if query_type == "out_of_scope" else "unhandled_branch"}
+
+    out["query_type"] = query_type
+    return out
+
+
+# ── MAIN ─────────────────────────────────────────────────────────────────────
+
+def main():
+    df = pd.read_excel(DATASET_PATH, sheet_name="Questions")
+    out_f = open(OUTPUT_PATH, "w", encoding="utf-8")
+
+    total_runs = 0
+    skipped = 0
+
+    for _, row in df.iterrows():
+        strategies = STRATEGIES if bool(row["strategy_applicable"]) else ["n/a"]
+
+        for lang in LANGUAGES:
+            question = row.get(f"question_{lang}")
+            if pd.isna(question) or not str(question).strip():
+                skipped += len(strategies)
+                continue
+
+            for strategy in strategies:
+                t0 = time.time()
+                try:
+                    result = _dispatch(str(question).strip(), lang, strategy)
+                except Exception as e:
+                    result = {"query_type": None, "sparql": None, "sparql_valid": False,
+                              "raw_answer": None, "final_answer": None,
+                              "failure_type": f"exception: {e}"}
+
+                expected_type = row["expected_type"]
+                routing_ok = (expected_type == "VARIES") or (result["query_type"] == expected_type)
+
+                scored_value = result.get("raw_answer") or result.get("final_answer")
+                if isinstance(scored_value, list):
+                    scored_value = "\n".join(str(v) for v in scored_value)
+
+                record = {
+                    "id": row["id"],
+                    "tier": int(row["tier"]),
+                    "category": row["category"],
+                    "kg": row["kg"],
+                    "language": lang,
+                    "strategy": strategy,
+                    "expected_type": expected_type,
+                    "query_type": result["query_type"],
+                    "routing_ok": routing_ok,
+                    "sparql": result["sparql"],
+                    "sparql_valid": result["sparql_valid"],
+                    "raw_answer": result["raw_answer"],
+                    "final_answer": result["final_answer"],
+                    "failure_type": result["failure_type"],
+                    "exact_match": exact_match(scored_value, row.get("expected_answer")),
+                    "f1": token_f1(scored_value, row.get("expected_answer")),
+                    "duration_s": round(time.time() - t0, 2),
+                }
+                out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                total_runs += 1
+                print(f"[{total_runs}] {row['id']} | {lang} | {strategy} | "
+                      f"{result['failure_type']}")
+
+    out_f.close()
+    print(f"\nDone. {total_runs} runs written to {OUTPUT_PATH}. "
+          f"{skipped} runs skipped (empty question cells — dataset not fully filled in yet).")
+
+
+if __name__ == "__main__":
+    main()
