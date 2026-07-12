@@ -1,25 +1,20 @@
 """
-router.py  (v9 — final with word boundary fix)
+router.py  (v10 — merged: word boundary fix + ASK detection)
 ------------------------------------------------
-WHAT CHANGED vs v8:
+WHAT CHANGED vs v9:
 
-    Fix — _has_kg1_signal() now uses word boundaries for single-word signals.
+    Fix — Two duplicate `route()` definitions existed in v9 (an incomplete
+    draft added while wiring up ASK detection, and the original complete
+    pipeline). Python silently used only the second, meaning ASK-style
+    questions ("Is BR62's callsign EVA062?") never reached the new
+    detection logic at all — they fell through to ordinary flight-number
+    routing instead. This version merges the two into a single route(),
+    with ASK detection running as Priority 1.5, between the structure
+    guard and flight-number detection.
 
-    In v8, the fast pre-check used `sig in q_lower`, which performs a
-    substring match. This means the word "gate" would match inside "navigate",
-    "aggregate", or any other word containing that substring. While unlikely
-    to cause real failures in aviation queries, it is a formal correctness
-    issue: a false positive here causes the router to skip the LLM for a
-    question that might be cross-KG, routing it silently to single_kg1
-    with no fallback.
-
-    The fix uses re.search(r"\b{sig}\b") for single-word signals, which
-    requires the signal to appear as a standalone word. Multi-word signals
-    like "ground speed" still use substring matching, which is correct
-    because the space itself prevents partial matches inside compound words.
-
-    This makes the fast pre-check formally correct, not just empirically
-    correct — an important distinction for a thesis defense.
+    Also carried over from v9: _has_kg1_signal() uses word boundaries for
+    single-word signals, so "gate" no longer matches inside "navigate" or
+    "aggregate".
 
 ARCHITECTURE OVERVIEW
 ---------------------
@@ -27,21 +22,33 @@ The router is the front door of the NL2SPARQL pipeline. Its sole job is
 to decide which branch handles a given question. It does NOT extract
 properties, generate SPARQL, or query any endpoint.
 
-Four branches exist:
+Branches:
+    ask_query   → yes/no question about a known entity's property value
     single_kg1  → a specific flight is asked about (flight number present,
                   question asks about the flight itself)
     single_kg2  → a specific airport is asked about by name or IATA code
+    single_kg3  → a specific university entity is asked about
     cross_kg    → a specific flight is asked about, but the question asks
                   about a property of its airport (country, elevation, etc.)
     template    → an aggregate question with no specific entity
                   (filter, ranking, comparison, count)
+    open_kg     → answerable from the KG but doesn't fit any template
+    out_of_scope → cannot be answered from this database
 
 ROUTING LOGIC
 -------------
-Priority 1 — Minimum structure guard
+Priority 1   — Minimum structure guard
     Rejects single-word or meaningless inputs immediately.
 
-Priority 2 — Flight number detected (regex)
+Priority 1.5 — ASK-style question + known entity (any KG)
+    Questions starting with an ASK signal ("is", "are", "does", "was",
+    "est-ce que", "هل", ...) that also name a known flight, airport, or
+    university entity are routed straight to ask_query. These questions
+    naturally mention two entity-shaped strings (the subject and the
+    comparison value), so flight-number detection here uses the
+    FIRST match, not the longest — see _detect_flight_number_first().
+
+Priority 2   — Flight number detected (regex)
     2a. FAST PATH: question contains a KG1-only signal word.
         These concepts only exist in KG1, never in KG2. The question
         cannot possibly be cross-KG. Return single_kg1 immediately
@@ -57,9 +64,16 @@ Priority 2 — Flight number detected (regex)
         If LLM returns cross_kg_filter → route cross_kg.
         Otherwise → route single_kg1.
 
-Priority 3 — No flight number → LLM classifies everything else.
-    Template branch, single_kg2, or out_of_scope.
-    If LLM fails, deterministic fallbacks provide a safety net.
+Priority 2.5 — Airport entity detected (deterministic)
+
+Priority 2.7 — University entity detected (deterministic), unless the
+    question has a count/list or filter signal, in which case it falls
+    through to the LLM so it can reach count_kg3 / filter_string_kg3.
+
+Priority 3   — No flight/airport/university entity match →
+    LLM classifies everything else: template branch, single_kg2, open_kg,
+    or out_of_scope, with smart reroutes for known misclassification
+    patterns and a final clean-gate check via _is_kg_answerable().
 
 WHY THE LLM RUNS FOR AMBIGUOUS FLIGHT QUESTIONS
 -------------------------------------------------
@@ -100,7 +114,7 @@ _IATA_RE   = re.compile(r"\b([A-Z]{3})\b")
 # ─────────────────────────────────────────────
 # These words refer exclusively to flight properties that exist only in KG1.
 # If any of them appear in a question that also contains a flight number,
-# the question cannot be cross-KG — return single_kg1 without the LLM.
+# the question cannot be cross-KG - return single_kg1 without the LLM.
 #
 # "destination" and "departure" are intentionally excluded: they appear in
 # both KG1 questions ("What is the destination of flight X?") and cross-KG
@@ -136,7 +150,7 @@ def _has_kg1_signal(q_lower: str) -> bool:
           Simple substring match. The space character naturally prevents
           partial matches inside compound words like "groundspeed".
       - Single-word signals (e.g. "gate"):
-          Word-boundary regex (\b). Prevents matching "gate" inside
+          Word-boundary regex (\\b). Prevents matching "gate" inside
           "navigate" or "aggregate". This is the formally correct approach
           for single tokens.
 
@@ -166,6 +180,10 @@ def _load_airport_lexicon():
 _airport_lex      = _load_airport_lexicon()
 _AIRPORT_ENTITIES = _airport_lex.get("airport_entities", {})
 _AIRPORT_TRIGGERS = KG_REGISTRY["airports"].get("triggers", [])
+
+def _detect_airport_keyword(q: str) -> bool:
+    q_lower = q.lower()
+    return any(k.lower() in q_lower for k in _AIRPORT_TRIGGERS)
 
 # ─────────────────────────────────────────────
 # LLM CLASSIFICATION PROMPT
@@ -447,9 +465,18 @@ def _has_minimum_structure(question: str) -> bool:
 # ─────────────────────────────────────────────
 
 def _detect_flight_number(q: str):
-    """Regex-based. Fast and deterministic. Called before any LLM."""
+    """Regex-based. Fast and deterministic. Called before any LLM.
+
+    Returns the LONGEST match. Correct for ordinary questions, which
+    only ever mention one flight number. Do NOT use this for ASK-style
+    comparison questions ("Is BR62's callsign EVA062?") — those mention
+    two entity-shaped strings and need _detect_flight_number_first()
+    instead, since "longest wins" would pick the comparison value
+    instead of the actual subject.
+    """
     m = _FLIGHT_RE.findall(q.upper())
     return max(m, key=len) if m else None
+
 def _detect_flight_number_first(q: str):
     """
     ASK-specific variant: returns the FIRST match, not the longest.
@@ -541,6 +568,7 @@ def _has_filter_signal(q: str) -> bool:
 def _has_count_signal(q: str) -> bool:
     q_lower = q.lower()
     return any(sig in q_lower for sig in _COUNT_SIGNALS)
+
 _ASK_SIGNALS = ["is ", "are ", "does ", "do ", "was ", "were ",
                 "est-ce que", "est-ce", "y a-t-il",
                 "هل "]
@@ -548,64 +576,6 @@ _ASK_SIGNALS = ["is ", "are ", "does ", "do ", "was ", "were ",
 def _has_ask_signal(q: str) -> bool:
     q_lower = q.lower().strip()
     return any(q_lower.startswith(sig) for sig in _ASK_SIGNALS)
-
-def route(question: str) -> dict:
-    """
-    Routes a natural language question to the correct pipeline branch.
-
-    Returns a routing dict consumed by main.py and test_pipeline.py.
-    Keys: query_type, kg, entity, direction, template, config, params.
-
-    Final structure:
-        Priority 1 → structure guard
-        Priority 1.5 → ASK-style question + known entity → ask_query
-        Priority 2 → flight number → single_kg1 or cross_kg
-        Priority 2.5 → airport entity → single_kg2
-        Priority 3 → LLM classifies → template / single_kg2 / open_kg
-                     (with smart reroute for known misclassification patterns)
-        Clean gate → _is_kg_answerable() → open_kg or out_of_scope
-    """
-
-    # ── Priority 1: Structure guard ───────────────────────────────────────────
-    if not _has_minimum_structure(question):
-        return {
-            "query_type": "out_of_scope",
-            "kg":         None,
-            "entity":     None,
-            "direction":  None,
-            "template":   None,
-            "config":     None,
-        }
-
-    q_lower = question.lower()
-
-    # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
-    if _has_ask_signal(question):
-        flight_entity      = _detect_flight_number_first(question)
-        airport_entity     = _detect_airport_entity(question)
-        university_entity  = _detect_university_entity(question)
-
-        if flight_entity:
-            return {
-                "query_type": "ask_query", "kg": "flights",
-                "entity": flight_entity, "template": "ask_query",
-            }
-        elif airport_entity:
-            return {
-                "query_type": "ask_query", "kg": "airports",
-                "entity": airport_entity, "template": "ask_query",
-            }
-        elif university_entity:
-            return {
-                "query_type": "ask_query", "kg": "university",
-                "entity": university_entity, "template": "ask_query",
-            }
-
-    # ── Priority 2: Flight number detected ────────────────────────────────────
-
-def _detect_airport_keyword(q: str) -> bool:
-    q_lower = q.lower()
-    return any(k.lower() in q_lower for k in _AIRPORT_TRIGGERS)
 
 # ─────────────────────────────────────────────
 # LLM CLASSIFIER
@@ -645,6 +615,7 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
             )
 
     return {}
+
 def _is_kg_answerable(question: str) -> bool:
     """
     Asks the LLM whether the question can be answered from the specific
@@ -699,12 +670,14 @@ def route(question: str) -> dict:
     Keys: query_type, kg, entity, direction, template, config, params.
 
     Final structure:
-        Priority 1 → structure guard
-        Priority 2 → flight number → single_kg1 or cross_kg
+        Priority 1   → structure guard
+        Priority 1.5 → ASK-style question + known entity → ask_query
+        Priority 2   → flight number → single_kg1 or cross_kg
         Priority 2.5 → airport entity → single_kg2
-        Priority 3 → LLM classifies → template / single_kg2 / open_kg
-                     (with smart reroute for known misclassification patterns)
-        Clean gate → _is_kg_answerable() → open_kg or out_of_scope
+        Priority 2.7 → university entity → single_kg3 (unless count/filter signal)
+        Priority 3   → LLM classifies → template / single_kg2 / open_kg
+                       (with smart reroute for known misclassification patterns)
+        Clean gate   → _is_kg_answerable() → open_kg or out_of_scope
     """
 
     # ── Priority 1: Structure guard ───────────────────────────────────────────
@@ -719,6 +692,28 @@ def route(question: str) -> dict:
         }
 
     q_lower = question.lower()
+
+    # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
+    if _has_ask_signal(question):
+        flight_entity      = _detect_flight_number_first(question)
+        airport_entity     = _detect_airport_entity(question)
+        university_entity  = _detect_university_entity(question)
+
+        if flight_entity:
+            return {
+                "query_type": "ask_query", "kg": "flights",
+                "entity": flight_entity, "template": "ask_query",
+            }
+        elif airport_entity:
+            return {
+                "query_type": "ask_query", "kg": "airports",
+                "entity": airport_entity, "template": "ask_query",
+            }
+        elif university_entity:
+            return {
+                "query_type": "ask_query", "kg": "university",
+                "entity": university_entity, "template": "ask_query",
+            }
 
     # ── Priority 2: Flight number detected ────────────────────────────────────
     flight = _detect_flight_number(question)
@@ -787,9 +782,6 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["airports"],
         }
 
-    # ── Priority 3: No flight number — LLM classifies everything else ─────────
-    
-    # ── Priority 2.7: University entity detected (deterministic) ──────────────
     # ── Priority 2.7: University entity detected (deterministic) ──────────────
     # Only short-circuits to single_kg3 for single-value lookups. Count/list
     # questions ("how many courses does X teach") fall through to the LLM
@@ -806,9 +798,12 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["university"],
         }
+
+    # ── Priority 3: No flight/airport/university match — LLM classifies ───────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
     params     = classified.get("params", {})
+
     # ── Template branch ───────────────────────────────────────────────────────
     if query_type in TEMPLATE_REGISTRY:
         cfg = TEMPLATE_REGISTRY[query_type]
@@ -866,7 +861,7 @@ def route(question: str) -> dict:
                     "template":   None,
                     "config":     None,
                 }
-        
+
         return {
             "query_type": "template",
             "kg":         cfg["kg"],
