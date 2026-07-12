@@ -43,15 +43,6 @@ from pipeline.mapper import (
     map_airport,
     map_university_entity,
 )
-from pipeline.generator import inject_and_generate
-from pipeline.executor  import (
-    validate_sparql,
-    execute_sparql,
-    format_answer,
-)
-from cross_kg_resolver import resolve_cross_kg
-from template_resolver import resolve_template
-from kg_registry import get_base_uri, get_endpoint, get_lexicon
 from pipeline.generator import inject_and_generate, generate_open_kg_sparql
 from pipeline.executor  import (
     validate_sparql,
@@ -59,6 +50,10 @@ from pipeline.executor  import (
     format_answer,
     format_answer_list,
 )
+from cross_kg_resolver import resolve_cross_kg
+from template_resolver import resolve_template
+from kg_registry import get_base_uri, get_endpoint, get_lexicon
+
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
 question  = "What university is Department5 part of?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
@@ -326,6 +321,7 @@ elif query_type == "cross_kg":
         print(f"Final answer: {answer}")
     else:
         print(f"Cross-KG resolution failed: {result['failure_type']}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # BRANCH E — SINGLE KG3 (UNIVERSITY)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -396,8 +392,7 @@ elif query_type == "single_kg3":
     )
     log["sparql_valid"] = is_valid
 
-    # Step 5: execute against KG3
-   # Step 5: execute against KG3 (multiple=True — university properties
+    # Step 5: execute against KG3 (multiple=True — university properties
     # like teacherOf/takesCourse are naturally one-to-many)
     if is_valid:
         raw = execute_sparql(sparql_query, endpoint=get_endpoint("university"), multiple=True)
@@ -413,8 +408,9 @@ elif query_type == "single_kg3":
     else:
         print("Invalid SPARQL.")
         log["failure_type"] = "generation_failure"
+
 # ─────────────────────────────────────────────────────────────────────────────
-# BRANCH E — TEMPLATE (filter / ranking / comparison / count)
+# BRANCH E — TEMPLATE (filter / ranking / comparison / count / group-aggregate)
 # ─────────────────────────────────────────────────────────────────────────────
 elif query_type == "template":
 
@@ -446,9 +442,7 @@ elif query_type == "template":
         print(f"  Template   : {template_name}")
         print(f"  Params     : {result.get('params')}")
         print(f"  SPARQL     : {result.get('sparql')}")
-# ─────────────────────────────────────────────────────────────────────────────
-# BRANCH F — OPEN KG
-# ─────────────────────────────────────────────────────────────────────────────
+
 # ─────────────────────────────────────────────────────────────────────────────
 # BRANCH F — OPEN KG
 # ─────────────────────────────────────────────────────────────────────────────
@@ -492,7 +486,6 @@ elif query_type == "open_kg":
             print(f"\nRaw answer: {raw}")
 
             if raw:
-                from pipeline.executor import format_answer_list
                 answer = format_answer_list(question, raw, lang)
                 log["final_answer"] = answer
                 log["failure_type"] = "success"
@@ -520,7 +513,8 @@ elif query_type == "ask_query":
         print(f"\nRaw answer  : {result['raw_answer']}")
         print(f"Final answer: {result['final_answer']}")
     else:
-        print(f"ASK resolution failed: {result['failure_type']}")                
+        print(f"ASK resolution failed: {result['failure_type']}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6: SAVE LOG
 # ─────────────────────────────────────────────────────────────────────────────

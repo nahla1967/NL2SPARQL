@@ -172,11 +172,9 @@ def _run_single_kg1(question: str, routing: dict, lang: str) -> dict:
     full_prop2_uri = (BASE + property2_uri) if property2_uri else None
 
     sparql = inject_and_generate(
-        
         flight_uri, full_prop_uri, question,
         strategy=STRATEGY, property2_uri=full_prop2_uri
     )
-    print(f"[debug] sparql=\n{sparql}")  # ← add this
 
     out["sparql"] = sparql
 
@@ -423,9 +421,7 @@ def _run_open_kg(question: str, routing: dict, lang: str) -> dict:
         return out
 
     raw = execute_sparql(sparql, endpoint=endpoint, multiple=True)
-    print(f"[debug] raw={raw}")
     out["raw_answer"] = raw
-
     if raw:
         out["final_answer"] = format_answer_list(question, raw, lang)
         out["failure_type"] = "success"
