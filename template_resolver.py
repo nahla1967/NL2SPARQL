@@ -278,6 +278,32 @@ Return ONLY a JSON object with these keys:
 - "limit": integer, default 10 if not specified
 Example: {{"property": "worksFor", "value": "Department3", "limit": 10}}
 Return ONLY the JSON. No explanation.""",
+"group_aggregate_kg1": f"""Extract parameters from this flight aggregation question.
+Question: "{question}"
+Return ONLY a JSON object with these keys:
+- "property": one of [gspeed, vspeed]
+- "function": one of [AVG, SUM, MAX, MIN]
+Group-by is always "airline" for this template — do not extract it.
+Example: {{"property": "gspeed", "function": "AVG"}}
+Return ONLY the JSON. No explanation.""",
+
+        "group_aggregate_kg2": f"""Extract parameters from this airport aggregation question.
+Question: "{question}"
+Return ONLY a JSON object with these keys:
+- "group_by": "country" or "continent"
+- "property": one of [elevationFt, lengthFt, widthFt]
+- "function": one of [AVG, SUM, MAX, MIN]
+Example: {{"group_by": "country", "property": "elevationFt", "function": "AVG"}}
+Return ONLY the JSON. No explanation.""",
+
+        "group_aggregate_kg3": f"""Extract parameters from this university aggregation question.
+Question: "{question}"
+Return ONLY a JSON object with these keys:
+- "property": "teacherOf" (courses taught) or "takesCourse" (courses taken)
+- "function": one of [AVG, MAX, MIN]
+Group-by is always "department" for this template — do not extract it.
+Example: {{"property": "teacherOf", "function": "AVG"}}
+Return ONLY the JSON. No explanation.""",
     }
 
     prompt = prompts.get(template_name, "")
@@ -430,7 +456,129 @@ def _build_ranking_kg2(params: dict) -> tuple[str, str] | None:
     label = f"top {limit} airports by {prop_info['label']} ({direction_word})"
     return sparql, label
 
+def _build_group_aggregate_kg1(params: dict) -> tuple[str, str] | None:
+    """
+    SELECT ?groupName (AVG(?value) AS ?agg) WHERE {
+      ?flight a fo:Flight .
+      ?flight fo:hasAirline ?airline .
+      ?airline fo:operating_as ?groupName .
+      ?flight fo:hasFlightEvent ?event .
+      ?event fo:gspeed ?value .
+    } GROUP BY ?groupName ORDER BY DESC(?agg)
+    """
+    from kg_registry import get_group_aggregate_config, AGGREGATE_FUNCTIONS
 
+    prop     = params.get("property", "gspeed")
+    function = (params.get("function") or "AVG").upper()
+
+    if function not in AGGREGATE_FUNCTIONS:
+        return None
+
+    cfg = get_group_aggregate_config("flights")
+    prop_info = cfg["numeric_properties"].get(prop)
+    if not prop_info:
+        return None
+
+    group_info = cfg["group_by"]["airline"]
+
+    sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+  ?flight a <{KG1}Flight> .
+  ?flight <{KG1}{group_info['hop_property']}> ?groupNode .
+  ?groupNode <{KG1}{group_info['name_property']}> ?groupName .
+  ?flight <{KG1}{prop_info['hop']}> ?event .
+  ?event <{KG1}{prop}> ?value .
+}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+
+    label = f"{function} of {prop} grouped by airline"
+    return sparql, label
+
+
+def _build_group_aggregate_kg2(params: dict) -> tuple[str, str] | None:
+    """
+    Direct property (elevationFt):
+      SELECT ?groupName (AVG(?value) AS ?agg) WHERE {
+        ?airport a ao:Airport .
+        ?airport ao:locatedInCountry ?c .
+        ?c ao:countryName ?groupName .
+        ?airport ao:elevationFt ?value .
+      } GROUP BY ?groupName
+
+    Runway property (lengthFt/widthFt): adds the hasRunway hop.
+    """
+    from kg_registry import get_group_aggregate_config, AGGREGATE_FUNCTIONS
+
+    group_by = params.get("group_by", "country")
+    prop     = params.get("property", "elevationFt")
+    function = (params.get("function") or "AVG").upper()
+
+    if function not in AGGREGATE_FUNCTIONS:
+        return None
+
+    cfg = get_group_aggregate_config("airports")
+    group_info = cfg["group_by"].get(group_by)
+    prop_info  = cfg["numeric_properties"].get(prop)
+    if not group_info or not prop_info:
+        return None
+
+    if prop_info["hop"] == "hasRunway":
+        sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+  ?airport a <{KG2}Airport> .
+  ?airport <{KG2}{group_info['hop_property']}> ?groupNode .
+  ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
+  ?airport <{KG2}hasRunway> ?runway .
+  ?runway <{KG2}{prop}> ?value .
+}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+    else:
+        sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+  ?airport a <{KG2}Airport> .
+  ?airport <{KG2}{group_info['hop_property']}> ?groupNode .
+  ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
+  ?airport <{KG2}{prop}> ?value .
+}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+
+    label = f"{function} of {prop} grouped by {group_by}"
+    return sparql, label
+
+
+def _build_group_aggregate_kg3(params: dict) -> tuple[str, str] | None:
+    """
+    Nested subquery — see design note. Inner query counts the relation
+    per (person, department) pair; outer query aggregates those counts
+    per department.
+
+      SELECT ?deptName (AVG(?cnt) AS ?agg) WHERE {
+        SELECT ?dept ?deptName (COUNT(?obj) AS ?cnt) WHERE {
+          ?person ub:worksFor ?dept .
+          ?dept ub:name ?deptName .
+          ?person ub:teacherOf ?obj .
+        } GROUP BY ?dept ?deptName
+      } GROUP BY ?deptName
+    """
+    from kg_registry import get_group_aggregate_config
+
+    prop     = params.get("property", "teacherOf")
+    function = (params.get("function") or "AVG").upper()
+
+    if function not in {"AVG", "MAX", "MIN"}:
+        return None
+
+    cfg = get_group_aggregate_config("university")
+    prop_info = cfg["countable_properties"].get(prop)
+    if not prop_info:
+        return None
+
+    group_info = cfg["group_by"]["department"]
+
+    sparql = f"""SELECT ?deptName ({function}(?cnt) AS ?agg) WHERE {{
+  SELECT ?person ?dept ?deptName (COUNT(?obj) AS ?cnt) WHERE {{
+    ?person <{KG3}{group_info['hop_property']}> ?dept .
+    ?dept <{KG3}{group_info['name_property']}> ?deptName .
+    ?person <{KG3}{prop}> ?obj .
+  }} GROUP BY ?person ?dept ?deptName
+}} GROUP BY ?deptName ORDER BY DESC(?agg)"""
+
+    label = f"{function} of {prop_info['label']} per person, grouped by department"
+    return sparql, label
 def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?name ?value WHERE {
@@ -797,6 +945,9 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
         "cross_kg_filter":      (_build_cross_kg_filter,      None,   None),
         "count_kg3": (_build_count_kg3, KG3_EP, ["name"]),
         "filter_string_kg3": (_build_filter_string_kg3, KG3_EP, ["name"]),
+        "group_aggregate_kg1": (_build_group_aggregate_kg1, KG1_EP, ["groupName", "agg"]),
+        "group_aggregate_kg2": (_build_group_aggregate_kg2, KG2_EP, ["groupName", "agg"]),
+        "group_aggregate_kg3": (_build_group_aggregate_kg3, KG3_EP, ["deptName", "agg"]),
     }
     # KG3 templates need the entity name, detected deterministically —
     # same regex the router uses, not extracted by the LLM (avoids the

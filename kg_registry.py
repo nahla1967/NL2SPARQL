@@ -220,6 +220,27 @@ TEMPLATE_REGISTRY = {
         "base_uri":    KG_REGISTRY["university"]["base_uri"],
         "description": "Filter university people by department membership",
     },
+
+    "group_aggregate_kg1": {
+        "kg":          "flights",
+        "endpoint":    KG_REGISTRY["flights"]["endpoint"],
+        "base_uri":    KG_REGISTRY["flights"]["base_uri"],
+        "description": "Aggregate a numeric flight property grouped by airline",
+    },
+
+    "group_aggregate_kg2": {
+        "kg":          "airports",
+        "endpoint":    KG_REGISTRY["airports"]["endpoint"],
+        "base_uri":    KG_REGISTRY["airports"]["base_uri"],
+        "description": "Aggregate a numeric airport property grouped by country or continent",
+    },
+
+    "group_aggregate_kg3": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Aggregate a count (courses/students) grouped by department",
+    },
 }
 
 # ── KG2 PROPERTY HOP TABLE ────────────────────────────────────────────────────
@@ -247,6 +268,55 @@ KG2_PROPERTY_HOPS = {
     # Region properties — must go through locatedInRegion first
     "regionName":  ("locatedInRegion", "regionName"),
 }
+
+# ── GROUP-BY / AGGREGATE PROPERTY MAPS ────────────────────────────────────────
+# Describes valid (group_property, numeric_property, aggregate_function)
+# combinations for group_aggregate_kg1/kg2/kg3 templates.
+#
+# WHY SCOPED THIS NARROWLY:
+#   KG1 groups by airline only (for now — city/country grouping reuses the
+#   same builder shape and can be added later with no design change).
+#   KG2 groups by country or continent (both reached via locatedInCountry,
+#   same hop already used elsewhere).
+#   KG3 has no numeric properties on people — "aggregate" there always means
+#   COUNT per professor/student, then AVG/MAX/MIN of those counts per
+#   department. This requires a nested subquery, unlike KG1/KG2's direct
+#   aggregate. See _build_group_aggregate_kg3() for the SPARQL shape.
+
+GROUP_AGGREGATE_KG1 = {
+    "group_by": {
+        "airline": {"hop_property": "hasAirline", "name_property": "operating_as"},
+    },
+    "numeric_properties": {
+        "gspeed": {"hop": "hasFlightEvent", "unit": "knots"},
+        "vspeed": {"hop": "hasFlightEvent", "unit": "ft/min"},
+    },
+}
+
+GROUP_AGGREGATE_KG2 = {
+    "group_by": {
+        "country":   {"hop_property": "locatedInCountry", "name_property": "countryName"},
+        "continent": {"hop_property": "locatedInCountry", "name_property": "continent"},
+    },
+    "numeric_properties": {
+        "elevationFt": {"hop": "direct"},
+        "lengthFt":    {"hop": "hasRunway"},
+        "widthFt":     {"hop": "hasRunway"},
+    },
+}
+
+GROUP_AGGREGATE_KG3 = {
+    "group_by": {
+        "department": {"hop_property": "worksFor", "name_property": "name"},
+    },
+    # Countable relations per person — no true numeric property exists.
+    "countable_properties": {
+        "teacherOf":    {"label": "courses taught"},
+        "takesCourse":  {"label": "courses taken"},
+    },
+}
+
+AGGREGATE_FUNCTIONS = {"AVG", "SUM", "MAX", "MIN"}
 # ── OPEN KG SCHEMA DESCRIPTION ───────────────────────────────────────────────
 # Human-readable schema injected into LLM prompts for the open_kg branch.
 # Describes exactly what data exists in both KGs — nothing more, nothing less.
@@ -389,6 +459,19 @@ def get_property_hop(property_short: str, kg_name: str = "airports"):
         if hop:
             return hop[0], hop[1]
     return property_short, None
+
+
+
+# ── INSERT HERE ────────────────────────────────────────────────────────────
+def get_group_aggregate_config(kg_name: str) -> dict:
+    """Group-by/aggregate property map for a KG (flights/airports/university)."""
+    return {
+        "flights":    GROUP_AGGREGATE_KG1,
+        "airports":   GROUP_AGGREGATE_KG2,
+        "university": GROUP_AGGREGATE_KG3,
+    }[kg_name]
+# ── END INSERT ─────────────────────────────────────────────────────────────
+
 def get_open_kg_schema() -> str:
     """Returns the schema description for open_kg SPARQL generation."""
     return OPEN_KG_SCHEMA

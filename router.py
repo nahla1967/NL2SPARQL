@@ -223,7 +223,22 @@ Classify the question into exactly one of these query types and extract its para
 
 9. out_of_scope — cannot be answered from this database
    params: {}
-10. open_kg — the question is about aviation data but does not fit any
+
+10. group_aggregate_kg1 — aggregate a numeric flight property, grouped by airline
+    params: group_by ("airline"), property (gspeed or vspeed),
+            function (AVG, SUM, MAX, or MIN)
+
+11. group_aggregate_kg2 — aggregate a numeric airport property, grouped by
+    country or continent
+    params: group_by ("country" or "continent"), property
+            (elevationFt, lengthFt, or widthFt), function (AVG, SUM, MAX, or MIN)
+
+12. group_aggregate_kg3 — aggregate a COUNT of a relation (courses taught,
+    courses taken), grouped by department
+    params: group_by ("department"), property (teacherOf or takesCourse),
+            function (AVG, MAX, or MIN — no SUM, since summing counts of
+            counts is rarely a meaningful question)   
+13. open_kg — the question is about aviation data but does not fit any
     template above. It asks about a specific property or relationship
     that requires a custom query.
     params: {}
@@ -235,12 +250,12 @@ Classify the question into exactly one of these query types and extract its para
     - "What is the registration number of the aircraft on flight BR62?" → open_kg
     - "Quel vol a la vitesse verticale la plus basse?" → open_kg
 
-11. count_kg3 — count or list university entities linked to a specific
+14. count_kg3 — count or list university entities linked to a specific
     named entity (professor, student, department). Only applies when the
     question BOTH names a specific entity (e.g. "FullProfessor0",
     "Department0") AND asks "how many" / "list all", not a single fact.
     params: property, direction, mode    
-12. filter_string_kg3 — list university people (professors/students)
+15. filter_string_kg3 — list university people (professors/students)
     belonging to a specific NAMED department, filtered by relationship
     type. Use when the question asks "which/who" belongs to a department
     by name, not about one already-named person.
@@ -291,7 +306,53 @@ University properties (only when a LUBM entity name like "FullProfessor0",
   "students", "members" (of a department)      → property=memberOf, direction=incoming
   "professors", "faculty", "staff" (of a dept) → property=worksFor, direction=incoming
   "departments" (of a university)              → property=subOrganizationOf, direction=incoming  
+Group-by / aggregate signal words:
+  "average", "mean"                            → function=AVG
+  "total", "sum"                                → function=SUM
+  "highest", "most", "maximum"                  → function=MAX
+  "lowest", "least", "minimum"                  → function=MIN
+  "per airline", "by airline", "for each airline" → group_by=airline
+  "per country", "by country"                   → group_by=country
+  "per continent", "by continent"               → group_by=continent
+  "per department", "by department"             → group_by=department
+  Group-by / aggregate signal words:
+  "average", "mean"                                          → function=AVG
+  "moyenne", "moyen"                                         → function=AVG
+  "متوسط", "معدل"                                            → function=AVG
 
+  "total", "sum"                                              → function=SUM
+  "total", "somme"                                            → function=SUM
+  "مجموع", "إجمالي"                                          → function=SUM
+
+  "highest", "most", "maximum"                                → function=MAX
+  "le plus élevé", "maximum", "le plus"                       → function=MAX
+  "الأعلى", "الأكثر", "أقصى"                                  → function=MAX
+
+  "lowest", "least", "minimum"                                → function=MIN
+  "le plus bas", "minimum", "le moins"                        → function=MIN
+  "الأدنى", "الأقل", "أدنى"                                   → function=MIN
+
+  "per airline", "by airline", "for each airline"             → group_by=airline
+  "par compagnie", "par compagnie aérienne"                   → group_by=airline
+  "لكل شركة طيران", "حسب شركة الطيران"                        → group_by=airline
+
+  "per country", "by country"                                 → group_by=country
+  "par pays"                                                  → group_by=country
+  "لكل دولة", "حسب الدولة", "بحسب الدولة"                     → group_by=country
+
+  "per continent", "by continent"                             → group_by=continent
+  "par continent"                                             → group_by=continent
+  "لكل قارة", "حسب القارة"                                    → group_by=continent
+
+  "per department", "by department"                           → group_by=department
+  "par département"                                           → group_by=department
+  "لكل قسم", "حسب القسم", "بحسب القسم"                        → group_by=department
+  IMPORTANT: distinguish group_aggregate from ranking_kg2/filter_numeric_kg1.
+  Ranking questions ask for the top/bottom N individual entities
+  ("which airport has the highest elevation?" → ranking_kg2).
+  Group-aggregate questions ask for a computed value PER CATEGORY
+  ("what is the average elevation per country?" → group_aggregate_kg2).
+  The word "per", "by", "for each", or "grouped by" is the strongest signal.
 ── DISAMBIGUATION RULES ──────────────────────────────────────────────────────
 
 CROSS_KG_FILTER: Use when a specific flight number is mentioned AND the
@@ -420,6 +481,17 @@ A: {{"query_type": "filter_string_kg3", "params": {{"property": "worksFor", "val
 
 Q: "List students who are members of Department1."
 A: {{"query_type": "filter_string_kg3", "params": {{"property": "memberOf", "value": "Department1", "limit": 10}}}}
+Q: "What is the average ground speed per airline?"
+A: {{"query_type": "group_aggregate_kg1", "params": {{"group_by": "airline", "property": "gspeed", "function": "AVG"}}}}
+
+Q: "What is the maximum elevation per country?"
+A: {{"query_type": "group_aggregate_kg2", "params": {{"group_by": "country", "property": "elevationFt", "function": "MAX"}}}}
+
+Q: "Quelle est la longueur de piste moyenne par pays?"
+A: {{"query_type": "group_aggregate_kg2", "params": {{"group_by": "country", "property": "lengthFt", "function": "AVG"}}}}
+
+Q: "Which department teaches the most courses on average per professor?"
+A: {{"query_type": "group_aggregate_kg3", "params": {{"group_by": "department", "property": "teacherOf", "function": "AVG"}}}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"

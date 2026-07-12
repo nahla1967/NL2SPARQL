@@ -109,9 +109,18 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 FULL_SYSTEM_TESTS =[
     # ── single_kg3 (direct lookups) ──────────────────────────────────────────
-    ("Is BR62's callsign EVA062?",        "ask_query", "ask_kg1_direct_001"),
-    ("Is CDG located in France?",         "ask_query", "ask_kg2_hop_001"),
-    ("Is FullProfessor0's name known?",   "ask_query", "ask_kg3_001"),  # adjust to a real, verifiable fact in your KG3
+    # ── group_aggregate (LLM classification test) ─────────────────────────────
+    ("What is the average ground speed per airline?",
+     "template", "group_agg_kg1_en_001"),
+
+    ("Quelle est l'élévation moyenne par pays?",
+     "template", "group_agg_kg2_fr_001"),
+
+    ("ما هو متوسط عدد المواد التي يدرّسها الأساتذة لكل قسم؟",
+     "template", "group_agg_kg3_ar_001"),
+     
+      ("ما هو متوسط عدد المواد التي يدرّسها الأستاذ بحسب القسم؟",
+     "template", "group_agg_kg3_ar_002_variant"),# adjust to a real, verifiable fact in your KG3
 ]
 
 ALL_TESTS = [

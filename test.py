@@ -1,8 +1,7 @@
-from router import route
-from template_resolver import resolve_ask_query
 from pipeline.language import detect_language
+from template_resolver import resolve_template
 
-question = "Is CDG located in France?"
+question = "What is the average number of courses taught per department?"
 lang = detect_language(question)
-routing = route(question)
-print(resolve_ask_query(question, routing, lang))
+result = resolve_template(question, "group_aggregate_kg3", lang)
+print(result)
