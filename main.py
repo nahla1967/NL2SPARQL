@@ -497,6 +497,30 @@ elif query_type == "open_kg":
                 log["final_answer"] = answer
                 log["failure_type"] = "success"
                 print(f"Final answer: {answer}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH — ASK_QUERY (yes/no questions about a known entity)
+# ─────────────────────────────────────────────────────────────────────────────
+elif query_type == "ask_query":
+
+    from template_resolver import resolve_ask_query
+    result = resolve_ask_query(question, routing, lang)
+
+    log.update({
+        "entity_uri":   result.get("entity_uri"),
+        "property_uri": result.get("property_uri"),
+        "sparql":       result.get("sparql"),
+        "raw_answer":   result.get("raw_answer"),
+        "final_answer": result.get("final_answer"),
+        "failure_type": result.get("failure_type"),
+        "sparql_valid": result.get("success", False),
+    })
+
+    if result["success"]:
+        print(f"\nRaw answer  : {result['raw_answer']}")
+        print(f"Final answer: {result['final_answer']}")
+    else:
+        print(f"ASK resolution failed: {result['failure_type']}")                
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6: SAVE LOG
 # ─────────────────────────────────────────────────────────────────────────────

@@ -421,6 +421,53 @@ def execute_ask_sparql(query: str, endpoint: str) -> bool | None:
     except Exception as e:
         print(f"[execute_ask_sparql] Unexpected error: {e}")
     return None
+def build_ask_query(
+    entity_uri:    str,
+    property_uri:  str,
+    value:         str,
+    property2_uri: str | None = None,
+) -> str:
+    """
+    Builds a SPARQL ASK query checking whether an entity has a specific
+    property value — direct (one-hop) or via an intermediate node (two-hop).
+
+    TWO-HOP CASE (property2_uri given):
+        Some properties require an intermediate node — e.g. an airport's
+        country is not a direct property; it requires:
+            <airport> <locatedInCountry> ?intermediate .
+            ?intermediate <countryName> ?value .
+        This mirrors the two-hop pattern already used in
+        inject_and_generate() for SELECT queries and get_property_hop()
+        in kg_registry.py — the hop structure is defined once, in the
+        registry, and reused consistently across SELECT and ASK.
+
+    See build_ask_query's original docstring for the FILTER(STR(...))
+    and local-name-stripping reasoning — both apply identically here.
+
+    Args:
+        entity_uri    : full URI of the subject
+        property_uri  : full URI of the (first-hop) property
+        value         : the value to compare against
+        property2_uri : full URI of the second-hop property, if any
+
+    Returns:
+        A SPARQL ASK query string.
+    """
+    safe_value = value.replace('"', '\\"')
+
+    if property2_uri:
+        return f"""ASK {{
+  <{entity_uri}> <{property_uri}> ?intermediate .
+  ?intermediate <{property2_uri}> ?value .
+  BIND(REPLACE(REPLACE(STR(?value), "^.*[/#]", ""), "_", " ") AS ?local_value)
+  FILTER(?local_value = "{safe_value}")
+}}"""
+
+    return f"""ASK {{
+  <{entity_uri}> <{property_uri}> ?value .
+  BIND(REPLACE(REPLACE(STR(?value), "^.*[/#]", ""), "_", " ") AS ?local_value)
+  FILTER(?local_value = "{safe_value}")
+}}"""
 # ── ANSWER FORMATTING ─────────────────────────────────────────────────────────
 def format_answer(question: str, raw_value: str, lang: str) -> str:
     lang_map      = {"en": "English", "fr": "French", "ar": "Arabic"}

@@ -265,3 +265,84 @@ def validate_university_extraction(entities: dict) -> bool:
     if not entities.get("property"):
         return False
     return True
+
+def extract_ask_entities(question: str, lang: str, entity_from_router: str | None) -> dict:
+    """
+    Extracts the property phrase AND the comparison value from an
+    ASK-style question (e.g. "Is BR62's callsign EVA062?").
+
+    DESIGN: same convention as extract_airport_entities() and
+    extract_university_entities() — the entity itself is already
+    resolved by the router (Priority 1.5). Only property + value
+    need LLM extraction here. Unlike the other extractors, ASK
+    questions require TWO pieces of information instead of one,
+    since they assert a specific value rather than just requesting one.
+
+    Args:
+        question           : the user's original question
+        lang                : detected language code (en / fr / ar)
+        entity_from_router  : entity already resolved by router
+                              (flight number, IATA code, or university entity)
+
+    Returns:
+        {
+            "entity":   entity string (passed through from router),
+            "property": raw property phrase from the question,
+            "value":    the comparison value being asserted,
+        }
+    """
+    prompt = f"""You are a property and value extractor for a yes/no (ASK-style) question
+about a knowledge graph.
+
+TASK: The question asserts that a specific entity has a specific property
+value. Extract two things:
+1. "property" — the property being asked about, AS IT APPEARS in the question
+2. "value" — the value being asserted, exactly as written (do not translate,
+   do not reformat)
+
+RULES:
+- Extract phrases AS THEY APPEAR in the question (do not translate)
+- Do not include the entity name/ID itself in either field
+- Return ONLY the JSON object — no labels, no explanation
+
+EXAMPLES:
+"Is BR62's callsign EVA062?"                → {{"property": "callsign", "value": "EVA062"}}
+"Is CDG located in France?"                 → {{"property": "located in", "value": "France"}}
+"Does flight OS295 depart from Vienna?"     → {{"property": "departure city", "value": "Vienna"}}
+"Est-ce que le vol TK1887 atterrit à CDG?"  → {{"property": "atterrit à", "value": "CDG"}}
+"هل مطار فيينا يقع في النمسا؟"              → {{"property": "يقع في", "value": "النمسا"}}
+
+Return ONLY a JSON object with keys "property" and "value". No explanation.
+
+Question: {question}
+"""
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw    = response["message"]["content"]
+        parsed = safe_json_parse(raw)
+        prop  = (parsed.get("property", "") if parsed else "").strip().lower()
+        value = (parsed.get("value", "")    if parsed else "").strip()
+        return {"entity": entity_from_router, "property": prop, "value": value}
+    except Exception as e:
+        return {
+            "entity":   entity_from_router,
+            "property": "",
+            "value":    "",
+            "reason":   f"ollama_error: {str(e)}"
+        }
+
+
+def validate_ask_extraction(entities: dict) -> bool:
+    """
+    Validates ASK extraction. Unlike other validators, BOTH property
+    AND value are required — an ASK question with a value but no known
+    property (or vice versa) cannot be resolved to a SPARQL ASK query.
+    """
+    if not entities.get("property"):
+        return False
+    if not entities.get("value"):
+        return False
+    return True

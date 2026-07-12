@@ -3,6 +3,8 @@ template_resolver.py
 --------------------
 Resolves complex queries using predefined SPARQL templates.
 Handles: filters, rankings, comparisons, counts, and cross-KG aggregates.
+Also resolves ask_query (yes/no) questions — see resolve_ask_query() at
+the bottom of this file.
 
 DESIGN PRINCIPLE:
     The LLM extracts parameters (threshold, property, value, entities).
@@ -21,8 +23,19 @@ TEMPLATE CATEGORIES:
         count_kg1             : count/list flights matching a condition
         filter_numeric_kg1    : flights where speed > / < threshold
 
+    KG3 — University queries:
+        count_kg3              : count/list entities linked to a named entity
+        filter_string_kg3      : filter people by department membership
+
     Cross-KG:
         cross_kg_filter       : flights whose airport property meets condition
+
+    ASK (all KGs):
+        resolve_ask_query()   : yes/no questions about a known entity's
+                                 property value — separate from the template
+                                 registry pattern above, since it returns a
+                                 boolean rather than rows. See its own
+                                 docstring below for the full rationale.
 
 SPARQL GENERATION:
     Templates use Python f-strings with validated parameter slots.
@@ -39,7 +52,15 @@ from kg_registry import (
     get_endpoint, get_base_uri, get_lexicon,
     TEMPLATE_REGISTRY, CROSS_KG_CONFIG
 )
-from pipeline.mapper import map_university_entity
+from pipeline.mapper import (
+    map_university_entity,
+    map_flight,
+    map_airport,
+    load_lexicon,
+    map_property_cascade,
+)
+from pipeline.extractor import extract_ask_entities, validate_ask_extraction
+from pipeline.executor  import build_ask_query, execute_ask_sparql
 
 # ── BASE URIs ─────────────────────────────────────────────────────────────────
 KG1   = get_base_uri("flights")
@@ -722,7 +743,7 @@ def _format_answer(question: str, raw_data: str, lang: str) -> str:
     return f"There are {count} result(s):\n\n{listed}"
 
 
-# ── MAIN RESOLVER ─────────────────────────────────────────────────────────────
+# ── MAIN RESOLVER (templates) ─────────────────────────────────────────────────
 
 def resolve_template(question: str, template_name: str, lang: str) -> dict:
     """
@@ -730,7 +751,7 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
 
     Args:
         question      : original user question
-        template_name : one of the 7 template types
+        template_name : one of the registered template types
         lang          : detected language (en/fr/ar)
 
     Returns:
@@ -903,4 +924,133 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
     result["success"]      = True
     result["failure_type"] = "success"
 
+    return result
+
+
+# ── ASK RESOLVER ───────────────────────────────────────────────────────────────
+
+def _format_ask_answer(result: bool, lang: str) -> str:
+    """
+    Template-based yes/no formatting — deterministic by design, not
+    LLM-generated. An ASK result is binary; there is no natural-language
+    ambiguity for an LLM to resolve, only risk of it contradicting the
+    boolean it was given. Same reasoning already applied to
+    format_answer_list's count/listing logic.
+    """
+    templates = {
+        "en": {"true": "Yes.", "false": "No."},
+        "fr": {"true": "Oui.", "false": "Non."},
+        "ar": {"true": "نعم.", "false": "لا."},
+    }
+    lang_templates = templates.get(lang, templates["en"])
+    return lang_templates["true"] if result else lang_templates["false"]
+
+
+def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
+    """
+    Resolves an ask_query routing decision into a boolean SPARQL ASK
+    answer. Mirrors the single_kg1/kg2/kg3 pipelines (extract → map →
+    build → execute), but dispatches entity resolution across all three
+    KGs based on routing["kg"], since ASK questions can target any of
+    them (see router.py Priority 1.5).
+
+    Kept as its own function rather than folded into resolve_template()/
+    TEMPLATE_REGISTRY, because ASK questions:
+      - resolve a single named entity (like single_kg1/kg2/kg3), not a
+        filtered set (like the template branch)
+      - return a boolean, not rows
+      - need a value comparison (FILTER), not just property retrieval
+    Forcing this into the template builder pattern would require either
+    a fake "builder" that doesn't build SELECT-shaped SPARQL, or a
+    special case inside resolve_template() that breaks its "always
+    returns rows" assumption.
+
+    Returns:
+        {
+            success      : bool
+            entity_uri   : resolved subject URI, or None
+            property_uri : resolved (first-hop) property URI, or None
+            value        : the asserted value from the question
+            sparql       : the generated ASK query
+            raw_answer   : True / False / None
+            final_answer : "Yes." / "No." in the detected language
+            failure_type : success | extraction_failure | mapping_failure |
+                           execution_failure | unknown_kg
+        }
+    """
+    result = {
+        "success":      False,
+        "entity_uri":   None,
+        "property_uri": None,
+        "value":        None,
+        "sparql":       None,
+        "raw_answer":   None,
+        "final_answer": None,
+        "failure_type": None,
+    }
+
+    kg     = routing["kg"]
+    entity = routing["entity"]
+
+    # ── Step 1: extract property + asserted value ─────────────────────────────
+    entities = extract_ask_entities(question, lang, entity)
+    if not validate_ask_extraction(entities):
+        result["failure_type"] = "extraction_failure"
+        return result
+
+    # ── Step 2: resolve entity URI + lexicon path per KG ───────────────────────
+    if kg == "flights":
+        entity_uri   = map_flight(entity)
+        lexicon_path = get_lexicon("flights")
+        base_uri     = get_base_uri("flights")
+    elif kg == "airports":
+        entity_uri   = map_airport(entity)
+        lexicon_path = get_lexicon("airports")
+        base_uri     = get_base_uri("airports")
+    elif kg == "university":
+        entity_uri   = map_university_entity(entity)
+        lexicon_path = get_lexicon("university")
+        base_uri     = get_base_uri("university")
+    else:
+        result["failure_type"] = "unknown_kg"
+        return result
+
+    if not entity_uri:
+        result["failure_type"] = "mapping_failure"
+        return result
+    result["entity_uri"] = entity_uri
+
+    # ── Step 3: map property (direct or two-hop) ────────────────────────────────
+    lexicon = load_lexicon(lexicon_path)
+    property_uri, tier, property2_uri = map_property_cascade(
+        entities["property"], lexicon, lexicon_path
+    )
+    if not property_uri:
+        result["failure_type"] = "mapping_failure"
+        return result
+
+    full_property_uri  = base_uri + property_uri
+    full_property2_uri = (base_uri + property2_uri) if property2_uri else None
+    result["property_uri"] = full_property_uri
+    result["value"]        = entities["value"]
+
+    # ── Step 4: build SPARQL ASK ─────────────────────────────────────────────
+    sparql = build_ask_query(
+        entity_uri, full_property_uri, entities["value"],
+        property2_uri=full_property2_uri
+    )
+    result["sparql"] = sparql
+
+    # ── Step 5: execute ───────────────────────────────────────────────────────
+    endpoint = get_endpoint(kg)
+    ask_result = execute_ask_sparql(sparql, endpoint)
+
+    if ask_result is None:
+        result["failure_type"] = "execution_failure"
+        return result
+
+    result["raw_answer"]   = ask_result
+    result["final_answer"] = _format_ask_answer(ask_result, lang)
+    result["success"]      = True
+    result["failure_type"] = "success"
     return result

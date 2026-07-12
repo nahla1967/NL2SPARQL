@@ -109,16 +109,9 @@ from kg_registry        import get_base_uri, get_endpoint, get_lexicon
 
 FULL_SYSTEM_TESTS =[
     # ── single_kg3 (direct lookups) ──────────────────────────────────────────
-    ("Who is the advisor of UndergraduateStudent4?",       "single_kg3", "kg3b_single_001"),
-    ("What courses does AssociateProfessor0 teach?",       "single_kg3", "kg3b_single_002"),
-    ("What university is Department5 part of?",            "single_kg3", "kg3b_single_003"),
-    ("What is AssociateProfessor0's name?",                 "single_kg3", "kg3b_single_004"),
-    ("How many courses does AssociateProfessor0 teach?",    "template",   "kg3b_count_001"),
-    ("How many courses does UndergraduateStudent4 take?",   "template",   "kg3b_count_002"),
-    ("List the courses that UndergraduateStudent4 takes.",  "template",   "kg3b_count_003"),
-    ("How many professors work for Department5?",           "template",   "kg3b_count_004"),
-    ("Which professors work for Department5?",               "template",   "kg3b_filter_001"),
-    ("Which professors work for Department3?",               "template",   "kg3b_filter_002"),
+    ("Is BR62's callsign EVA062?",        "ask_query", "ask_kg1_direct_001"),
+    ("Is CDG located in France?",         "ask_query", "ask_kg2_hop_001"),
+    ("Is FullProfessor0's name known?",   "ask_query", "ask_kg3_001"),  # adjust to a real, verifiable fact in your KG3
 ]
 
 ALL_TESTS = [
@@ -481,7 +474,8 @@ def run_single_test(question: str, expected_type: str) -> dict:
             branch_out = _run_single_kg3(question, routing, lang)
         elif query_type == "open_kg":
             branch_out = _run_open_kg(question, routing, lang)
-        
+        elif query_type == "ask_query":
+            branch_out = _run_ask_query(question, routing, lang)
         else:
             # out_of_scope — nothing to run.
             # Success means the router correctly recognized this as out-of-scope.
@@ -497,7 +491,20 @@ def run_single_test(question: str, expected_type: str) -> dict:
 
     result["duration_s"] = round(time.time() - t0, 2)
     return result
-
+def _run_ask_query(question: str, routing: dict, lang: str) -> dict:
+    """
+    Branch: ask_query — yes/no question about a known entity.
+    Delegates entirely to resolve_ask_query().
+    """
+    from template_resolver import resolve_ask_query
+    ar = resolve_ask_query(question, routing, lang)
+    return {
+        "sparql":       ar.get("sparql"),
+        "sparql_valid": ar.get("success", False),
+        "raw_answer":   ar.get("raw_answer"),
+        "final_answer": ar.get("final_answer"),
+        "failure_type": ar.get("failure_type"),
+    }
 
 # ── DISPLAY ───────────────────────────────────────────────────────────────────
 
