@@ -481,7 +481,7 @@ def _build_group_aggregate_kg1(params: dict) -> tuple[str, str] | None:
 
     group_info = cfg["group_by"]["airline"]
 
-    sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+    sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}{group_info['hop_property']}> ?groupNode .
   ?groupNode <{KG1}{group_info['name_property']}> ?groupName .
@@ -521,7 +521,7 @@ def _build_group_aggregate_kg2(params: dict) -> tuple[str, str] | None:
         return None
 
     if prop_info["hop"] == "hasRunway":
-        sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+        sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}{group_info['hop_property']}> ?groupNode .
   ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
@@ -529,7 +529,7 @@ def _build_group_aggregate_kg2(params: dict) -> tuple[str, str] | None:
   ?runway <{KG2}{prop}> ?value .
 }} GROUP BY ?groupName ORDER BY DESC(?agg)"""
     else:
-        sparql = f"""SELECT ?groupName ({function}(?value) AS ?agg) WHERE {{
+        sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}{group_info['hop_property']}> ?groupNode .
   ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
@@ -569,7 +569,7 @@ def _build_group_aggregate_kg3(params: dict) -> tuple[str, str] | None:
 
     group_info = cfg["group_by"]["department"]
 
-    sparql = f"""SELECT ?deptName ({function}(?cnt) AS ?agg) WHERE {{
+    sparql = f"""SELECT ?deptName (ROUND({function}(?cnt) * 100) / 100 AS ?agg) WHERE {{
   SELECT ?person ?dept ?deptName (COUNT(?obj) AS ?cnt) WHERE {{
     ?person <{KG3}{group_info['hop_property']}> ?dept .
     ?dept <{KG3}{group_info['name_property']}> ?deptName .

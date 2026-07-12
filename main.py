@@ -55,7 +55,7 @@ from template_resolver import resolve_template
 from kg_registry import get_base_uri, get_endpoint, get_lexicon
 
 # ── TEST CONFIGURATION ────────────────────────────────────────────────────────
-question  = "What university is Department5 part of?"
+question  = "What is the average number of courses taught grouped by department?"
 condition = "zero-shot"   # zero-shot | few-shot | cot
 
 # ── STEP 0: LANGUAGE DETECTION ────────────────────────────────────────────────

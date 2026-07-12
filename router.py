@@ -774,17 +774,17 @@ def route(question: str) -> dict:
         if flight_entity:
             return {
                 "query_type": "ask_query", "kg": "flights",
-                "entity": flight_entity, "template": "ask_query",
+                "entity": flight_entity, "direction": None, "template": "ask_query",
             }
         elif airport_entity:
             return {
                 "query_type": "ask_query", "kg": "airports",
-                "entity": airport_entity, "template": "ask_query",
+                "entity": airport_entity, "direction": None, "template": "ask_query",
             }
         elif university_entity:
             return {
                 "query_type": "ask_query", "kg": "university",
-                "entity": university_entity, "template": "ask_query",
+                "entity": university_entity, "direction": None, "template": "ask_query",
             }
 
     # ── Priority 2: Flight number detected ────────────────────────────────────
