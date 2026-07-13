@@ -900,7 +900,7 @@ def _format_answer(question: str, raw_data: str, lang: str, total_count: int = N
 
 # ── MAIN RESOLVER (templates) ─────────────────────────────────────────────────
 
-def resolve_template(question: str, template_name: str, lang: str) -> dict:
+def resolve_template(question: str, template_name: str, lang: str, router_params: dict = None) -> dict:
     """
     Main entry point for template resolution.
 
@@ -932,14 +932,19 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
     }
 
     # ── Step 1: extract parameters ────────────────────────────────────────────
-    params = _extract_params(question, template_name, lang)
+    
+    if router_params:
+        params = router_params
+        print(f"[template] Reusing router params (skipping re-extraction): {params}")
+    else:
+        params = _extract_params(question, template_name, lang)
     result["params"] = params
 
     if not params:
         result["failure_type"] = "param_extraction_failure"
         return result
 
-    print(f"[template] Extracted params: {params}")
+    
 
     # ── Step 2: build SPARQL ──────────────────────────────────────────────────
     builders = {

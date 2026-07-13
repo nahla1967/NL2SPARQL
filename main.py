@@ -349,6 +349,8 @@ elif query_type == "single_kg3":
     # Disambiguate "part of" style phrases: memberOf (person -> dept)
     # vs subOrganizationOf (dept -> university) resolve to the same text
     # but need different properties depending on the entity's real type.
+    FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
+
     if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
         entity_type = get_university_entity_type(entity_uri)
         if entity_type == "Department" and property_uri == "memberOf":
@@ -357,6 +359,9 @@ elif query_type == "single_kg3":
         elif entity_type != "Department" and property_uri == "subOrganizationOf":
             property_uri = "memberOf"
             print(f"[disambiguation] Non-department entity — corrected subOrganizationOf → memberOf")
+        elif entity_type in FACULTY_TYPES and property_uri == "memberOf":
+            property_uri = "worksFor"
+            print(f"[disambiguation] Faculty entity ({entity_type}) — corrected memberOf → worksFor")
     log.update({
         "entity_uri":    entity_uri,
         "property_uri":  property_uri,

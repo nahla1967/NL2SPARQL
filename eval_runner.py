@@ -41,14 +41,8 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "ask_query_001", "ask_query_002", "ask_query_004",
-    "compare_two_airports_001", "compare_two_airports_002", "compare_two_airports_003",
-    "cross_kg_005", "cross_kg_009",
-    "multilingual_edge_001", "multilingual_edge_002", "multilingual_edge_003", "multilingual_edge_004",
-    "open_kg_001", "open_kg_006",
-    "out_of_scope_002",
-    "property_ambiguity_001", "property_ambiguity_002", "property_ambiguity_003", "property_ambiguity_004",
-    "typo_fuzzy_001", "typo_fuzzy_002", "typo_fuzzy_003",
+    
+    "property_ambiguity_001", 
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -210,12 +204,17 @@ def _run_single_kg3(question, routing, strategy, lang):
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
 
     # Disambiguate "part of" style phrases — same fix as main.py / test_pipeline.py.
+    # Disambiguate "part of" style phrases — same fix as main.py / test_pipeline.py.
+    FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
+
     if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
         entity_type = get_university_entity_type(entity_uri)
         if entity_type == "Department" and property_uri == "memberOf":
             property_uri = "subOrganizationOf"
         elif entity_type != "Department" and property_uri == "subOrganizationOf":
             property_uri = "memberOf"
+        elif entity_type in FACULTY_TYPES and property_uri == "memberOf":
+            property_uri = "worksFor"
 
     if not entity_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
@@ -295,7 +294,7 @@ def _run_open_kg(question, lang):
 
 
 def _run_template(question, routing, lang):
-    tr = resolve_template(question, routing["template"], lang)
+    tr = resolve_template(question, routing["template"], lang, router_params=routing.get("params"))
     return {
         "sparql": tr.get("sparql"), "sparql_valid": tr.get("success", False),
         "raw_answer": tr.get("raw_data"), "final_answer": tr.get("final_answer"),

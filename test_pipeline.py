@@ -277,7 +277,7 @@ def _run_single_kg3(question: str, routing: dict, lang: str) -> dict:
         entities["property"], lexicon, lexicon_path
     )
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
-
+    FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
     # Disambiguate "part of" style phrases: memberOf (person -> dept)
     # vs subOrganizationOf (dept -> university) — same fix as main.py.
     if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
@@ -286,6 +286,9 @@ def _run_single_kg3(question: str, routing: dict, lang: str) -> dict:
             property_uri = "subOrganizationOf"
         elif entity_type != "Department" and property_uri == "subOrganizationOf":
             property_uri = "memberOf"
+
+        elif entity_type in FACULTY_TYPES and property_uri == "memberOf":
+            property_uri = "worksFor"    
     
     if not entity_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
