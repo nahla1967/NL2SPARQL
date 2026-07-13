@@ -640,7 +640,11 @@ def _has_filter_signal(q: str) -> bool:
 def _has_count_signal(q: str) -> bool:
     q_lower = q.lower()
     return any(sig in q_lower for sig in _COUNT_SIGNALS)
+_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن"]
 
+def _has_compare_signal(q: str) -> bool:
+    q_lower = q.lower()
+    return any(sig in q_lower for sig in _COMPARE_SIGNALS)
 _ASK_SIGNALS = ["is ", "are ", "does ", "do ", "was ", "were ",
                 "est-ce que", "est-ce", "y a-t-il",
                 "هل "]
@@ -657,6 +661,8 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
     prompt = _CLASSIFICATION_PROMPT.replace("{question}", question)
 
     for attempt in range(max_attempts):
+        
+        raw = ""
         try:
             response = ollama.chat(
                 model="llama3",
@@ -819,17 +825,15 @@ def route(question: str) -> dict:
         params     = classified.get("params", {})
 
         if query_type == "cross_kg_filter":
-            # The question asks about the airport property, not the flight.
-            # direction tells the cross_kg_resolver which airport to look up.
             direction = params.get("direction", "destination")
-            return {
-                "query_type": "cross_kg",
-                "kg":         "cross",
-                "entity":     flight,
-                "direction":  direction,
-                "template":   None,
-                "config":     CROSS_KG_CONFIG,
-            }
+            return {"query_type": "cross_kg", "kg": "cross", "entity": flight,
+                     "direction": direction, "template": None, "config": CROSS_KG_CONFIG}
+
+        if query_type == "out_of_scope":          # NEW — respect it instead of forcing single_kg1
+            return {"query_type": "out_of_scope", "kg": None, "entity": None,
+                     "direction": None, "template": None, "config": None}
+
+           # unchanged fallback for everything else
 
         # LLM returned anything other than cross_kg_filter, or failed.
         # Treat as a plain KG1 flight question.
@@ -844,7 +848,7 @@ def route(question: str) -> dict:
 
     # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
-    if airport:
+    if airport and not _has_compare_signal(question):
         return {
             "query_type": "single_kg2",
             "kg":         "airports",

@@ -32,12 +32,24 @@ import json
 import re
 import time
 import pandas as pd
+import os
+
 
 DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
 OUTPUT_PATH  = "eval_results.jsonl"
 
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
+BROKEN_IDS = {
+    "ask_query_001", "ask_query_002", "ask_query_004",
+    "compare_two_airports_001", "compare_two_airports_002", "compare_two_airports_003",
+    "cross_kg_005", "cross_kg_009",
+    "multilingual_edge_001", "multilingual_edge_002", "multilingual_edge_003", "multilingual_edge_004",
+    "open_kg_001", "open_kg_006",
+    "out_of_scope_002",
+    "property_ambiguity_001", "property_ambiguity_002", "property_ambiguity_003", "property_ambiguity_004",
+    "typo_fuzzy_001", "typo_fuzzy_002", "typo_fuzzy_003",
+}
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
 from router import route
@@ -330,13 +342,25 @@ def _dispatch(question, lang, strategy):
 
 def main():
     df = pd.read_excel(DATASET_PATH, sheet_name="Questions")
+    df = df[df["id"].isin(BROKEN_IDS)]           # only re-run what broke
+
+    old_good_rows = []
+    if os.path.exists(OUTPUT_PATH):
+        with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                rec = json.loads(line)
+                if rec["id"] not in BROKEN_IDS:    # keep everything that already passed
+                    old_good_rows.append(line)
+
     out_f = open(OUTPUT_PATH, "w", encoding="utf-8")
+    for line in old_good_rows:
+        out_f.write(line)
 
     total_runs = 0
     skipped = 0
 
     for _, row in df.iterrows():
-        strategies = STRATEGIES if bool(row["strategy_applicable"]) else ["n/a"]
+        strategies = STRATEGIESstrategies = STRATEGIES if bool(row["strategy_applicable"]) else ["zero-shot"]
 
         for lang in LANGUAGES:
             question = row.get(f"question_{lang}")

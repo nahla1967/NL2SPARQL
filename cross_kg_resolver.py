@@ -11,9 +11,9 @@ PATTERN:
     Step 3 → KG2:  Airport URI + property  →  answer  (e.g. "Germany")
 
 GENERIC INTERFACE:
-    resolve_cross_kg(flight_number, direction, airport_property)
+    resolve_cross_kg(flight_uri, direction, property_uri, property_short, property2_uri=None)
 
-    All cross-KG questions reduce to these three parameters.
+    All cross-KG questions reduce to these parameters.
     The function handles the two-step SPARQL pipeline internally.
 
 PROPERTY NAMES:
@@ -106,33 +106,25 @@ LIMIT 1
 
 # ── STEP 3: GET PROPERTY VALUE FROM KG2 ───────────────────────────────────────
 
-def _get_airport_property(airport_uri: str, property_uri: str) -> str | None:
-    """
-    Queries KG2 to retrieve a property value from an Airport node.
-
-    Handles both:
-      - Direct properties: Airport → elevationFt → "1738"
-      - One-hop properties: Airport → locatedInCountry → Country → countryName
-
-    Returns the resolved string value, or None if not found.
-    """
+def _get_airport_property(airport_uri: str, property_uri: str, property2_uri: str | None = None) -> str | None:
     endpoint = CROSS_KG_CONFIG["kg2_endpoint"]
     kg2_base = CROSS_KG_CONFIG["kg2_base"]
 
-    # --- Attempt 1: direct property ---
-    query_direct = f"""
+    if property2_uri:
+        query_two_hop = f"""
 SELECT ?value WHERE {{
-  <{airport_uri}> <{property_uri}> ?value .
+  <{airport_uri}> <{property_uri}> ?node .
+  ?node <{property2_uri}> ?value .
 }}
 LIMIT 1
 """
-    bindings = _sparql_query(endpoint, query_direct)
-    if bindings:
-        raw = bindings[0].get("value", {}).get("value", "")
-        # If the result is a URI (object property), do a second hop
-        if raw.startswith("http"):
-            return _resolve_uri_label(raw, endpoint, kg2_base)
-        return raw
+        bindings = _sparql_query(endpoint, query_two_hop)
+        if bindings:
+            raw = bindings[0].get("value", {}).get("value", "")
+            if raw.startswith("http"):
+                return _resolve_uri_label(raw, endpoint, kg2_base)
+            return raw
+        return None
 
     # --- Attempt 2: one-hop through object property ---
     # Tries: Airport → objectProp → Node → dataProps
@@ -191,10 +183,11 @@ LIMIT 1
 # ── MAIN RESOLVER ─────────────────────────────────────────────────────────────
 
 def resolve_cross_kg(
-    flight_uri:       str,
-    direction:        str,
-    property_uri:     str,
-    property_short:   str,
+    flight_uri: str,
+    direction: str,
+    property_uri: str,
+    property_short: str,
+    property2_uri: str | None = None,
 ) -> dict:
     """
     Generic cross-KG resolver. Bridges KG1 and KG2 via the IATA code.
@@ -204,6 +197,8 @@ def resolve_cross_kg(
         direction       : 'origin' or 'destination'
         property_uri    : full KG2 property URI (e.g. ao:elevationFt full URI)
         property_short  : short name for logging (e.g. 'elevationFt')
+        property2_uri   : optional second-hop KG2 property URI, for two-hop
+                           lookups (e.g. locatedInCountry → countryName)
 
     Returns a dict:
     {
@@ -243,7 +238,7 @@ def resolve_cross_kg(
     print(f"[cross_kg] Step 2 ✓ Airport URI = {airport_uri}")
 
     # Step 3 — KG2: Airport URI → property value
-    raw_value = _get_airport_property(airport_uri, property_uri)
+    raw_value = _get_airport_property(airport_uri, property_uri, property2_uri)
     if not raw_value:
         print(f"[cross_kg] Step 3 failed: property '{property_short}' not found")
         result["failure_type"] = "kg2_property_not_found"

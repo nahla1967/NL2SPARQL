@@ -392,7 +392,7 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
     """
     prop  = params.get("property", "airportType")
     value = params.get("value", "")
-    limit = int(params.get("limit", 10))
+    limit = int(params.get("limit") or 10)
 
     prop_info = KG2_STRING_PROPS.get(prop)
     if not prop_info or not value:
@@ -763,7 +763,7 @@ def _build_filter_string_kg3(params: dict) -> tuple[str, str] | None:
     """
     prop  = params.get("property", "worksFor")
     value = params.get("value", "")
-    limit = int(params.get("limit", 10))
+    limit = int(params.get("limit") or 10)
 
     prop_info = KG3_STRING_PROPS.get(prop)
     if not prop_info or not value:
@@ -859,12 +859,17 @@ def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
             # Clean URIs
             if val.startswith("http"):
                 val = val.split("/")[-1].replace("_", " ")
+            else:
+                try:
+                    val = f"{float(val):.2f}"
+                except ValueError:
+                    pass  # not a number — leave it as-is (a name, code, etc.)
             parts.append(val)
         lines.append(", ".join(parts))
     return "\n".join(lines)
 
+def _format_answer(question: str, raw_data: str, lang: str, total_count: int = None) -> str:
 
-def _format_answer(question: str, raw_data: str, lang: str) -> str:
     """
     Formats the raw result as a natural language answer.
     Counting and numbering are computed in Python — never left to the
@@ -888,6 +893,8 @@ def _format_answer(question: str, raw_data: str, lang: str) -> str:
         return lines[0]
 
     listed = "\n".join(f"{i+1}. {ln}" for i, ln in enumerate(lines))
+    if total_count is not None and total_count > count:
+        return f"There are {total_count} result(s) — showing the first {count}:\n\n{listed}"
     return f"There are {count} result(s):\n\n{listed}"
 
 
@@ -1066,11 +1073,12 @@ def resolve_template(question: str, template_name: str, lang: str) -> dict:
             raw_data  = count_val
         else:
             raw_data = _format_rows(rows, columns)
+            result["total_rows"] = len(rows)
 
         result["raw_data"] = raw_data
 
     # ── Step 4: format answer ─────────────────────────────────────────────────
-    final_answer = _format_answer(question, result["raw_data"], lang)
+    final_answer = _format_answer(question, result["raw_data"], lang, result.get("total_rows"))
     result["final_answer"] = final_answer
     result["success"]      = True
     result["failure_type"] = "success"
