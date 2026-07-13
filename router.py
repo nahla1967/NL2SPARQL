@@ -135,7 +135,31 @@ _KG1_ONLY_SIGNALS = {
     "vole vers",               # French equivalent
     "تغادر",                   # Arabic: departs
     "وجهة الرحلة",
+    # City of the FLIGHT itself (hasOriginCity / hasDestinationCity — a
+    # KG1 literal, not the destination airport's own properties). Without
+    # these, "What is the departure city of flight X?" falls through to
+    # the LLM, where the cross_kg_filter few-shot examples (all about the
+    # destination airport's country/elevation/type) dominate and the
+    # question gets misrouted to cross_kg.
+    "departure city", "origin city", "destination city",
+    "ville de départ", "ville de destination", "ville d'origine",
+    "مدينة مغادرة", "مدينة انطلاق", "مدينة وصول",
 }
+
+# Aircraft-registration questions mention a flight number (so Priority 2
+# fires) but must be answered from open_kg, not single_kg1/kg2/cross_kg —
+# the registration number lives on the Aircraft node, outside all three
+# templated branches. Left to the LLM, this was misrouted a different way
+# in every language (single_kg1 in en/fr, cross_kg in ar), because no
+# few-shot example in the prompt covers this question type at all.
+_OPEN_KG_SIGNALS = {
+    "registration number", "registration no",
+    "numéro d'immatriculation", "numero d'immatriculation", "immatriculation",
+    "رقم التسجيل", "رقم تسجيل",
+}
+
+def _has_open_kg_signal(q_lower: str) -> bool:
+    return any(sig in q_lower for sig in _OPEN_KG_SIGNALS)
 
 # ─────────────────────────────────────────────
 # KG1 SIGNAL DETECTOR (word-boundary safe)
@@ -797,6 +821,20 @@ def route(question: str) -> dict:
     flight = _detect_flight_number(question)
 
     if flight:
+
+        # ── Fast path (2a-pre): open_kg signal word present ────────────────────
+        # Aircraft-registration questions mention a flight number but must
+        # be answered from open_kg (registration lives on the Aircraft
+        # node). Checked BEFORE the KG1-only check so it takes priority.
+        if _has_open_kg_signal(q_lower):
+            return {
+                "query_type": "open_kg",
+                "kg":         "cross",
+                "entity":     None,
+                "direction":  None,
+                "template":   None,
+                "config":     None,
+            }
 
         # ── Fast path (2a): KG1-only signal word present ──────────────────────
         # If the question contains a word that can only refer to a flight

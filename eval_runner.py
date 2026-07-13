@@ -252,13 +252,15 @@ def _run_cross_kg(question, routing, lang):
     entities = extract_airport_entities(question, lang, iata_from_router=None)
     lexicon_path = get_lexicon("airports")
     lexicon = load_lexicon(lexicon_path)
-    property_uri, _, _ = map_property_cascade(entities["property"], lexicon, lexicon_path)
+    property_uri, _, property2_uri = map_property_cascade(entities["property"], lexicon, lexicon_path)
     if not property_uri:
         out["failure_type"] = "mapping_failure"
         return out
     full_prop = get_base_uri("airports") + property_uri
+    full_prop2 = (get_base_uri("airports") + property2_uri) if property2_uri else None
     result = resolve_cross_kg(flight_uri=flight_uri, direction=routing["direction"],
-                               property_uri=full_prop, property_short=property_uri)
+                               property_uri=full_prop, property_short=property_uri,
+                               property2_uri=full_prop2)
     out["raw_answer"] = result.get("raw_value")
     out["failure_type"] = result.get("failure_type")
     out["sparql_valid"] = result.get("success", False)
