@@ -360,8 +360,7 @@ def main():
     skipped = 0
 
     for _, row in df.iterrows():
-        strategies = STRATEGIESstrategies = STRATEGIES if bool(row["strategy_applicable"]) else ["zero-shot"]
-
+        strategies = STRATEGIES if bool(row["strategy_applicable"]) else ["zero-shot"]
         for lang in LANGUAGES:
             question = row.get(f"question_{lang}")
             if pd.isna(question) or not str(question).strip():
