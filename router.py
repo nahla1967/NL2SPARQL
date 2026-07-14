@@ -445,7 +445,8 @@ A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasOriginCity", 
 
 Q: "كم رحلة تتجه إلى برلين؟"
 A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}}}
-
+Q: "How many flights arrive in Vienna?"
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasDestinationCity", "filter_value": "Vienna", "mode": "count"}}}}
 Q: "Which flights have a ground speed above 400 knots?"
 A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}}}
 
@@ -886,7 +887,7 @@ def route(question: str) -> dict:
 
     # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
-    if airport and not _has_compare_signal(question):
+    if airport and not _has_compare_signal(question) and not _has_count_signal(question):
         return {
             "query_type": "single_kg2",
             "kg":         "airports",
