@@ -339,6 +339,7 @@ STRICT RULES:
   CORRECT:   <uri> <property> ?value .
   WRONG:     <uri> ?value <property> .
 - Do not invent properties that are not listed above.
+- Only include the triple patterns strictly needed to answer the question — do not add extra properties the question didn't ask about
 - If multiple results are possible, add LIMIT 10.
 
 EXAMPLES of correct queries:
@@ -356,6 +357,7 @@ SELECT (COUNT(?airport) AS ?count) WHERE {{
   ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
 }}
 
+
 Q: "Which flight has the highest ground speed?"
 SELECT ?number ?value WHERE {{
   ?flight a <http://www.semanticweb.org/ontologies/flight_ontology#Flight> .
@@ -363,6 +365,13 @@ SELECT ?number ?value WHERE {{
   ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasFlightEvent> ?event .
   ?event <http://www.semanticweb.org/ontologies/flight_ontology#gspeed> ?value .
 }} ORDER BY DESC(?value) LIMIT 1
+Q: "What is the registration number of flight OS235?"
+SELECT ?value WHERE {{
+  ?flight a <http://www.semanticweb.org/ontologies/flight_ontology#Flight> .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#flightNumber> "OS235" .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasAircraft> ?aircraft .
+  ?aircraft <http://www.semanticweb.org/ontologies/flight_ontology#reg> ?value .
+}}
 
 Return ONLY the SPARQL query. No explanation. No markdown."""
 

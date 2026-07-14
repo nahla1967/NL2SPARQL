@@ -359,7 +359,9 @@ def execute_sparql(
             if not bindings:
                 return None
 
-            def _resolve_binding(binding: dict) -> str:
+            def _resolve_binding(binding: dict) -> str | None:
+                if not binding:
+                    return None
                 if len(binding) > 1:
                     parts = [binding[k]["value"] for k in binding]
                     return ", ".join(parts)
@@ -378,7 +380,8 @@ def execute_sparql(
                 return resolved          # ← Change 1 goes HERE, one line above this return.
 
             if multiple:
-                return [_resolve_binding(b) for b in bindings]
+                resolved = [_resolve_binding(b) for b in bindings]
+                return [r for r in resolved if r is not None]
             else:
                 return _resolve_binding(bindings[0])
 
