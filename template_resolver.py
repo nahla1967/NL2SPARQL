@@ -369,14 +369,14 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}hasRunway> ?runway .
   ?runway <{prop_uri}> ?value .
   FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) LIMIT {limit}"""
+}} ORDER BY DESC(?value) ?airport LIMIT {limit}"""
     else:
         sparql = f"""SELECT ?airport ?name ?value WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
   ?airport <{prop_uri}> ?value .
   FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) LIMIT {limit}"""
+}} ORDER BY DESC(?value) ?airport LIMIT {limit}"""
 
     label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
     return sparql, label
@@ -444,13 +444,13 @@ def _build_ranking_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}airportName> ?name .
   ?airport <{KG2}hasRunway> ?runway .
   ?runway <{prop_uri}> ?value .
-}} ORDER BY {order}(?value) LIMIT {limit}"""
+}} ORDER BY {order}(?value) ?airport LIMIT {limit}"""
     else:
         sparql = f"""SELECT ?airport ?name ?value WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
   ?airport <{prop_uri}> ?value .
-}} ORDER BY {order}(?value) LIMIT {limit}"""
+}} ORDER BY {order}(?value) ?airport LIMIT {limit}"""
 
     direction_word = "highest" if order == "DESC" else "lowest"
     label = f"top {limit} airports by {prop_info['label']} ({direction_word})"
@@ -626,6 +626,48 @@ def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     return sparql, label
     
 
+# ── AIRLINE NAME → ICAO CODE LOOKUP ────────────────────────────────────────
+# The KG1 Airline nodes only store ICAO 3-letter codes (operating_as /
+# painted_as), never a human-readable name. The LLM extraction prompt for
+# count_kg1 asks for a natural-language "airline name", so without this
+# lookup, filter_value never matches anything in the graph (silent 0 result,
+# not a query error — this is why it passed sparql_valid=True in eval runs).
+#
+# Verified against independent public sources (Wikipedia List of airline
+# codes + airline-code lookup sites), NOT guessed from memory.
+# The KG's full set of ICAO codes present in the current 369-flight dataset
+# is 31 codes; only the ones below are confirmed. The rest are left
+# unmapped on purpose rather than guessed — extend this dict once verified.
+AIRLINE_NAME_TO_ICAO = {
+    # English
+    "austrian airlines": "AUA", "austrian": "AUA",
+    "brussels airlines": "BEL", "brussels": "BEL",
+    "condor": "CFG",
+    "air dolomiti": "DLA", "dolomiti": "DLA",
+    "air cairo": "MSC",
+    "air france": "AFR",
+    "air india": "AIC",
+    "air baltic": "BTI", "airbaltic": "BTI",
+    # French
+    "compagnie aérienne autrichienne": "AUA",
+    # Arabic
+    "الخطوط الجوية النمساوية": "AUA",
+}
+# NOTE: AZG, BRX, CTN, EVA, EWL, FCM, FIN, FSF, KAL, LGL, LOT, MAE, MAY,
+# OAW, PEV, PGT, RYS, SXS, THY, TKJ, TVF, WMT are the other ICAO codes
+# present in flight_ontology-materialized.ttl. Add them here once you've
+# verified each against an authoritative source (e.g. ICAO Doc 8585) —
+# deliberately left out rather than filled in from an unverified guess.
+
+
+def _resolve_airline_value(filter_value: str) -> str:
+    """Map a natural-language airline name to its KG ICAO code if known;
+    otherwise pass the raw value through unchanged (preserves prior
+    behavior for values that already are ICAO codes, e.g. from list/API
+    input rather than an LLM-extracted name)."""
+    return AIRLINE_NAME_TO_ICAO.get(filter_value.strip().lower(), filter_value)
+
+
 def _build_count_kg1(params: dict) -> tuple[str, str] | None:
     """
     SELECT (COUNT(?flight) AS ?count) WHERE {
@@ -664,19 +706,20 @@ def _build_count_kg1(params: dict) -> tuple[str, str] | None:
     value_prop = value_prop_map.get(filter_prop)
 
     if filter_prop == "hasAirline":
-        # Airline requires operating_as lookup
+        # Airline requires operating_as lookup — resolve name → ICAO code first
+        resolved_value = _resolve_airline_value(filter_value)
         if mode == "count":
             sparql = f"""SELECT (COUNT(?flight) AS ?count) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}hasAirline> ?airline .
-  ?airline <{KG1}operating_as> "{filter_value}" .
+  ?airline <{KG1}operating_as> "{resolved_value}" .
 }}"""
         else:
             sparql = f"""SELECT ?flight ?number WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}flightNumber> ?number .
   ?flight <{KG1}hasAirline> ?airline .
-  ?airline <{KG1}operating_as> "{filter_value}" .
+  ?airline <{KG1}operating_as> "{resolved_value}" .
 }} ORDER BY ?number LIMIT 50"""
     elif value_prop:
         if mode == "count":
@@ -807,7 +850,7 @@ def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
   ?flight <{KG1}hasFlightEvent> ?event .
   ?event <{prop_uri}> ?value .
   FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) LIMIT {limit}"""
+}} ORDER BY DESC(?value) ?flight LIMIT {limit}"""
 
     label = f"flights with {prop_info['label']} {operator} {threshold} {unit}"
     return sparql, label
