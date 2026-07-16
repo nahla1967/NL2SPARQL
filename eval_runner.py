@@ -33,7 +33,9 @@ import re
 import time
 import pandas as pd
 import os
+import sys
 
+FULL_RUN = "--full" in sys.argv
 
 DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
 OUTPUT_PATH  = "eval_results.jsonl"
@@ -351,10 +353,11 @@ def _dispatch(question, lang, strategy):
 
 def main():
     df = pd.read_excel(DATASET_PATH, sheet_name="Questions")
-    df = df[df["id"].isin(BROKEN_IDS)]           # only re-run what broke
+    if not FULL_RUN:
+        df = df[df["id"].isin(BROKEN_IDS)]           # only re-run what broke
 
     old_good_rows = []
-    if os.path.exists(OUTPUT_PATH):
+    if not FULL_RUN and os.path.exists(OUTPUT_PATH):
         with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
             for line in f:
                 rec = json.loads(line)
@@ -417,7 +420,10 @@ def main():
                       f"{result['failure_type']}")
 
     out_f.close()
-    print(f"\nDone. {total_runs} runs written to {OUTPUT_PATH}. "
+    mode_label = "FULL RUN (all 72 questions, old results discarded)" if FULL_RUN \
+        else "INCREMENTAL (only BROKEN_IDS re-run, old results preserved)"
+    print(f"\nDone. Mode: {mode_label}")
+    print(f"{total_runs} runs written to {OUTPUT_PATH}. "
           f"{skipped} runs skipped (empty question cells — dataset not fully filled in yet).")
 
 
