@@ -126,6 +126,23 @@ LIMIT 1
             return raw
         return None
 
+    # --- Attempt 1: direct literal on the airport node itself ---
+    # Handles properties like elevationFt / airportType, which sit straight
+    # on the Airport node (kg_registry.py marks these as {"hop": "direct"}).
+    # Without this check, these values get treated as if they had an
+    # intermediate resource node (Attempt 2 below), which fails silently
+    # because a literal can't be the subject of a further triple pattern.
+    query_direct = f"""
+SELECT ?value WHERE {{
+  <{airport_uri}> <{property_uri}> ?value .
+  FILTER(isLiteral(?value))
+}}
+LIMIT 1
+"""
+    bindings = _sparql_query(endpoint, query_direct)
+    if bindings:
+        return bindings[0].get("value", {}).get("value")
+
     # --- Attempt 2: one-hop through object property ---
     # Tries: Airport → objectProp → Node → dataProps
     # This handles locatedInCountry → countryName, locatedInRegion → regionName

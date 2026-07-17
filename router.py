@@ -492,6 +492,21 @@ A: {{"query_type": "open_kg", "params": {{}}}}
 Q: "ما هي الرحلة ذات أعلى سرعة أرضية؟"
 A: {{"query_type": "open_kg", "params": {{}}}}
 
+Q: "What is the weather forecast for JFK tomorrow?"
+A: {{"query_type": "out_of_scope", "params": {{}}}}
+
+Q: "Am I allowed to bring a guitar on flight BR62?"
+A: {{"query_type": "out_of_scope", "params": {{}}}}
+
+Q: "Who invented the first commercial airplane?"
+A: {{"query_type": "out_of_scope", "params": {{}}}}
+
+Q: "Quel est le prix du billet pour le vol AF123?"
+A: {{"query_type": "out_of_scope", "params": {{}}}}
+
+Q: "هل تقدم شركة الطيران وجبات نباتية؟"
+A: {{"query_type": "out_of_scope", "params": {{}}}}
+
 Q: "How many courses does FullProfessor0 teach?"
 A: {{"query_type": "count_kg3", "params": {{"property": "teacherOf", "direction": "outgoing", "mode": "count"}}}}
 
@@ -670,13 +685,41 @@ _COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن
 def _has_compare_signal(q: str) -> bool:
     q_lower = q.lower()
     return any(sig in q_lower for sig in _COMPARE_SIGNALS)
-_ASK_SIGNALS = ["is ", "are ", "does ", "do ", "was ", "were ",
-                "est-ce que", "est-ce", "y a-t-il",
-                "هل "]
+def _has_ask_signal(question: str) -> bool:
+    """
+    Asks the LLM whether this question is a yes/no CONFIRMATION question
+    (asserting a specific value and asking to confirm it) versus an OPEN
+    information-seeking question. This replaces surface-pattern matching
+    (keyword lists, language-specific regexes for inversion, etc.) with
+    semantic classification, so it generalizes to any language or
+    phrasing — including constructions we have never seen — rather than
+    requiring every new phrasing to be added by hand.
+    """
+    prompt = f"""Does this question ask to CONFIRM whether a specific
+property already has a specific value (a yes/no question)? Or does it
+ASK for information (what/which/how much)?
 
-def _has_ask_signal(q: str) -> bool:
-    q_lower = q.lower().strip()
-    return any(q_lower.startswith(sig) for sig in _ASK_SIGNALS)
+Examples:
+Q: "Is BR62's callsign EVA062?" → YES
+Q: "La porte du vol OS830 est-elle A17?" → YES
+Q: "هل مطار فيينا يقع في النمسا؟" → YES
+Q: "What is the callsign of BR62?" → NO
+Q: "Quelle est la porte du vol OS830?" → NO
+Q: "ما هو مطار الوصول؟" → NO
+
+Answer only YES or NO.
+
+Question: "{question}"
+"""
+    try:
+        response = ollama.chat(
+            model="llama3",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["message"]["content"].strip().upper().startswith("YES")
+    except Exception as e:
+        print(f"[router] _has_ask_signal LLM check failed: {e}")
+        return False
 
 # ─────────────────────────────────────────────
 # LLM CLASSIFIER
@@ -744,6 +787,19 @@ The knowledge graph contains:
 - Airports: name, type, elevation, country, region, city,
   IATA code, ICAO code, coordinates
 - Runways: length, width, surface, lighting, identifier
+
+The knowledge graph does NOT contain: weather, prices/tickets, passenger
+policies (pets, baggage, check-in), history, news, opinions, safety
+records, or anything not explicitly listed above.
+
+EXAMPLES:
+Q: "What is the weather forecast for JFK tomorrow?"     → NO (weather not in KG)
+Q: "Am I allowed to bring a guitar on flight BR62?"     → NO (policy, not in KG)
+Q: "Who invented the first commercial airplane?"        → NO (general knowledge, not in KG)
+Q: "Can I bring a pet on flight FR947?"           → NO (policy, not in KG)
+Q: "What is the history of the airline industry?" → NO (general knowledge, not in KG)
+Q: "Quel temps fait-il à l'aéroport VIE?"          → NO
+Q: "هل يمكنني اصطحاب حيوان أليف؟"                  → NO
 
 Answer only YES or NO:
 Can this question be answered using only the data described above?
@@ -886,8 +942,23 @@ def route(question: str) -> dict:
         }
 
     # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
+    # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
     if airport and not _has_compare_signal(question) and not _has_count_signal(question):
+        # A known entity being present doesn't guarantee the QUESTION is
+        # answerable about that entity — "What's the weather at VIE?"
+        # also matches here. Reuse the same answerability gate Priority 3
+        # already relies on, instead of a hardcoded keyword list that
+        # could never cover every out-of-scope phrasing.
+        if not _is_kg_answerable(question):
+            return {
+                "query_type": "out_of_scope",
+                "kg":         None,
+                "entity":     None,
+                "direction":  None,
+                "template":   None,
+                "config":     None,
+            }
         return {
             "query_type": "single_kg2",
             "kg":         "airports",
@@ -1017,7 +1088,21 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     None,
         }
-
+    # ── out_of_scope branch — LLM already said no, trust it ───────────────────
+    # Without this check, an explicit out_of_scope answer from _llm_classify()
+    # falls through to the clean gate below, which asks a SECOND, independent
+    # question and can overrule the first answer. Two classifiers voting,
+    # only the second counted — this silently discarded correct
+    # out_of_scope classifications.
+    if query_type == "out_of_scope":
+        return {
+            "query_type": "out_of_scope",
+            "kg":         None,
+            "entity":     None,
+            "direction":  None,
+            "template":   None,
+            "config":     None,
+        }
     # ── CLEAN GATE ────────────────────────────────────────────────────────────
     # Everything that reached here has:
     #   - no flight number
