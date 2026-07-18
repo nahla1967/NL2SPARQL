@@ -89,6 +89,19 @@ For cross_kg questions it only determines the flight number and
 direction (origin/destination). The actual property is extracted
 downstream by the hybrid mapping layer (extract_airport_entities +
 map_property_cascade), which is the core thesis contribution.
+
+WHAT CHANGED vs v10 (this revision — majority-vote gates)
+-----------------------------------------------------------
+    test_broken_rows.py caught real sampling variance in both
+    _has_ask_signal() and _is_kg_answerable(): the identical question
+    "Is BLQ located in France?" returned different answers across 5
+    calls to the same prompt (4 False, 1 True). That's LLM sampling
+    noise, not a logic bug — no amount of prompt-tuning fixes it
+    reliably. Both gates now vote across 3 independent calls
+    (_llm_yes_no_majority) and take the majority answer instead of
+    trusting a single unconstrained sample. This triples the latency
+    cost of these two specific checks, but they're cheap binary calls,
+    and reliability matters more than shaving a couple seconds here.
 """
 
 from rapidfuzz import process, fuzz
@@ -685,6 +698,45 @@ _COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن
 def _has_compare_signal(q: str) -> bool:
     q_lower = q.lower()
     return any(sig in q_lower for sig in _COMPARE_SIGNALS)
+
+
+# ─────────────────────────────────────────────
+# LLM MAJORITY-VOTE HELPER
+# ─────────────────────────────────────────────
+
+def _llm_yes_no_majority(prompt: str, k: int = 3) -> bool:
+    """
+    Calls ollama.chat() k times on the same yes/no prompt and returns the
+    majority vote, instead of trusting a single unconstrained sample.
+
+    WHY: test_broken_rows.py caught a real 4-1 split on the identical
+    question "Is BLQ located in France?" — same prompt, different answers
+    across calls. That's sampling variance, not a logic bug, so no amount
+    of prompt-tuning fixes it reliably. A single yes/no LLM call is cheap
+    enough that voting 3x is a small cost for removing coin-flip behavior
+    on borderline phrasings.
+
+    k=3 (odd, so no ties) is a deliberate minimum — enough to smooth out
+    single-sample noise without tripling latency for every question in
+    the pipeline (only _has_ask_signal and _is_kg_answerable use this).
+    """
+    votes = []
+    for _ in range(k):
+        try:
+            response = ollama.chat(
+                model="llama3",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            votes.append(response["message"]["content"].strip().upper().startswith("YES"))
+        except Exception as e:
+            print(f"[router] _llm_yes_no_majority call failed: {e}")
+            votes.append(False)
+    result = sum(votes) > len(votes) / 2
+    if len(set(votes)) > 1:
+        print(f"[router] _llm_yes_no_majority: split vote {votes} → {result}")
+    return result
+
+
 def _has_ask_signal(question: str) -> bool:
     """
     Asks the LLM whether this question is a yes/no CONFIRMATION question
@@ -694,6 +746,11 @@ def _has_ask_signal(question: str) -> bool:
     semantic classification, so it generalizes to any language or
     phrasing — including constructions we have never seen — rather than
     requiring every new phrasing to be added by hand.
+
+    Uses majority-vote sampling (_llm_yes_no_majority) rather than a
+    single call — identical questions were observed to get different
+    answers across runs (see test_broken_rows.py, "Is BLQ located in
+    France?": 4/5 False, 1/5 True on a single-call basis).
     """
     prompt = f"""Does this question ask to CONFIRM whether a specific
 property already has a specific value (a yes/no question)? Or does it
@@ -706,17 +763,16 @@ Q: "هل مطار فيينا يقع في النمسا؟" → YES
 Q: "What is the callsign of BR62?" → NO
 Q: "Quelle est la porte du vol OS830?" → NO
 Q: "ما هو مطار الوصول؟" → NO
+Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
 
 Answer only YES or NO.
 
 Question: "{question}"
 """
     try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response["message"]["content"].strip().upper().startswith("YES")
+        result = _llm_yes_no_majority(prompt)
+        print(f"[router] _has_ask_signal('{question[:40]}...') → {result}")
+        return result
     except Exception as e:
         print(f"[router] _has_ask_signal LLM check failed: {e}")
         return False
@@ -773,7 +829,10 @@ def _is_kg_answerable(question: str) -> bool:
         word "airline" yet cannot be answered from our KG.
         This prompt grounds the check in the actual data model.
 
-    Returns True if the LLM says YES, False otherwise.
+    Uses majority-vote sampling (_llm_yes_no_majority) rather than a
+    single call, for the same reliability reason as _has_ask_signal().
+
+    Returns True if the majority of calls say YES, False otherwise.
     """
     from kg_registry import get_open_kg_schema
     schema = get_open_kg_schema()
@@ -800,19 +859,18 @@ Q: "Can I bring a pet on flight FR947?"           → NO (policy, not in KG)
 Q: "What is the history of the airline industry?" → NO (general knowledge, not in KG)
 Q: "Quel temps fait-il à l'aéroport VIE?"          → NO
 Q: "هل يمكنني اصطحاب حيوان أليف؟"                  → NO
-
+Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
+Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
+Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
 Answer only YES or NO:
 Can this question be answered using only the data described above?
 
 Question: "{question}"
 """
     try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        answer = response["message"]["content"].strip().upper()
-        return answer.startswith("YES")
+        result = _llm_yes_no_majority(prompt)
+        print(f"[router] _is_kg_answerable('{question[:40]}...') → {result}")
+        return result
     except Exception as e:
         print(f"[router] _is_kg_answerable failed: {e}")
         return False
@@ -941,7 +999,6 @@ def route(question: str) -> dict:
             "config":     KG_REGISTRY["flights"],
         }
 
-    # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
     if airport and not _has_compare_signal(question) and not _has_count_signal(question):

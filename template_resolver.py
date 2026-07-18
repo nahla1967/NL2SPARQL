@@ -1204,7 +1204,7 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
     if not validate_ask_extraction(entities):
         result["failure_type"] = "extraction_failure"
         return result
-
+    print(f"[ask_query] lang={lang} extracted property='{entities['property']}' value='{entities['value']}'")
     # ── Step 2: resolve entity URI + lexicon path per KG ───────────────────────
     if kg == "flights":
         entity_uri   = map_flight(entity)

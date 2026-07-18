@@ -311,7 +311,7 @@ EXAMPLES:
 "Does flight OS295 depart from Vienna?"     → {{"property": "departure city", "value": "Vienna"}}
 "Est-ce que le vol TK1887 atterrit à CDG?"  → {{"property": "atterrit à", "value": "CDG"}}
 "هل مطار فيينا يقع في النمسا؟"              → {{"property": "يقع في", "value": "النمسا"}}
-
+"هل مدرج مطار فرانكفورت من الأسفلت؟" → {{"property": "سطح المدرج", "value": "الأسفلت"}}
 Return ONLY a JSON object with keys "property" and "value". No explanation.
 
 Question: {question}
