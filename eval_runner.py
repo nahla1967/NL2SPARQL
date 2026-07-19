@@ -34,6 +34,7 @@ import time
 import pandas as pd
 import os
 import sys
+from rdflib import Graph
 
 FULL_RUN = "--full" in sys.argv
 
@@ -43,9 +44,8 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    
-    "open_kg_003", 
-   
+    "open_kg_003",
+    "ask_query_001", "ask_query_002", "ask_query_003", "ask_query_004",
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -78,6 +78,46 @@ def _normalise_for_scoring(text) -> str:
     text = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
+    """
+    Builds a {normalised airport name → IATA code} lookup from OUR OWN
+    KG2 ontology (58 airports) — not the global airports.csv, which has
+    9006 rows and 49 duplicate names mapping to different IATA codes.
+    Using the KG's own 58 airports guarantees no ambiguity.
+    """
+    g = Graph()
+    g.parse(ttl_path, format="turtle")
+    lookup = {}
+    query = """
+    PREFIX ao: <http://www.semanticweb.org/ontologies/airport_ontology#>
+    SELECT ?name ?code WHERE {
+        ?airport ao:airportName ?name ;
+                 ao:iataCode ?code .
+    }
+    """
+    for row in g.query(query):
+        lookup[_normalise_for_scoring(str(row.name))] = str(row.code).strip().upper()
+    return lookup
+
+
+AIRPORT_CODE_LOOKUP = _load_airport_code_lookup()
+
+
+def _canonicalize_airport_names(text: str) -> str:
+    """
+    Replaces full airport names with their IATA code inside a text blob,
+    so scoring can compare 'Esenboğa International Airport' against the
+    ground truth's 'ESB' as the same entity. Word-boundary matched to
+    avoid partial-word collisions.
+    """
+    if not text:
+        return text
+    normed = _normalise_for_scoring(text)
+    for name, code in AIRPORT_CODE_LOOKUP.items():
+        normed = re.sub(rf"\b{re.escape(name)}\b", code, normed)
+    return normed
 
 
 def exact_match(predicted, expected) -> bool | None:
@@ -430,9 +470,32 @@ def main():
                 expected_type = row["expected_type"]
                 routing_ok = (expected_type == "VARIES") or (result["query_type"] == expected_type)
 
-                scored_value = result.get("raw_answer") or result.get("final_answer")
+                # Fix #1: always score the formatted answer, never the raw
+                # value — raw_answer can be a Python bool (True/False) for
+                # ask_query, and `True` is truthy, so `raw_answer or final_answer`
+                # silently used the literal boolean instead of "Yes."/"No.".
+                scored_value = result.get("final_answer")
                 if isinstance(scored_value, list):
                     scored_value = "\n".join(str(v) for v in scored_value)
+
+                # Fix #3: ranking_kg2 / filter_numeric_kg2 ground truth uses
+                # IATA codes ("ESB"), the pipeline outputs full names
+                # ("Esenboğa International Airport") — same entity, different
+                # identifier. Canonicalize before comparing.
+                scored_value_for_match = _canonicalize_airport_names(scored_value)
+
+                # Fix #2: ask_query ground truth is English-only ("Yes."/"No."),
+                # but final_answer is localized ("Non.", "لا."). A yes/no
+                # answer is a boolean and has no language — compare booleans,
+                # not translated text.
+                if row["category"] == "ask_query":
+                    expected_bool = _normalise_for_scoring(row.get("expected_answer")).startswith("yes")
+                    predicted_bool = result.get("raw_answer")
+                    if predicted_bool is None:
+                        ask_exact, ask_f1 = None, None
+                    else:
+                        ask_exact = (bool(predicted_bool) == expected_bool)
+                        ask_f1 = 1.0 if ask_exact else 0.0
 
                 record = {
                     "id": row["id"],
@@ -449,8 +512,10 @@ def main():
                     "raw_answer": result["raw_answer"],
                     "final_answer": result["final_answer"],
                     "failure_type": result["failure_type"],
-                    "exact_match": exact_match(scored_value, row.get("expected_answer")),
-                    "f1": token_f1(scored_value, row.get("expected_answer")),
+                    "exact_match": ask_exact if row["category"] == "ask_query"
+                                   else exact_match(scored_value_for_match, row.get("expected_answer")),
+                    "f1": ask_f1 if row["category"] == "ask_query"
+                          else token_f1(scored_value_for_match, row.get("expected_answer")),
                     "duration_s": round(time.time() - t0, 2),
                 }
                 out_f.write(json.dumps(record, ensure_ascii=False) + "\n")

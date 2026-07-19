@@ -312,6 +312,8 @@ EXAMPLES:
 "Est-ce que le vol TK1887 atterrit à CDG?"  → {{"property": "atterrit à", "value": "CDG"}}
 "هل مطار فيينا يقع في النمسا؟"              → {{"property": "يقع في", "value": "النمسا"}}
 "هل مدرج مطار فرانكفورت من الأسفلت؟" → {{"property": "سطح المدرج", "value": "الأسفلت"}}
+"La porte du vol TK123 est-elle B5?"        → {{"property": "porte", "value": "B5"}}
+"هل بوابة الرحلة TK123 هي B5؟"              → {{"property": "بوابة", "value": "B5"}}
 Return ONLY a JSON object with keys "property" and "value". No explanation.
 
 Question: {question}

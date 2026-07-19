@@ -136,6 +136,8 @@
     "which nation": ["locatedInCountry", "countryName"],
     "located in": ["locatedInCountry", "countryName"],
     "located in country": ["locatedInCountry", "countryName"],
+    "situé en": ["locatedInCountry", "countryName"],
+"يقع في": ["locatedInCountry", "countryName"],
     "region": ["locatedInRegion", "regionName"],
     "which region": ["locatedInRegion", "regionName"],
     "what region": ["locatedInRegion", "regionName"],
