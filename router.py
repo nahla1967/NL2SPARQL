@@ -105,7 +105,9 @@ WHAT CHANGED vs v10 (this revision — majority-vote gates)
 """
 
 from rapidfuzz import process, fuzz
+from template_resolver import KG2_NUMERIC_PROPS, KG2_STRING_PROPS
 import re
+import ast
 import json
 import ollama
 from kg_registry import (
@@ -311,6 +313,11 @@ Airport string properties:
   "city", "municipality"                       → municipality
   "continent"                                  → continent
   "surface"                                    → surface
+  "grass runway", "asphalt runway", "paved runway", "runway surface",
+  "runway material", "what is the runway made of"   → surface
+      (value: the surface type mentioned — "grass", "asphalt", "concrete",
+       etc. Always use the property name "surface" exactly — never invent
+       names like "hasGrassRunway", "pavementType", or "runwayMaterial".)
 
 Flight numeric properties:
   "ground speed", "speed", "knots"             → gspeed
@@ -400,9 +407,12 @@ CROSS_KG_FILTER: Use when a specific flight number is mentioned AND the
     "Dans quel pays atterrit le vol OS295?"             → cross_kg_filter
     "في أي دولة يهبط الرحلة OS235؟"                   → cross_kg_filter
 
-COUNT_KG1: Use when the question counts or lists flights.
+COUNT_KG1: Use when the question counts or lists FLIGHTS specifically.
   "how many flights" / "combien de vols" / "كم رحلة" → always count_kg1,
   even if a city name is present.
+  Do NOT use count_kg1 to count airports or runways — KG1 has no runway
+  data at all. "How many runways are closed?" / "how many airports..."
+  belong to open_kg, even though they also start with "how many".
 OPEN_KG: Use when the question asks about aviation data that exists in the
   KG but does not fit filter_numeric, filter_string, ranking, compare,
   count, or cross_kg_filter patterns. Specifically:
@@ -545,6 +555,12 @@ A: {{"query_type": "group_aggregate_kg2", "params": {{"group_by": "country", "pr
 
 Q: "Which department teaches the most courses on average per professor?"
 A: {{"query_type": "group_aggregate_kg3", "params": {{"group_by": "department", "property": "teacherOf", "function": "AVG"}}}}
+
+Q: "Which airports have a grass runway?"
+A: {{"query_type": "filter_string_kg2", "params": {{"property": "surface", "value": "grass", "limit": 10}}}}
+
+Q: "How many runways in the dataset are closed?"
+A: {{"query_type": "open_kg", "params": {{}}}}
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
 Question: "{question}"
@@ -691,13 +707,37 @@ def _has_filter_signal(q: str) -> bool:
     return any(sig in q_lower for sig in _FILTER_SIGNALS)
 
 def _has_count_signal(q: str) -> bool:
+    """
+    Word-boundary-safe, same pattern as _has_kg1_signal(). Plain
+    substring matching let "count" (from _COUNT_SIGNALS) match inside
+    "country" — e.g. "What country is CTA located in?" was silently
+    treated as a count question, skipping Priority 2.5 entirely and
+    falling through to the LLM, which misrouted it to cross_kg_filter.
+    """
     q_lower = q.lower()
-    return any(sig in q_lower for sig in _COUNT_SIGNALS)
+    for sig in _COUNT_SIGNALS:
+        if " " in sig:
+            if sig in q_lower:
+                return True
+        else:
+            if re.search(rf"\b{re.escape(sig)}\b", q_lower):
+                return True
+    return False
+
 _COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن"]
 
 def _has_compare_signal(q: str) -> bool:
+    """Same word-boundary fix as _has_count_signal(), applied preventively —
+    not yet observed causing a bug, but same substring-match risk."""
     q_lower = q.lower()
-    return any(sig in q_lower for sig in _COMPARE_SIGNALS)
+    for sig in _COMPARE_SIGNALS:
+        if " " in sig:
+            if sig in q_lower:
+                return True
+        else:
+            if re.search(rf"\b{re.escape(sig)}\b", q_lower):
+                return True
+    return False
 
 
 # ─────────────────────────────────────────────
@@ -764,6 +804,7 @@ Q: "What is the callsign of BR62?" → NO
 Q: "Quelle est la porte du vol OS830?" → NO
 Q: "ما هو مطار الوصول؟" → NO
 Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
+Q: "في أي دولة يقع مطار أثينا؟" → NO
 
 Answer only YES or NO.
 
@@ -785,7 +826,7 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
     prompt = _CLASSIFICATION_PROMPT.replace("{question}", question)
 
     for attempt in range(max_attempts):
-        
+
         raw = ""
         try:
             response = ollama.chat(
@@ -798,7 +839,17 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
             match = re.search(r"\{.*\}", raw, re.DOTALL)
             candidate = match.group() if match else raw
 
-            result = json.loads(candidate)
+            try:
+                result = json.loads(candidate)
+            except json.JSONDecodeError:
+                # llama3 sometimes echoes Python-dict style (single quotes)
+                # instead of strict JSON — more common for fr/ar prompts.
+                # ast.literal_eval is a real parser, not a string
+                # replace(), so a genuine apostrophe inside a value
+                # (e.g. "l'aéroport") doesn't get mangled.
+                result = ast.literal_eval(candidate)
+
+            result["query_type"] = _normalize_query_type(result.get("query_type", ""), question)
             print(f"[router] LLM classified as: {result.get('query_type')} "
                   f"| params: {result.get('params')}")
             return result
@@ -862,6 +913,7 @@ Q: "هل يمكنني اصطحاب حيوان أليف؟"                  → N
 Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
 Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
 Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
+Q: "في أي دولة يقع مطار أثينا؟" → NO
 Answer only YES or NO:
 Can this question be answered using only the data described above?
 
@@ -878,7 +930,74 @@ Question: "{question}"
 # ─────────────────────────────────────────────
 # ROUTER
 # ─────────────────────────────────────────────
+_VALID_QUERY_TYPES = set(TEMPLATE_REGISTRY.keys()) | {"single_kg2", "open_kg", "out_of_scope"}
 
+def _normalize_query_type(query_type, question: str = "") -> str:
+    """
+    Corrects a query_type the LLM invented but that isn't actually
+    registered. Two-stage:
+
+    1. Family match — strip the trailing "_kgN" and look for the one
+       real registered type sharing the same base name. Handles the
+       dominant failure mode: right template family, wrong KG number
+       ("filter_string_kg1" meant to be "_kg2"). Plain fuzzy matching
+       can't do this reliably — "kg1"→"kg2" and "kg1"→"kg3" are both
+       single-character edits, so the score ties and picks arbitrarily
+       (this is what went wrong last run: kg1 → kg3 instead of kg2).
+
+    2. If the family has multiple real KG variants (e.g. filter_string
+       exists for both kg2 and kg3), disambiguate using which KG the
+       question actually names — reusing the same entity/keyword
+       detectors already used elsewhere in this file, not new logic.
+
+    3. Fallback: plain fuzzy match, for genuinely unrelated typos that
+       don't fit the "_kgN" pattern at all.
+    """
+    if not isinstance(query_type, str):
+        # The LLM occasionally returns query_type as something other than
+        # a plain string (e.g. a nested object). Treat as unclassified
+        # rather than crash — "" falls through cleanly to the existing
+        # clean gate later in route(), same as any other unrecognized type.
+        print(f"[router] LLM returned non-string query_type "
+              f"({type(query_type).__name__}); treating as unclassified")
+        return ""
+    if query_type in _VALID_QUERY_TYPES:
+        return query_type
+
+    base = re.sub(r"_kg\d+$", "", query_type)
+    family = [t for t in _VALID_QUERY_TYPES
+              if re.sub(r"_kg\d+$", "", t) == base and t != query_type]
+
+    if len(family) == 1:
+        corrected = family[0]
+        print(f"[router] Correcting hallucinated query_type '{query_type}' "
+              f"→ '{corrected}' (family match)")
+        return corrected
+
+    if len(family) > 1:
+        if _detect_university_entity(question) or any(
+            sig in question.lower() for sig in _FILTER_SIGNALS
+        ):
+            kg_guess = "university"
+        elif _detect_airport_keyword(question) or _detect_airport_entity(question):
+            kg_guess = "airports"
+        else:
+            kg_guess = None
+        if kg_guess:
+            for t in family:
+                if TEMPLATE_REGISTRY[t]["kg"] == kg_guess:
+                    print(f"[router] Correcting hallucinated query_type '{query_type}' "
+                          f"→ '{t}' (kg={kg_guess})")
+                    return t
+
+    match = process.extractOne(query_type, list(_VALID_QUERY_TYPES), scorer=fuzz.WRatio)
+    if match and match[1] >= 85:
+        corrected, score, _ = match
+        print(f"[router] Correcting hallucinated query_type '{query_type}' "
+              f"→ '{corrected}' (score={score})")
+        return corrected
+    return query_type
+    return query_type  # leave as-is — falls through to the clean gate, same as before
 def route(question: str) -> dict:
     """
     Routes a natural language question to the correct pipeline branch.
@@ -1001,6 +1120,7 @@ def route(question: str) -> dict:
 
     # ── Priority 2.5: Airport entity detected (deterministic) ─────────────────
     airport = _detect_airport_entity(question)
+    print(f"[router] Priority 2.5 check: airport={airport!r}")
     if airport and not _has_compare_signal(question) and not _has_count_signal(question):
         # A known entity being present doesn't guarantee the QUESTION is
         # answerable about that entity — "What's the weather at VIE?"
@@ -1104,7 +1224,27 @@ def route(question: str) -> dict:
                     "template":   None,
                     "config":     None,
                 }
-
+        # Case 4: ranking_kg2 received a categorical (non-numeric) property.
+        # "Show all large airports" / "which airports are in Greece" ask for
+        # a FILTER, not a ranking — the LLM sometimes reaches for ranking_kg2
+        # anyway. If we can recover the target value, reroute to
+        # filter_string_kg2 (same fix as Cases 1-3). If not, fall back to
+        # open_kg rather than build a template with a missing required
+        # field — same safety convention already used everywhere else here.
+        if query_type == "ranking_kg2":
+            prop = params.get("property", "")
+            if prop not in KG2_NUMERIC_PROPS and prop in KG2_STRING_PROPS:
+                value = params.get("value") or params.get("threshold")
+                if value:
+                    print(f"[router] Smart reroute: categorical property in ranking_kg2 → filter_string_kg2")
+                    query_type = "filter_string_kg2"
+                    params = {"property": prop, "value": value, "limit": params.get("limit", 10)}
+                else:
+                    print(f"[router] Smart reroute: categorical property in ranking_kg2, no value → open_kg")
+                    return {
+                        "query_type": "open_kg", "kg": "cross", "entity": None,
+                        "direction": None, "template": None, "config": None,
+                    }
         return {
             "query_type": "template",
             "kg":         cfg["kg"],

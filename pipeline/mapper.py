@@ -17,6 +17,30 @@ WHY THIS APPROACH:
     flights or airports. Only the lexicon it searches changes.
     Passing the lexicon as a parameter — rather than hardcoding the path —
     is the minimal change needed to make the mapper work for both KGs.
+
+WHAT CHANGED (this revision — scored cascade for ASK queries)
+-----------------------------------------------------------
+    map_property_cascade_scored() added. Investigating a batch of
+    "successful" French ASK-query runs (KRK/BLQ/NAP "est-il situé en...")
+    revealed they were silently WRONG: the semantic tier was matching
+    French locative phrases ("situé en", "se trouve") to the bare
+    "iata" lexicon entry at scores of 0.85-0.88 — comfortably above
+    SEMANTIC_THRESHOLD (0.72) — producing an ASK query that compared
+    the airport's IATA code against a country name instead of its
+    actual country. The query still executed and returned a boolean,
+    so it never showed up as a failure — just a wrong answer.
+
+    This matters specifically for resolve_ask_query() (see
+    template_resolver.py): every other branch treats a bad match as an
+    honest mapping_failure. ASK is the one branch where a bad match
+    still produces a plausible-looking True/False, so it needs a
+    stricter confidence bar than the rest of the pipeline.
+
+    map_property_cascade() itself is UNCHANGED — every other branch
+    (single_kg1, single_kg2, single_kg3, cross_kg, the template
+    resolver) still calls it exactly as before, with its original
+    3-value return. Only resolve_ask_query() should switch to calling
+    map_property_cascade_scored() instead.
 """
 
 import json
@@ -37,6 +61,19 @@ CACHE_PHRASES_KG2    = "lexicon_airports_phrases.json"
 
 FUZZY_THRESHOLD    = 90
 SEMANTIC_THRESHOLD = 0.72
+
+# ASK-specific: stricter than the global SEMANTIC_THRESHOLD above.
+# A wrong ASK match produces a silently wrong boolean rather than an
+# honest failure, so it needs a higher confidence bar than the rest of
+# the pipeline (see map_property_cascade_scored / resolve_ask_query).
+#
+# Raised from 0.85 to 0.90 after test evidence: French "situé en" /
+# "se trouve" both matched the bare "iata" lexicon entry at 0.848-0.876
+# — every observed bad ASK match has landed in that exact band, and
+# every observed correct ASK match has come from pre-norm/exact, never
+# semantic. 0.90 clears both known bad cases with no evidence yet of
+# rejecting a real one.
+ASK_SEMANTIC_THRESHOLD = 0.90
 
 
 # ── TEXT NORMALISATION ────────────────────────────────────────────────────────
@@ -250,6 +287,12 @@ def map_property_cascade(
     lexicon_path is used to select the correct embedding cache
     and to determine whether to apply KG2 hop resolution.
     Defaults to KG1 for backward compatibility.
+
+    UNCHANGED by the scored-cascade revision — every existing caller
+    (single_kg1, single_kg2, single_kg3, cross_kg, the template
+    resolver) keeps working exactly as before, with the same 3-value
+    return. See map_property_cascade_scored() below for the ASK-only
+    variant that also exposes a confidence score.
     """
     if not property_text:
         return None, None, None
@@ -286,6 +329,122 @@ def map_property_cascade(
         return prop1, "semantic", prop2
 
     return None, None, None
+
+
+# ── SCORED CASCADE (ASK-only) ─────────────────────────────────────────────────
+
+def map_property_cascade_scored(
+    property_text: str,
+    lexicon: dict,
+    lexicon_path: str = "lexicon.json"
+) -> tuple:
+    """
+    Same cascade order and same underlying tier logic as
+    map_property_cascade() (pre-norm → exact → fuzzy → semantic), but
+    also returns a confidence score for the matched tier, on a common
+    0-1 scale (fuzzy's 0-100 score is divided by 100 for consistency
+    with semantic's native 0-1 cosine similarity).
+
+    pre-norm and exact tiers are literal dictionary hits, not
+    similarity scores, so they are always reported at score=1.0.
+
+    WHY THIS EXISTS SEPARATELY FROM map_property_cascade():
+        Investigating French ASK-query runs ("KRK est-il situé en
+        Pologne?") found the semantic tier matching "situé en" / "se
+        trouve" to the bare "iata" lexicon entry at 0.85-0.88 — well
+        above SEMANTIC_THRESHOLD (0.72) — producing an ASK query that
+        silently compared the wrong property and returned a coincidental
+        boolean instead of an honest failure. Every other branch treats
+        a bad cascade match as a clean mapping_failure; ASK is the one
+        branch where a bad match still produces a plausible-looking
+        answer, so resolve_ask_query() needs the actual score to apply
+        a stricter bar (ASK_SEMANTIC_THRESHOLD, 0.85) on top of the
+        normal cascade, without changing that threshold for every other
+        branch that has been working fine at 0.72.
+
+    Returns (prop1, tier, prop2, score). Returns (None, None, None, None)
+    if nothing matched.
+    """
+    if not property_text:
+        return None, None, None, None
+
+    def _unpack(uri):
+        if isinstance(uri, list):
+            return uri[0], uri[1]
+        if isinstance(uri, dict):
+            return None, None
+        return uri, None
+
+    # ── pre-norm / exact: always full confidence ────────────────────────────
+    uri, _ = _pre_map(property_text, lexicon)
+    if uri:
+        prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+        return prop1, "pre-norm", prop2, 1.0
+
+    uri = map_property(property_text, lexicon)
+    if uri:
+        prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+        return prop1, "exact", prop2, 1.0
+
+    # ── fuzzy: same FUZZY_THRESHOLD gate as map_property_fuzzy() ────────────
+    phrases      = _get_phrases(lexicon)
+    norm_in      = _normalise(property_text)
+    norm_phrases = [_normalise(p) for p in phrases]
+    fuzzy_result = process.extractOne(norm_in, norm_phrases, scorer=fuzz.WRatio)
+    if fuzzy_result is not None:
+        matched_phrase, fuzzy_score, index = fuzzy_result
+        print(f"[fuzzy] input='{property_text}' → match='{phrases[index]}' score={fuzzy_score}")
+        if fuzzy_score >= FUZZY_THRESHOLD:
+            uri = lexicon["properties"][phrases[index]]
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "fuzzy", prop2, fuzzy_score / 100.0
+
+    # ── semantic: same two-stage logic as map_property_with_embeddings() ────
+    model            = _get_model()
+    phrases2, matrix = _load_or_build_cache(lexicon, lexicon_path)
+    script           = _detect_script(norm_in)
+    query_vec        = model.encode(norm_in)
+
+    same_script_indices = [
+        i for i, ph in enumerate(phrases2)
+        if (_is_arabic_phrase(ph) if script == "arabic" else not _is_arabic_phrase(ph))
+    ]
+
+    if same_script_indices:
+        sub_matrix  = matrix[same_script_indices]
+        sub_scores  = util.cos_sim(query_vec, sub_matrix)[0]
+        best_sub_idx   = sub_scores.argmax().item()
+        best_sub_score = sub_scores[best_sub_idx].item()
+        best_index     = same_script_indices[best_sub_idx]
+        best_phrase    = phrases2[best_index]
+
+        print(f"[semantic] '{property_text}' [script={script}] "
+              f"→ '{best_phrase}' score={best_sub_score:.3f}")
+
+        if best_sub_score >= SEMANTIC_THRESHOLD:
+            uri = lexicon["properties"][best_phrase]
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "semantic", prop2, best_sub_score
+
+    all_scores       = util.cos_sim(query_vec, matrix)[0]
+    best_full_idx    = all_scores.argmax().item()
+    best_full_score  = all_scores[best_full_idx].item()
+    best_full_phrase = phrases2[best_full_idx]
+
+    print(f"[semantic] '{property_text}' full-matrix → "
+          f"'{best_full_phrase}' score={best_full_score:.3f}")
+
+    if best_full_score >= SEMANTIC_THRESHOLD + 0.05:
+        uri = lexicon["properties"][best_full_phrase]
+        prop1, prop2 = _unpack(uri)
+        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+        return prop1, "semantic", prop2, best_full_score
+
+    return None, None, None, None
 
 
 # ── FLIGHT MAPPING (KG1) — UNCHANGED ─────────────────────────────────────────

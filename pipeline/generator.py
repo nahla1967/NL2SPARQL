@@ -21,13 +21,27 @@ WHAT CHANGED vs v2:
     protects all three strategies (zero-shot, few-shot, cot) equally.
 
     No other changes. The KG-agnostic design from v2 is preserved.
+
+WHAT CHANGED (this revision — removed hardcoded BASE)
+-----------------------------------------------------------
+    FLIGHT_BASE was a private, hardcoded constant used only in this
+    file's few-shot examples — inconsistent with the rest of the
+    pipeline, which always resolves base URIs through
+    kg_registry.get_base_uri(). Replaced with a call to that shared
+    function at module load, so this file has no ontology knowledge of
+    its own and stays in sync with kg_registry.py if the base URI ever
+    changes.
 """
 
 import re
 import ollama
+from kg_registry import get_base_uri
 
-# Used ONLY for the static few-shot examples below.
-FLIGHT_BASE = "http://www.semanticweb.org/ontologies/flight_ontology#"
+# Used ONLY for the static few-shot examples below. Resolved from the
+# shared registry instead of hardcoded, so this file has a single
+# source of truth for the flight ontology's base URI, same as every
+# other module in the pipeline.
+FLIGHT_BASE = get_base_uri("flights")
 
 
 # ── REVERSED TRIPLE FIX ───────────────────────────────────────────────────────
@@ -64,6 +78,40 @@ def fix_reversed_triple(sparql: str) -> str:
     return pattern.sub(flip, sparql)
 
 
+# ── MISPLACED AGGREGATE FIX ───────────────────────────────────────────────────
+
+def fix_misplaced_aggregate(sparql: str) -> str:
+    """
+    Detects and corrects a SPARQL aggregate expression placed AFTER the
+    closing brace instead of inside the SELECT clause — observed on
+    Arabic COUNT questions:
+
+        SELECT ?count WHERE { ... } COUNT(?runway) AS ?count LIMIT 1   ← WRONG
+
+    instead of:
+
+        SELECT (COUNT(?runway) AS ?count) WHERE { ... } LIMIT 1        ← CORRECT
+
+    Same bug family as fix_reversed_triple() above — the model moves a
+    clause out of position specifically for Arabic output, likely the
+    same right-to-left artifact. Pure string correction, no LLM call.
+    """
+    pattern = re.compile(
+        r'SELECT\s+\?\w+\s+WHERE\s*(\{.*?\})\s*'
+        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*'
+        r'(LIMIT\s+\d+)?',
+        re.IGNORECASE | re.DOTALL
+    )
+
+    def fix(m):
+        body, func, agg_target, out_var, limit = m.groups()
+        print(f"[generator] Misplaced aggregate detected — auto-correcting")
+        limit_clause = f" {limit}" if limit else ""
+        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {body}{limit_clause}"
+
+    return pattern.sub(fix, sparql)
+
+
 # ── SPARQL EXTRACTOR ──────────────────────────────────────────────────────────
 
 def extract_sparql(text: str) -> str:
@@ -85,6 +133,8 @@ def extract_sparql(text: str) -> str:
 
         # Fix reversed triples before returning
         query = fix_reversed_triple(query)
+        # Fix misplaced aggregates (same bug family, Arabic-specific)
+        query = fix_misplaced_aggregate(query)
         return query
 
     return text.strip()
@@ -272,8 +322,6 @@ Return only the SPARQL query. No explanation. No markdown."""
 
 # ── OPEN KG SPARQL GENERATOR ──────────────────────────────────────────────────
 
-# ── OPEN KG SPARQL GENERATOR ──────────────────────────────────────────────────
-
 FLIGHT_ONTOLOGY_NS  = "flight_ontology"
 AIRPORT_ONTOLOGY_NS = "airport_ontology"
 
@@ -371,6 +419,12 @@ SELECT ?value WHERE {{
   ?flight <http://www.semanticweb.org/ontologies/flight_ontology#flightNumber> "OS235" .
   ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasAircraft> ?aircraft .
   ?aircraft <http://www.semanticweb.org/ontologies/flight_ontology#reg> ?value .
+}}
+
+Q: "How many runways in the dataset are closed?"
+SELECT (COUNT(?runway) AS ?count) WHERE {{
+  ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#closed> true .
 }}
 
 Return ONLY the SPARQL query. No explanation. No markdown."""

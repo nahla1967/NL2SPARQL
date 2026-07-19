@@ -43,14 +43,9 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "ask_query_001", "ask_query_002", "ask_query_004",
-    "compare_two_airports_001", "compare_two_airports_002", "compare_two_airports_003",
-    "cross_kg_005", "cross_kg_009",
-    "multilingual_edge_001", "multilingual_edge_002", "multilingual_edge_003", "multilingual_edge_004",
-    "open_kg_001", "open_kg_006",
-    "out_of_scope_002",
-    "property_ambiguity_001", "property_ambiguity_002", "property_ambiguity_003", "property_ambiguity_004",
-    "typo_fuzzy_001", "typo_fuzzy_002", "typo_fuzzy_003",
+    
+    "open_kg_003", 
+   
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -85,15 +80,59 @@ def _normalise_for_scoring(text) -> str:
     return text.strip()
 
 
-def exact_match(predicted, expected) -> bool:
+def exact_match(predicted, expected) -> bool | None:
     if expected is None or (isinstance(expected, float) and pd.isna(expected)):
-        return None  # not scoreable — no ground truth provided
+        return None
+    expected_list = _split_list_answer(expected)
+    if expected_list is not None:
+        predicted_list = _split_list_answer(predicted) or [_normalise_for_scoring(predicted)]
+        return list_exact_match(predicted_list, expected_list)
     return _normalise_for_scoring(predicted) == _normalise_for_scoring(expected)
 
+def _split_list_answer(text) -> list[str] | None:
+    """
+    Turns a list-style answer into a normalised list of primary items.
+    Returns None if the text doesn't look like a list at all.
+    """
+    if text is None:
+        return None
+    text = str(text).strip()
 
+    # Drop a trailing clarifying note in parentheses, e.g.
+    # "(top 10 by gspeed, highest first)" — it's metadata, not data.
+    text = re.sub(r"\s*\([^)]*\)\s*$", "", text)
+
+    # A "list" is either multiple lines, or a single line with 2+ commas.
+    lines = [l for l in text.split("\n") if l.strip()]
+    if len(lines) < 2 and text.count(",") < 2:
+        return None  # single value, not a list
+
+    items = lines if len(lines) >= 2 else text.split(",")
+
+    # Each item may carry a secondary value after its own comma
+    # ("ESB, 3125.00") — keep only the first field, the identifier.
+    primary = [item.split(",")[0].strip() for item in items]
+    return [_normalise_for_scoring(p) for p in primary if p.strip()]
+def list_exact_match(predicted: list[str], expected: list[str]) -> bool:
+    return set(predicted) == set(expected)
+
+
+def list_f1(predicted: list[str], expected: list[str]) -> float:
+    if not predicted or not expected:
+        return 0.0
+    overlap = len(set(predicted) & set(expected))
+    if overlap == 0:
+        return 0.0
+    precision = overlap / len(set(predicted))
+    recall = overlap / len(set(expected))
+    return round(2 * precision * recall / (precision + recall), 4)
 def token_f1(predicted, expected) -> float | None:
     if expected is None or (isinstance(expected, float) and pd.isna(expected)):
         return None
+    expected_list = _split_list_answer(expected)
+    if expected_list is not None:
+        predicted_list = _split_list_answer(predicted) or [_normalise_for_scoring(predicted)]
+        return list_f1(predicted_list, expected_list)
     pred_tokens = _normalise_for_scoring(predicted).split()
     gold_tokens = _normalise_for_scoring(expected).split()
     if not pred_tokens or not gold_tokens:

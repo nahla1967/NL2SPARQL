@@ -45,6 +45,7 @@ SPARQL GENERATION:
 
 import re
 import json
+import ast
 import ollama
 import urllib.parse
 import urllib.request
@@ -58,7 +59,9 @@ from pipeline.mapper import (
     map_airport,
     load_lexicon,
     map_property_cascade,
+    map_property_cascade_scored,
 )
+from pipeline.mapper import ASK_SEMANTIC_THRESHOLD 
 from pipeline.extractor import extract_ask_entities, validate_ask_extraction
 from pipeline.executor  import build_ask_query, execute_ask_sparql
 
@@ -114,6 +117,31 @@ _UNIVERSITY_ENTITY_RE = re.compile(
     r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
     r'University|Lecturer|Publication)\d+)\b'
 )
+def _sanitize_sparql_literal(value: str) -> str:
+    """
+    Cleans a value before it's embedded inside a SPARQL string literal
+    ("...").  Strips characters that would either break the literal's
+    syntax or let injected SPARQL escape it.
+    """
+    value = str(value).strip()
+    value = value.strip('"').strip("'")          # LLM-echoed quote wrapping
+    value = value.replace("\\", "").replace('"', "")  # backslash / embedded quote
+    value = value.replace("\n", " ").replace("\r", " ")
+    return value.strip()
+
+def _sanitize_params(params: dict) -> dict:
+    """
+    Sanitizes every string value in an extracted-params dict before it
+    reaches any SPARQL builder. Applied once, at the point where params
+    enter resolve_template() — whether they came from the router's own
+    LLM classification (router_params) or this module's _extract_params()
+    — so every template is protected the same way, without each builder
+    needing its own cleanup call.
+    """
+    return {
+        k: (_sanitize_sparql_literal(v) if isinstance(v, str) else v)
+        for k, v in params.items()
+    }
 
 def _detect_university_entity_for_template(q: str):
     m = _UNIVERSITY_ENTITY_RE.search(q)
@@ -323,7 +351,14 @@ Return ONLY the JSON. No explanation.""",
         if not match:
             print(f"[template] No JSON object found in LLM output: {repr(raw[:100])}")
             return {}
-        return json.loads(match.group())                # ← replaces json.loads(raw)
+        candidate = match.group()
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            # Same fallback as router.py's _llm_classify — llama3 sometimes
+            # echoes Python-dict style (single quotes) instead of strict
+            # JSON, more often for fr/ar prompts.
+            return ast.literal_eval(candidate)
     except Exception as e:
         print(f"[template] Parameter extraction failed: {e}")
         return {}
@@ -981,7 +1016,10 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         print(f"[template] Reusing router params (skipping re-extraction): {params}")
     else:
         params = _extract_params(question, template_name, lang)
+    params = _sanitize_params(params)
     result["params"] = params
+
+
 
     if not params:
         result["failure_type"] = "param_extraction_failure"
@@ -1228,11 +1266,26 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
     result["entity_uri"] = entity_uri
 
     # ── Step 3: map property (direct or two-hop) ────────────────────────────────
+    # ── Step 3: map property (direct or two-hop) ────────────────────────────────
     lexicon = load_lexicon(lexicon_path)
-    property_uri, tier, property2_uri = map_property_cascade(
+    property_uri, tier, property2_uri, score = map_property_cascade_scored(
         entities["property"], lexicon, lexicon_path
     )
     if not property_uri:
+        result["failure_type"] = "mapping_failure"
+        return result
+
+    # ASK questions are the one branch where a weak match still produces
+    # a plausible-looking True/False instead of an honest failure — e.g.
+    # French "situé en" / "se trouve" matching the bare "iata" lexicon
+    # entry at semantic score 0.85-0.88, silently comparing the wrong
+    # property. So ASK enforces ASK_SEMANTIC_THRESHOLD (0.85) on top of
+    # the normal cascade, instead of trusting anything that cleared the
+    # global SEMANTIC_THRESHOLD (0.72) used everywhere else.
+    if tier == "semantic" and score < ASK_SEMANTIC_THRESHOLD:
+        print(f"[ask_query] Rejecting low-confidence semantic match "
+              f"(score={score:.3f}, tier={tier}) for property="
+              f"'{entities['property']}' — refusing to guess.")
         result["failure_type"] = "mapping_failure"
         return result
 
