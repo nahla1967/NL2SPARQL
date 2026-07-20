@@ -82,11 +82,11 @@ KG3_EP = get_endpoint("university")
 # Used to validate extracted parameters before injecting into templates.
 
 KG2_NUMERIC_PROPS = {
-    "elevationFt": {"uri": f"{KG2}elevationFt",  "label": "elevation",     "unit": "feet",   "hop": "direct"},
-    "lengthFt":    {"uri": f"{KG2}lengthFt",     "label": "runway length",  "unit": "feet",   "hop": "runway"},
-    "widthFt":     {"uri": f"{KG2}widthFt",      "label": "runway width",   "unit": "feet",   "hop": "runway"},
-    "latitude":    {"uri": f"{KG2}latitude",     "label": "latitude",       "unit": "degrees","hop": "direct"},
-    "longitude":   {"uri": f"{KG2}longitude",    "label": "longitude",      "unit": "degrees","hop": "direct"},
+    "elevationFt": {"uri": f"{KG2}elevationFt",  "label": "elevation",     "unit": "feet",   "hop": "direct",  "adjective": "higher"},
+    "lengthFt":    {"uri": f"{KG2}lengthFt",     "label": "runway length",  "unit": "feet",   "hop": "runway",  "adjective": "longer"},
+    "widthFt":     {"uri": f"{KG2}widthFt",      "label": "runway width",   "unit": "feet",   "hop": "runway",  "adjective": "wider"},
+    "latitude":    {"uri": f"{KG2}latitude",     "label": "latitude",       "unit": "degrees","hop": "direct",  "adjective": "higher"},
+    "longitude":   {"uri": f"{KG2}longitude",    "label": "longitude",      "unit": "degrees","hop": "direct",  "adjective": "higher"},
 }
 
 KG2_STRING_PROPS = {
@@ -637,23 +637,26 @@ def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     hop      = prop_info.get("hop", "direct")
 
     if hop == "runway":
-        sparql = f"""SELECT ?name ?value WHERE {{
+        sparql = f"""SELECT ?name ?iata ?value WHERE {{
   VALUES ?airport {{ <{KG2}Airport/{a1}> <{KG2}Airport/{a2}> }}
   ?airport <{KG2}airportName> ?name .
+  ?airport <{KG2}iataCode> ?iata .
   ?airport <{KG2}hasRunway> ?runway .
   ?runway <{prop_uri}> ?value .
 }} ORDER BY DESC(?value)"""
     elif hop == "country":
-        sparql = f"""SELECT ?name ?value WHERE {{
+        sparql = f"""SELECT ?name ?iata ?value WHERE {{
   VALUES ?airport {{ <{KG2}Airport/{a1}> <{KG2}Airport/{a2}> }}
   ?airport <{KG2}airportName> ?name .
+  ?airport <{KG2}iataCode> ?iata .
   ?airport <{KG2}locatedInCountry> ?country .
   ?country <{prop_uri}> ?value .
 }}"""
     else:
-        sparql = f"""SELECT ?name ?value WHERE {{
+        sparql = f"""SELECT ?name ?iata ?value WHERE {{
   VALUES ?airport {{ <{KG2}Airport/{a1}> <{KG2}Airport/{a2}> }}
   ?airport <{KG2}airportName> ?name .
+  ?airport <{KG2}iataCode> ?iata .
   ?airport <{prop_uri}> ?value .
 }} ORDER BY DESC(?value)"""
 
@@ -946,6 +949,38 @@ def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
         lines.append(", ".join(parts))
     return "\n".join(lines)
 
+def _format_compare_answer(rows: list, params: dict) -> str | None:
+    """
+    Builds 'X is higher (A: v1, B: v2)' for compare_two_airports, using the
+    original question order (airport1, airport2) for the parenthetical,
+    picking whichever value is bigger as the winner. Returns None if the
+    rows don't contain what's needed, so the caller can fall back to the
+    generic _format_answer().
+    """
+    a1 = params.get("airport1", "").upper()
+    a2 = params.get("airport2", "").upper()
+    prop = (params.get("property") or "elevationFt").strip()
+    adjective = (KG2_NUMERIC_PROPS.get(prop) or {}).get("adjective", "higher")
+
+    values = {}
+    for row in rows:
+        iata = row.get("iata", {}).get("value", "").upper()
+        val  = row.get("value", {}).get("value", "")
+        if iata:
+            values[iata] = val
+
+    v1, v2 = values.get(a1), values.get(a2)
+    if v1 is None or v2 is None:
+        return None
+
+    try:
+        winner = a1 if float(v1) > float(v2) else a2
+    except ValueError:
+        return None
+
+    return f"{winner} is {adjective} ({a1}: {v1}, {a2}: {v2})"
+
+
 def _format_answer(question: str, raw_data: str, lang: str, total_count: int = None) -> str:
 
     """
@@ -1032,7 +1067,7 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         "filter_numeric_kg2":   (_build_filter_numeric_kg2,   KG2_EP, ["name", "value"]),
         "filter_string_kg2":    (_build_filter_string_kg2,    KG2_EP, ["name"]),
         "ranking_kg2":          (_build_ranking_kg2,          KG2_EP, ["name", "value"]),
-        "compare_two_airports": (_build_compare_two_airports, KG2_EP, ["name", "value"]),
+        "compare_two_airports": (_build_compare_two_airports, KG2_EP, ["name", "iata", "value"]),
         "count_kg1":            (_build_count_kg1,            KG1_EP, ["count"]),
         "filter_numeric_kg1":   (_build_filter_numeric_kg1,   KG1_EP, ["number", "value"]),
         "cross_kg_filter":      (_build_cross_kg_filter,      None,   None),
@@ -1066,6 +1101,8 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     print(f"[template] Query type: {label}")
 
     # ── Step 3: execute ───────────────────────────────────────────────────────
+
+    compare_rows = None  # only populated for compare_two_airports, see Step 4
 
     # Special handling for cross-KG filter (two-step execution)
     if template_name == "cross_kg_filter":
@@ -1162,8 +1199,22 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             result["total_rows"] = len(rows)
 
         result["raw_data"] = raw_data
+        # compare_two_airports needs the original SPARQL rows (name/iata/value
+        # per airport), not the flattened text, to build its comparison
+        # sentence — keep them around for Step 4.
+        if template_name == "compare_two_airports":
+            compare_rows = rows
 
     # ── Step 4: format answer ─────────────────────────────────────────────────
+    if template_name == "compare_two_airports" and compare_rows:
+        compare_answer = _format_compare_answer(compare_rows, params)
+        if compare_answer:
+            result["final_answer"] = compare_answer
+            result["success"]      = True
+            result["failure_type"] = "success"
+            return result
+        # else: fall through to the generic formatter below as a safety net
+
     final_answer = _format_answer(question, result["raw_data"], lang, result.get("total_rows"))
     result["final_answer"] = final_answer
     result["success"]      = True

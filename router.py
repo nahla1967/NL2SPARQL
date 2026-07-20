@@ -791,7 +791,25 @@ def _has_ask_signal(question: str) -> bool:
     single call — identical questions were observed to get different
     answers across runs (see test_broken_rows.py, "Is BLQ located in
     France?": 4/5 False, 1/5 True on a single-call basis).
+
+    ARABIC FAST-PATH: "هل" is a dedicated Arabic question-particle that
+    marks yes/no questions specifically (comparable to English question-
+    inversion, but a single fixed word at a fixed position, so it's far
+    more reliable than the surrounding grammar). LLM voting on Arabic
+    text was observed to be unstable — the identical question sometimes
+    routed True, sometimes False, across separate runs (see eval log,
+    ask_query_003 ar). Since "هل" is a deterministic linguistic marker,
+    we check for it first and skip the LLM vote entirely when present,
+    removing that instability for the common case. This is a shortcut,
+    not an override: if the question does NOT start with "هل", we still
+    fall through to the existing LLM voting unchanged — so this only
+    ever helps Arabic ask-style questions, and never touches English,
+    French, or Arabic questions phrased without "هل".
     """
+    if question.strip().startswith("هل"):
+        print(f"[router] _has_ask_signal('{question[:40]}...') → True (fast-path: 'هل' prefix)")
+        return True
+
     prompt = f"""Does this question ask to CONFIRM whether a specific
 property already has a specific value (a yes/no question)? Or does it
 ASK for information (what/which/how much)?
