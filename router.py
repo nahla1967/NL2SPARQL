@@ -1210,6 +1210,40 @@ def route(question: str) -> dict:
                     "config":     None,
                 }
 
+        # Case 1.5: cross_kg_filter classified with no flight entity in the
+        # question at all. Priority 2 already handles every question that
+        # contains a flight number, so by the time execution reaches here
+        # (Priority 3), there is no legitimate way for a question to need
+        # cross_kg_filter — it can only be a misclassification. The LLM
+        # reaches for it anyway when a question mentions an airport
+        # property + threshold/limit that overlaps with cross_kg_filter's
+        # own few-shot examples (e.g. "elevationFt > 800, limit 10").
+        # Reroute to the matching airport-only template using whichever
+        # property type the LLM actually extracted.
+        if query_type == "cross_kg_filter":
+            prop = params.get("airport_property", "")
+            if prop in KG2_NUMERIC_PROPS:
+                print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_numeric_kg2")
+                query_type = "filter_numeric_kg2"
+                params = {"property": prop, "operator": params.get("operator", ">"),
+                          "threshold": params.get("threshold"), "limit": params.get("limit", 10)}
+                cfg = TEMPLATE_REGISTRY[query_type]
+            elif prop in KG2_STRING_PROPS:
+                print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_string_kg2")
+                query_type = "filter_string_kg2"
+                params = {"property": prop, "value": params.get("threshold"), "limit": params.get("limit", 10)}
+                cfg = TEMPLATE_REGISTRY[query_type]
+            else:
+                print(f"[router] Smart reroute: cross_kg_filter with no flight entity, unrecognised property → open_kg")
+                return {
+                    "query_type": "open_kg",
+                    "kg":         "cross",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   None,
+                    "config":     None,
+                }
+
         # Case 2: filter_numeric_kg1 with ranking intent and no real threshold
         if query_type == "filter_numeric_kg1":
             prop      = params.get("property", "")
@@ -1259,6 +1293,42 @@ def route(question: str) -> dict:
                     params = {"property": prop, "value": value, "limit": params.get("limit", 10)}
                 else:
                     print(f"[router] Smart reroute: categorical property in ranking_kg2, no value → open_kg")
+                    return {
+                        "query_type": "open_kg", "kg": "cross", "entity": None,
+                        "direction": None, "template": None, "config": None,
+                    }
+        # Case 5: filter_string_kg2 received a NUMERIC property
+        # (elevationFt/lengthFt/widthFt) — the reverse of Case 4. Observed
+        # in real eval runs: a threshold phrase like "runway longer than
+        # 10000 feet" sometimes gets filed under filter_string_kg2 even
+        # though the property extraction itself is correct and numeric.
+        # The LLM sometimes already extracts a separate "operator" key
+        # despite the wrong top-level category (seen in the fr run); when
+        # it doesn't, parse a leading >/</>=/<= off the "value" string
+        # instead. Reroute deterministically rather than trust either
+        # shape blindly.
+        if query_type == "filter_string_kg2":
+            prop = params.get("property", "")
+            if prop in KG2_NUMERIC_PROPS:
+                raw_value = str(params.get("value", ""))
+                operator  = params.get("operator")
+                threshold = None
+                if operator in (">", "<", ">=", "<="):
+                    threshold = raw_value
+                else:
+                    m = re.match(r"\s*(>=|<=|>|<)?\s*(-?\d+(?:\.\d+)?)", raw_value)
+                    if m:
+                        operator  = m.group(1) or ">"
+                        threshold = m.group(2)
+                if threshold is not None:
+                    print(f"[router] Smart reroute: filter_string_kg2 with numeric property → filter_numeric_kg2")
+                    query_type = "filter_numeric_kg2"
+                    params = {"property": prop, "operator": operator,
+                              "threshold": threshold, "limit": params.get("limit", 10)}
+                    cfg = TEMPLATE_REGISTRY[query_type]
+                else:
+                    print(f"[router] Smart reroute: filter_string_kg2 with numeric property, "
+                          f"no parseable threshold → open_kg")
                     return {
                         "query_type": "open_kg", "kg": "cross", "entity": None,
                         "direction": None, "template": None, "config": None,

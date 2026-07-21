@@ -181,6 +181,12 @@ def _extract_params(question: str, template_name: str, lang: str) -> dict:
 
         "filter_numeric_kg2": f"""Extract parameters from this airport question.
 Question: "{question}"
+
+Identify the property being filtered using this mapping:
+  "elevation" or "altitude" or "height"                → "elevationFt"
+  "runway length" or "length" or "longer" or "longest"  → "lengthFt"
+  "runway width" or "width" or "wider" or "widest"      → "widthFt"
+
 Return ONLY a JSON object with these keys:
 - "property": one of [elevationFt, lengthFt, widthFt]
 - "operator": one of [>, <, >=, <=]
@@ -206,6 +212,12 @@ Return ONLY the JSON. No explanation.""",
 
         "ranking_kg2": f"""Extract parameters from this airport ranking question.
 Question: "{question}"
+
+Identify the property being ranked using this mapping:
+  "elevation" or "altitude" or "height"                → "elevationFt"
+  "runway length" or "length" or "longer" or "longest"  → "lengthFt"
+  "runway width" or "width" or "wider" or "widest"      → "widthFt"
+
 Return ONLY a JSON object with these keys:
 - "property": one of [elevationFt, lengthFt, widthFt]
 - "order": "DESC" for highest/longest/most, "ASC" for lowest/shortest/least

@@ -82,10 +82,23 @@ def _normalise_for_scoring(text) -> str:
 
 def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
     """
-    Builds a {normalised airport name → IATA code} lookup from OUR OWN
-    KG2 ontology (58 airports) — not the global airports.csv, which has
-    9006 rows and 49 duplicate names mapping to different IATA codes.
-    Using the KG's own 58 airports guarantees no ambiguity.
+    Builds a {airport name (lower-cased only) → IATA code} lookup from
+    OUR OWN KG2 ontology (58 airports) — not the global airports.csv,
+    which has 9006 rows and 49 duplicate names mapping to different IATA
+    codes. Using the KG's own 58 airports guarantees no ambiguity.
+
+    Keys are lower-cased only, NOT run through _normalise_for_scoring().
+    Full normalisation replaces punctuation (hyphens, en-dashes) with
+    spaces, so a name like "Catania-Fontanarossa Airport" would become
+    the key "catania fontanarossa airport" — a space where the real
+    pipeline text still has a hyphen. That space-vs-hyphen mismatch
+    means the regex substitution in _canonicalize_airport_names() never
+    matches, silently failing for every hyphenated/en-dashed name (7 of
+    the 58 airports: Catania-Fontanarossa, Luxembourg-Findel,
+    Falcone–Borsellino, Stockholm-Arlanda, Josep Tarradellas
+    Barcelona-El Prat, Paris-Orly, Rome–Fiumicino). Lower-casing alone
+    is enough since matching is already case-insensitive
+    (re.IGNORECASE) in _canonicalize_airport_names().
     """
     g = Graph()
     g.parse(ttl_path, format="turtle")
@@ -98,7 +111,7 @@ def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
     }
     """
     for row in g.query(query):
-        lookup[_normalise_for_scoring(str(row.name))] = str(row.code).strip().upper()
+        lookup[str(row.name).strip().lower()] = str(row.code).strip().upper()
     return lookup
 
 
@@ -109,15 +122,21 @@ def _canonicalize_airport_names(text: str) -> str:
     """
     Replaces full airport names with their IATA code inside a text blob,
     so scoring can compare 'Esenboğa International Airport' against the
-    ground truth's 'ESB' as the same entity. Word-boundary matched to
-    avoid partial-word collisions.
+    ground truth's 'ESB' as the same entity.
+
+    Substitutes directly on the ORIGINAL text (case-insensitive), rather
+    than through _normalise_for_scoring() first — that would collapse
+    every newline/comma into a single space, which destroys the list
+    structure that _split_list_answer() needs to detect multi-item
+    answers (e.g. ranking_kg2's "Name1, val1\nName2, val2"). Longer
+    names are substituted first so a short name that's a substring of a
+    longer one (rare, but possible) never partially matches first.
     """
     if not text:
         return text
-    normed = _normalise_for_scoring(text)
-    for name, code in AIRPORT_CODE_LOOKUP.items():
-        normed = re.sub(rf"\b{re.escape(name)}\b", code, normed)
-    return normed
+    for name, code in sorted(AIRPORT_CODE_LOOKUP.items(), key=lambda kv: -len(kv[0])):
+        text = re.sub(re.escape(name), code, text, flags=re.IGNORECASE)
+    return text
 
 
 def exact_match(predicted, expected) -> bool | None:
@@ -470,19 +489,39 @@ def main():
                 expected_type = row["expected_type"]
                 routing_ok = (expected_type == "VARIES") or (result["query_type"] == expected_type)
 
-                # Fix #1: always score the formatted answer, never the raw
-                # value — raw_answer can be a Python bool (True/False) for
-                # ask_query, and `True` is truthy, so `raw_answer or final_answer`
-                # silently used the literal boolean instead of "Yes."/"No.".
-                scored_value = result.get("final_answer")
+                # Fix #1: score the raw extracted value, not the natural-
+                # language sentence — comparing "The departure city of
+                # flight OS295 is Vienna." against gold "Vienna" destroys
+                # exact-match and dilutes F1 with sentence filler tokens.
+                # EXCEPTION: compare_two_airports is scored on final_answer,
+                # because that's the branch where we specifically built
+                # final_answer to BE the gold-matching comparison sentence
+                # ("NAP is higher (BLQ: 123, NAP: 294)") — raw_answer there
+                # is the unformatted SPARQL row dump, not a scoring target.
+                # ask_query is scored separately below on its own boolean
+                # raw_answer, bypassing this branch entirely.
+                if row["category"] == "compare_two_airports":
+                    scored_value = result.get("final_answer")
+                else:
+                    scored_value = result.get("raw_answer")
                 if isinstance(scored_value, list):
                     scored_value = "\n".join(str(v) for v in scored_value)
 
                 # Fix #3: ranking_kg2 / filter_numeric_kg2 ground truth uses
                 # IATA codes ("ESB"), the pipeline outputs full names
                 # ("Esenboğa International Airport") — same entity, different
-                # identifier. Canonicalize before comparing.
-                scored_value_for_match = _canonicalize_airport_names(scored_value)
+                # identifier. Canonicalize before comparing, but ONLY for
+                # these two categories — applying it everywhere (previous
+                # bug) ran every answer through it regardless of whether it
+                # needed it, and the canonicalization itself used to funnel
+                # through full normalisation first, destroying the comma/
+                # newline structure list-scoring depends on. Both are fixed
+                # here: scoped to just these 2 categories, and substituting
+                # directly on the original text instead.
+                if row["category"] in ("ranking_kg2", "filter_numeric_kg2"):
+                    scored_value_for_match = _canonicalize_airport_names(scored_value)
+                else:
+                    scored_value_for_match = scored_value
 
                 # Fix #2: ask_query ground truth is English-only ("Yes."/"No."),
                 # but final_answer is localized ("Non.", "لا."). A yes/no
