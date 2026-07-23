@@ -1,11 +1,16 @@
-from template_resolver import _sanitize_params, _build_filter_string_kg2
+# fix_classification_prompt.py
+with open("router.py", encoding="utf-8") as f:
+    src = f.read()
 
-# The exact corrupted params from your log (filter_string_kg2_001, ar)
-broken_params = {"property": "countryName", "value": '"Italy"', "limit": 10}
+start = src.index('_CLASSIFICATION_PROMPT = """')
+end = src.index('"""', start + len('_CLASSIFICATION_PROMPT = """')) + 3
+block = src[start:end]
 
-clean_params = _sanitize_params(broken_params)
-print("before:", broken_params)
-print("after: ", clean_params)
+fixed_block = block.replace("{{", "{").replace("}}", "}")
+assert "{question}" in fixed_block, "placeholder got mangled — abort, don't save"
 
-sparql, label = _build_filter_string_kg2(clean_params)
-print(sparql)
+new_src = src[:start] + fixed_block + src[end:]
+with open("router.py", "w", encoding="utf-8") as f:
+    f.write(new_src)
+
+print("Done. Doubled braces remaining:", fixed_block.count("{{"))

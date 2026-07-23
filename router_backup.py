@@ -431,153 +431,153 @@ OPEN_KG: Use when the question asks about aviation data that exists in the
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
 Q: "Which airports have an elevation above 1000 feet?"
-A: {"query_type": "filter_numeric_kg2", "params": {"property": "elevationFt", "operator": ">", "threshold": 1000, "limit": 10}}
+A: {{"query_type": "filter_numeric_kg2", "params": {{"property": "elevationFt", "operator": ">", "threshold": 1000, "limit": 10}}}}
 
 Q: "Show all large airports."
-A: {"query_type": "filter_string_kg2", "params": {"property": "airportType", "value": "large_airport", "limit": 10}}
+A: {{"query_type": "filter_string_kg2", "params": {{"property": "airportType", "value": "large_airport", "limit": 10}}}}
 
 Q: "Which airports are located in Germany?"
-A: {"query_type": "filter_string_kg2", "params": {"property": "countryName", "value": "Germany", "limit": 10}}
+A: {{"query_type": "filter_string_kg2", "params": {{"property": "countryName", "value": "Germany", "limit": 10}}}}
 
 Q: "What are the top 5 airports with the highest elevation?"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 5}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 5}}}}
 
 Q: "Which airport has the shortest runway?"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "ASC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "ASC", "limit": 1}}}}
 
 Q: "Quel aéroport a la piste la plus longue?"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "DESC", "limit": 1}}}}
 
 Q: "Quel aéroport a la plus haute élévation?"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
 
 Q: "أي مطار لديه أعلى ارتفاع؟"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
 
 Q: "Compare VIE and FRA by elevation."
-A: {"query_type": "compare_two_airports", "params": {"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}
+A: {{"query_type": "compare_two_airports", "params": {{"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}}}
 
 Q: "Comparez CDG et LHR par longueur de piste."
-A: {"query_type": "compare_two_airports", "params": {"airport1": "CDG", "airport2": "LHR", "property": "lengthFt"}}
+A: {{"query_type": "compare_two_airports", "params": {{"airport1": "CDG", "airport2": "LHR", "property": "lengthFt"}}}}
 
 Q: "How many flights are operated by Lufthansa?"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasAirline", "filter_value": "Lufthansa", "mode": "count"}}
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasAirline", "filter_value": "Lufthansa", "mode": "count"}}}}
 
 Q: "Combien de vols partent de Vienne?"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasOriginCity", "filter_value": "Vienna", "mode": "count"}}
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasOriginCity", "filter_value": "Vienna", "mode": "count"}}}}
 
 Q: "كم رحلة تتجه إلى برلين؟"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasDestinationCity", "filter_value": "Berlin", "mode": "count"}}}}
 Q: "How many flights arrive in Vienna?"
-A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity", "filter_value": "Vienna", "mode": "count"}}
+A: {{"query_type": "count_kg1", "params": {{"filter_property": "hasDestinationCity", "filter_value": "Vienna", "mode": "count"}}}}
 Q: "Which flights have a ground speed above 400 knots?"
-A: {"query_type": "filter_numeric_kg1", "params": {"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}
+A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}}}
 
 Q: "Which flights have a vertical speed below -1000 feet per minute?"
-A: {"query_type": "filter_numeric_kg1", "params": {"property": "vspeed", "operator": "<", "threshold": -1000, "limit": 10}}
+A: {{"query_type": "filter_numeric_kg1", "params": {{"property": "vspeed", "operator": "<", "threshold": -1000, "limit": 10}}}}
 
 Q: "What country does flight LO225 land in?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Poland", "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Poland", "limit": 1}}}}
 
 Q: "What type of airport does flight FR182 arrive at?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 1}}}}
 
 Q: "What is the elevation of the destination airport of KE567?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 0, "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 0, "limit": 1}}}}
 
 Q: "Dans quel pays atterrit le vol OS295?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Austria", "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Austria", "limit": 1}}}}
 
 Q: "في أي دولة يهبط الرحلة OS235؟"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 1}}}}
 
 Q: "What is the runway length at the destination of OS214?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "lengthFt", "operator": ">", "threshold": 0, "limit": 1}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "lengthFt", "operator": ">", "threshold": 0, "limit": 1}}}}
 
 Q: "Which flights land at airports with elevation above 800 feet?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 800, "limit": 10}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "elevationFt", "operator": ">", "threshold": 800, "limit": 10}}}}
 
 Q: "Which flights arrive at airports located in Germany?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}}}
 
 Q: "Quels vols atterrissent dans des aéroports en Allemagne?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Germany", "limit": 10}}}}
 
 Q: "Which flights land at large airports?"
-A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}
+A: {{"query_type": "cross_kg_filter", "params": {{"direction": "destination", "airport_property": "airportType", "operator": "=", "threshold": "large_airport", "limit": 10}}}}
 
 Q: "Which flight has the highest ground speed?"
-A: {"query_type": "open_kg", "params": {}}
+A: {{"query_type": "open_kg", "params": {{}}}}
 
 Q: "What is the callsign of the fastest flight?"
-A: {"query_type": "open_kg", "params": {}}
+A: {{"query_type": "open_kg", "params": {{}}}}
 
 Q: "ما هي الرحلة ذات أعلى سرعة أرضية؟"
-A: {"query_type": "open_kg", "params": {}}
+A: {{"query_type": "open_kg", "params": {{}}}}
 
 Q: "What is the weather forecast for JFK tomorrow?"
-A: {"query_type": "out_of_scope", "params": {}}
+A: {{"query_type": "out_of_scope", "params": {{}}}}
 
 Q: "Am I allowed to bring a guitar on flight BR62?"
-A: {"query_type": "out_of_scope", "params": {}}
+A: {{"query_type": "out_of_scope", "params": {{}}}}
 
 Q: "Who invented the first commercial airplane?"
-A: {"query_type": "out_of_scope", "params": {}}
+A: {{"query_type": "out_of_scope", "params": {{}}}}
 
 Q: "Quel est le prix du billet pour le vol AF123?"
-A: {"query_type": "out_of_scope", "params": {}}
+A: {{"query_type": "out_of_scope", "params": {{}}}}
 
 Q: "هل تقدم شركة الطيران وجبات نباتية؟"
-A: {"query_type": "out_of_scope", "params": {}}
+A: {{"query_type": "out_of_scope", "params": {{}}}}
 
 Q: "How many courses does FullProfessor0 teach?"
-A: {"query_type": "count_kg3", "params": {"property": "teacherOf", "direction": "outgoing", "mode": "count"}}
+A: {{"query_type": "count_kg3", "params": {{"property": "teacherOf", "direction": "outgoing", "mode": "count"}}}}
 
 Q: "List the courses that GraduateStudent3 takes."
-A: {"query_type": "count_kg3", "params": {"property": "takesCourse", "direction": "outgoing", "mode": "list"}}
+A: {{"query_type": "count_kg3", "params": {{"property": "takesCourse", "direction": "outgoing", "mode": "list"}}}}
 
 Q: "How many students are in Department0?"
-A: {"query_type": "count_kg3", "params": {"property": "memberOf", "direction": "incoming", "mode": "count"}}
+A: {{"query_type": "count_kg3", "params": {{"property": "memberOf", "direction": "incoming", "mode": "count"}}}}
 
 Q: "Which professors work for Department3?"
-A: {"query_type": "filter_string_kg3", "params": {"property": "worksFor", "value": "Department3", "limit": 10}}
+A: {{"query_type": "filter_string_kg3", "params": {{"property": "worksFor", "value": "Department3", "limit": 10}}}}
 
 Q: "List students who are members of Department1."
-A: {"query_type": "filter_string_kg3", "params": {"property": "memberOf", "value": "Department1", "limit": 10}}
+A: {{"query_type": "filter_string_kg3", "params": {{"property": "memberOf", "value": "Department1", "limit": 10}}}}
 Q: "What is the average ground speed per airline?"
-A: {"query_type": "group_aggregate_kg1", "params": {"group_by": "airline", "property": "gspeed", "function": "AVG"}}
+A: {{"query_type": "group_aggregate_kg1", "params": {{"group_by": "airline", "property": "gspeed", "function": "AVG"}}}}
 
 Q: "What is the maximum elevation per country?"
-A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "MAX"}}
+A: {{"query_type": "group_aggregate_kg2", "params": {{"group_by": "country", "property": "elevationFt", "function": "MAX"}}}}
 
 Q: "Quelle est la longueur de piste moyenne par pays?"
-A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "lengthFt", "function": "AVG"}}
+A: {{"query_type": "group_aggregate_kg2", "params": {{"group_by": "country", "property": "lengthFt", "function": "AVG"}}}}
 
 Q: "Which department teaches the most courses on average per professor?"
-A: {"query_type": "group_aggregate_kg3", "params": {"group_by": "department", "property": "teacherOf", "function": "AVG"}}
+A: {{"query_type": "group_aggregate_kg3", "params": {{"group_by": "department", "property": "teacherOf", "function": "AVG"}}}}
 
 Q: "Which airports have a grass runway?"
-A: {"query_type": "filter_string_kg2", "params": {"property": "surface", "value": "grass", "limit": 10}}
+A: {{"query_type": "filter_string_kg2", "params": {{"property": "surface", "value": "grass", "limit": 10}}}}
 
 Q: "How many runways in the dataset are closed?"
-A: {"query_type": "open_kg", "params": {}}
+A: {{"query_type": "open_kg", "params": {{}}}}
 Q: "Which airport has the shortest runway?"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "ASC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "ASC", "limit": 1}}}}
 
 Q: "Quel aéroport a la piste la plus longue?"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "DESC", "limit": 1}}}}
 
 Q: "Quel aéroport a la plus haute élévation?"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
 
 Q: "أي مطار لديه أعلى ارتفاع؟"
-A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "elevationFt", "order": "DESC", "limit": 1}}}}
 
 Q: "أي مطار لديه أقصر مدرج؟"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "ASC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "ASC", "limit": 1}}}}
 
 Q: "أي مطار لديه أطول مدرج؟"
-A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+A: {{"query_type": "ranking_kg2", "params": {{"property": "lengthFt", "order": "DESC", "limit": 1}}}}
 
 
 
