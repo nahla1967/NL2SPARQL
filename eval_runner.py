@@ -44,8 +44,7 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "open_kg_003",
-    "ask_query_001", "ask_query_002", "ask_query_003", "ask_query_004",
+    "ranking_kg2_001", "ranking_kg2_002", "ranking_kg2_003",
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────

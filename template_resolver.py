@@ -217,6 +217,12 @@ Identify the property being ranked using this mapping:
   "elevation" or "altitude" or "height"                → "elevationFt"
   "runway length" or "length" or "longer" or "longest"  → "lengthFt"
   "runway width" or "width" or "wider" or "widest"      → "widthFt"
+  "élévation" or "altitude" or "hauteur"                → "elevationFt"
+  "piste" + "longue"/"longueur"/"courte"                → "lengthFt"
+  "piste" + "large"/"largeur"/"étroite"                 → "widthFt"
+  "الارتفاع" or "أعلى" or "أدنى" (with no مدرج mention)   → "elevationFt"
+  "مدرج" + "أقصر" or "أطول" or "طول"                      → "lengthFt"
+  "مدرج" + "أعرض" or "أضيق" or "عرض"                      → "widthFt"
 
 Return ONLY a JSON object with these keys:
 - "property": one of [elevationFt, lengthFt, widthFt]
