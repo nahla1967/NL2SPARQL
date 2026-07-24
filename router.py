@@ -1046,6 +1046,7 @@ Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
 Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
 Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
 Q: "في أي دولة يقع مطار أثينا؟"                    → NO
+
 Answer only YES or NO:
 Can this question be answered using only the data described above?
 
