@@ -825,10 +825,36 @@ def _has_ask_signal(question: str) -> bool:
     fall through to the existing LLM voting unchanged — so this only
     ever helps Arabic ask-style questions, and never touches English,
     French, or Arabic questions phrased without "هل".
+
+    WH-WORD FAST-PATH (negative): a question opening with an
+    information-seeking word (what/which/where/when/how/who, or their
+    French/Arabic equivalents) is, in every real dataset example checked,
+    never a yes/no confirmation question — genuine ask_query phrasing
+    instead uses inversion ("Is X...?", "X est-il...?") or the "هل"
+    particle above. Without this check, _has_ask_signal ran unconditionally
+    on every single question in the pipeline BEFORE Priority 2's
+    zero-LLM-cost fast path (_has_kg1_signal) ever got a chance to run —
+    so an obvious question like "What is the gate of flight OS295?" paid
+    3 LLM calls here for nothing, on every run, regardless of category.
+    This fast-path returns False immediately for that entire class of
+    question, restoring the original zero/one-call cost for the common
+    case, while leaving majority-vote sampling fully intact for anything
+    that isn't a clear-cut WH-question (which is exactly where the
+    original sampling-noise problem was observed).
     """
     if question.strip().startswith("هل"):
         print(f"[router] _has_ask_signal('{question[:40]}...') → True (fast-path: 'هل' prefix)")
         return True
+
+    WH_WORDS = (
+        "what", "which", "where", "when", "how", "who",
+        "quel", "quelle", "quels", "quelles", "où", "quand", "comment", "qui", "combien",
+        "ما", "ماذا", "أي", "أين", "متى", "كيف", "من", "كم",
+    )
+    q_stripped = question.strip().lower()
+    if any(q_stripped.startswith(w) for w in WH_WORDS):
+        print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word opener)")
+        return False
 
     prompt = f"""Does this question ask to CONFIRM whether a specific
 property already has a specific value (a yes/no question)? Or does it
@@ -1103,7 +1129,6 @@ def _normalize_query_type(query_type, question: str = "") -> str:
               f"→ '{corrected}' (score={score})")
         return corrected
     return query_type
-    return query_type  # leave as-is — falls through to the clean gate, same as before
 def route(question: str) -> dict:
     """
     Routes a natural language question to the correct pipeline branch.
@@ -1331,6 +1356,49 @@ def route(question: str) -> dict:
                     "template":   None,
                     "config":     None,
                 }
+
+        # Case 1.6: compare_two_airports classified with a missing airport
+        # code. A genuine two-airport comparison always names two IATA
+        # codes or two specific airports; if either airport1 or airport2
+        # came back empty, the question almost certainly named no airport
+        # at all — a ranking/superlative question ("which airport has the
+        # shortest runway?", "top 5 airports by elevation") that the LLM
+        # misclassified as a comparison, reusing that template's structure
+        # without codes to fill (producing an empty VALUES {} clause).
+        # Reroute to ranking_kg2 using whatever property was extracted.
+        # compare_two_airports' schema has no order/limit fields, so both
+        # are inferred here: order from ranking-direction keywords in the
+        # question, limit from the first standalone digit in the question
+        # text (falls back to 1, matching a single-airport "which airport
+        # has the X-est Y" phrasing, if no digit is present).
+        if query_type == "compare_two_airports":
+            a1 = (params.get("airport1") or "").strip()
+            a2 = (params.get("airport2") or "").strip()
+            if not a1 or not a2:
+                prop = (params.get("property") or "").strip()
+                if prop in KG2_NUMERIC_PROPS:
+                    ASC_SIGNALS = [
+                        "shortest", "lowest", "smallest", "narrowest",
+                        "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
+                        "أقصر", "أدنى", "أضيق"
+                    ]
+                    order = "ASC" if any(sig in question.lower() for sig in ASC_SIGNALS) else "DESC"
+                    limit_match = re.search(r"\b(\d+)\b", question)
+                    limit = int(limit_match.group(1)) if limit_match else 1
+                    print(f"[router] Smart reroute: compare_two_airports missing airport code(s) → ranking_kg2")
+                    query_type = "ranking_kg2"
+                    params = {"property": prop, "order": order, "limit": limit}
+                    cfg = TEMPLATE_REGISTRY[query_type]
+                else:
+                    print(f"[router] Smart reroute: compare_two_airports missing airport code(s), unrecognised property → open_kg")
+                    return {
+                        "query_type": "open_kg",
+                        "kg":         "cross",
+                        "entity":     None,
+                        "direction":  None,
+                        "template":   None,
+                        "config":     None,
+                    }
 
         # Case 2: filter_numeric_kg1 with ranking intent and no real threshold
         if query_type == "filter_numeric_kg1":
