@@ -143,9 +143,7 @@ _KG1_ONLY_SIGNALS = {
     # French
     "porte", "indicatif", "vitesse sol", "vitesse verticale",
     # Arabic
-    "بوابة", "مبنى", "الإشارة", "سرعة أرضية", "سرعة عمودية",
-     "destination of flight",   # "What is the destination of flight X?"
-    "depart from",             # "Where does flight OS235 depart from?"
+    "بوابة", "مبنى", "صالة", "إشارة النداء", "الإشارة", "سرعة أرضية", "سرعة عمودية",    "depart from",             # "Where does flight OS235 depart from?"
     "flying to",               # "What country is flight LO225 flying to?"
     "vole vers",               # French equivalent
     "تغادر",                   # Arabic: departs
@@ -785,7 +783,9 @@ def _llm_yes_no_majority(prompt: str, k: int = 3) -> bool:
         try:
             response = ollama.chat(
                 model="llama3",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0}
+                
             )
             votes.append(response["message"]["content"].strip().upper().startswith("YES"))
         except Exception as e:
@@ -843,6 +843,7 @@ Q: "Quelle est la porte du vol OS830?" → NO
 Q: "ما هو مطار الوصول؟" → NO
 Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
 Q: "في أي دولة يقع مطار أثينا؟" → NO
+Q: "ما هي إشارة النداء للرحلة TK500؟" → NO
 
 Answer only YES or NO.
 
@@ -1018,7 +1019,7 @@ Q: "هل يمكنني اصطحاب حيوان أليف؟"                  → N
 Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
 Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
 Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
-Q: "في أي دولة يقع مطار أثينا؟" → NO
+Q: "في أي دولة يقع مطار أثينا؟"                    → NO
 Answer only YES or NO:
 Can this question be answered using only the data described above?
 

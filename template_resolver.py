@@ -443,6 +443,11 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
       ?airport ao:airportType "large_airport" .
     } LIMIT 10
     """
+    _SURFACE_SYNONYMS = {
+    "asphalt":  ["ASP", "ASPH", "PEM", "ASPHALT"],
+    "concrete": ["CON", "CONC", "concrete", "Concrete"],
+    "grass":    ["GRS", "GRASS"],
+}
     prop  = params.get("property", "airportType")
     value = params.get("value", "")
     limit = int(params.get("limit") or 10)
@@ -458,6 +463,16 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}airportName> ?name .
   ?airport <{KG2}locatedInCountry> ?country .
   ?country <{KG2}countryName> "{value}" .
+}} ORDER BY ?name LIMIT {limit}"""
+    elif prop == "surface":
+        prop_uri = prop_info["uri"]
+        codes = _SURFACE_SYNONYMS.get(value.lower(), [value])
+        values_clause = ", ".join(f'"{c}"' for c in codes)
+        sparql = f"""SELECT ?airport ?name WHERE {{
+  ?airport a <{KG2}Airport> .
+  ?airport <{KG2}airportName> ?name .
+  ?airport <{prop_uri}> ?surfaceVal .
+  FILTER(?surfaceVal IN ({values_clause}))
 }} ORDER BY ?name LIMIT {limit}"""
     else:
         prop_uri = prop_info["uri"]

@@ -159,6 +159,7 @@
     "الرمز":                      "hasCallsign",
     "رمز الرحلة":                 "hasCallsign",
     "الكود الراديوي":             "hasCallsign",
+    "إشارة النداء":               "hasCallsign",
 
     "departure country":          "hasOriginCountry",
     "origin country":             "hasOriginCountry",
