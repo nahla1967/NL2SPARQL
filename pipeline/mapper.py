@@ -83,6 +83,7 @@ def _normalise(text: str) -> str:
     text = re.sub(r'ة', 'ه', text)
     text = re.sub(r'[يى]', 'ي', text)
     text = re.sub(r'ـ', '', text)
+    text = re.sub(r'(?<=^)ال|(?<=\s)ال', '', text) 
     text = re.sub(r'[^\w\s]', '', text)
     return text.strip().lower()
 
@@ -114,7 +115,7 @@ def _pre_normalise(text: str) -> str:
     return text.strip()
 
 def _pre_map(text: str, lexicon: dict) -> tuple:
-    norm = _pre_normalise(text)
+    norm = _normalise(_pre_normalise(text))
     normalised_properties = {
         _normalise(k): v
         for k, v in lexicon["properties"].items()
@@ -124,7 +125,6 @@ def _pre_map(text: str, lexicon: dict) -> tuple:
     if result:
         print(f"[pre-norm] '{text}' → exact hit: {result}")
     return result, None
-
 
 # ── TIER 1: EXACT ─────────────────────────────────────────────────────────────
 def map_property(property_text: str, lexicon: dict) -> str | None:

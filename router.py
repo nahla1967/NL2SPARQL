@@ -102,6 +102,23 @@ WHAT CHANGED vs v10 (this revision — majority-vote gates)
     trusting a single unconstrained sample. This triples the latency
     cost of these two specific checks, but they're cheap binary calls,
     and reliability matters more than shaving a couple seconds here.
+
+WHAT CHANGED (this revision — false-premise fix in _has_ask_signal)
+-----------------------------------------------------------
+    test_llm_variance.py isolated the ROOT CAUSE behind the original
+    "Is BLQ located in France?" instability: it wasn't random sampling
+    noise at all. A controlled 2x2 test (English/Arabic x true-fact/
+    false-fact) showed the model answers NO with perfect consistency
+    (10/10 at temperature=0) whenever the embedded factual claim is
+    FALSE, and YES with perfect consistency whenever it's TRUE —
+    regardless of language. The model was silently answering "is this
+    claim true?" instead of "is this question structurally a yes/no
+    confirmation?", which are different questions. A confirmation
+    question is ask-style whether or not the fact it asserts is true.
+    Fixed by adding an explicit false-premise example (in both English
+    and Arabic, since the bug wasn't language-specific) to the few-shot
+    list, teaching the model that truth value does not determine the
+    label.
 """
 
 from rapidfuzz import process, fuzz
@@ -139,11 +156,12 @@ _IATA_RE   = re.compile(r"\b([A-Z]{3})\b")
 _KG1_ONLY_SIGNALS = {
     # English
     "gate", "terminal", "callsign", "squawk",
-    "ground speed", "vertical speed",
+    "ground speed", "vertical speed", "airline", "operated by", "operates flight",
     # French
-    "porte", "indicatif", "vitesse sol", "vitesse verticale",
+    "porte", "indicatif", "vitesse sol", "vitesse verticale", "compagnie aérienne", "opère le vol", "exploité par",
     # Arabic
-    "بوابة", "مبنى", "صالة", "إشارة النداء", "الإشارة", "سرعة أرضية", "سرعة عمودية",    "depart from",             # "Where does flight OS235 depart from?"
+   "بوابة", "مبنى", "صالة", "إشارة النداء", "الإشارة", "سرعة أرضية", "سرعة عمودية",
+    "شركة الطيران", "تشغل الرحلة", "تشغل رحلة",    "depart from",             # "Where does flight OS235 depart from?"
     "flying to",               # "What country is flight LO225 flying to?"
     "vole vers",               # French equivalent
     "تغادر",                   # Arabic: departs
@@ -174,35 +192,33 @@ _OPEN_KG_SIGNALS = {
 def _has_open_kg_signal(q_lower: str) -> bool:
     return any(sig in q_lower for sig in _OPEN_KG_SIGNALS)
 
+
+def _strip_arabic_al(text: str) -> str:
+    """
+    Strips a leading 'ال' (definite article) from each word in Arabic
+    text before signal matching. Arabic attaches the article directly
+    to nouns with no separating character (السرعة, not سرعة), so a
+    fixed multi-word phrase like "سرعة عمودية" silently fails to match
+    "السرعة العمودية" — every word after the first loses its match
+    because ال sits between the space and the noun.
+    This is intentionally narrow: only a literal leading 'ال' per word,
+    not general Arabic morphology, since that's the one pattern that
+    breaks _KG1_ONLY_SIGNALS / _COUNT_SIGNALS / _COMPARE_SIGNALS matching.
+    """
+    return re.sub(r'(?<=^)ال|(?<=\s)ال', '', text)
 # ─────────────────────────────────────────────
 # KG1 SIGNAL DETECTOR (word-boundary safe)
 # ─────────────────────────────────────────────
 
 def _has_kg1_signal(q_lower: str) -> bool:
-    """
-    Returns True if the question contains any KG1-only signal word.
-
-    Uses two matching strategies depending on signal length:
-      - Multi-word signals (e.g. "ground speed"):
-          Simple substring match. The space character naturally prevents
-          partial matches inside compound words like "groundspeed".
-      - Single-word signals (e.g. "gate"):
-          Word-boundary regex (\\b). Prevents matching "gate" inside
-          "navigate" or "aggregate". This is the formally correct approach
-          for single tokens.
-
-    This distinction matters for thesis correctness: a false positive here
-    causes the router to skip the LLM for a question that might be cross-KG,
-    routing it silently to single_kg1 with no fallback.
-    """
+    q_lower = _strip_arabic_al(q_lower)
     for sig in _KG1_ONLY_SIGNALS:
-        if " " in sig:
-            # Multi-word: substring match is sufficient and correct
-            if sig in q_lower:
+        sig_stripped = _strip_arabic_al(sig)
+        if " " in sig_stripped:
+            if sig_stripped in q_lower:
                 return True
         else:
-            # Single word: require word boundary to avoid partial matches
-            if re.search(rf"\b{re.escape(sig)}\b", q_lower):
+            if re.search(rf"\b{re.escape(sig_stripped)}\b", q_lower):
                 return True
     return False
 
@@ -777,6 +793,13 @@ def _llm_yes_no_majority(prompt: str, k: int = 3) -> bool:
     k=3 (odd, so no ties) is a deliberate minimum — enough to smooth out
     single-sample noise without tripling latency for every question in
     the pipeline (only _has_ask_signal and _is_kg_answerable use this).
+
+    NOTE (see module docstring, "false-premise fix"): test_llm_variance.py
+    later showed the original BLQ instability wasn't actually random
+    sampling noise — at temperature=0 the model was PERFECTLY consistent,
+    just consistently wrong on false-premise questions. Voting is kept
+    here regardless, since temperature=0 determinism isn't formally
+    guaranteed across all backends/hardware, and it's a cheap safety net.
     """
     votes = []
     for _ in range(k):
@@ -841,6 +864,19 @@ def _has_ask_signal(question: str) -> bool:
     case, while leaving majority-vote sampling fully intact for anything
     that isn't a clear-cut WH-question (which is exactly where the
     original sampling-noise problem was observed).
+
+    FALSE-PREMISE EXAMPLES: test_llm_variance.py isolated the actual
+    root cause of the original BLQ instability. It wasn't sampling
+    noise — at temperature=0 the model answered "Is BLQ located in
+    France?" NO with perfect 10/10 consistency, because BLQ is actually
+    in Italy. The model was silently conflating "is this a confirmation
+    question" with "is the embedded claim true", in both English and
+    Arabic equally (confirmed via a controlled 2x2: language x truth
+    value). A confirmation question is ask-style regardless of whether
+    the fact it asserts is true, so both an English and an Arabic
+    false-premise example were added below, explicitly labeled YES,
+    to teach the model that truth value is irrelevant to this
+    classification.
     """
     if question.strip().startswith("هل"):
         print(f"[router] _has_ask_signal('{question[:40]}...') → True (fast-path: 'هل' prefix)")
@@ -868,6 +904,8 @@ Q: "What is the callsign of BR62?" → NO
 Q: "Quelle est la porte du vol OS830?" → NO
 Q: "ما هو مطار الوصول؟" → NO
 Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
+Q: "Is BLQ located in France?" → YES
+Q: "هل يقع مطار بولونيا في فرنسا؟" → YES
 Q: "في أي دولة يقع مطار أثينا؟" → NO
 Q: "ما هي إشارة النداء للرحلة TK500؟" → NO
 
@@ -944,8 +982,8 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
     # this was the direct cause of the "invalid character '"' (U+201C)"
     # failures seen in evaluation runs.
     _SMART_PUNCTUATION = str.maketrans({
-        "\u201c": '"', "\u201d": '"',   # “ ”
-        "\u2018": "'", "\u2019": "'",   # ‘ ’
+        "\u201c": '"', "\u201d": '"',   # " "
+        "\u2018": "'", "\u2019": "'",   # ' '
     })
 
     for attempt in range(max_attempts):

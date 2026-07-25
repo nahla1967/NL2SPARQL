@@ -838,10 +838,12 @@ Examples:
 Q: "Is BR62's callsign EVA062?" → YES
 Q: "La porte du vol OS830 est-elle A17?" → YES
 Q: "هل مطار فيينا يقع في النمسا؟" → YES
+Q: "Is BLQ located in France?" → YES
+Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
+
 Q: "What is the callsign of BR62?" → NO
 Q: "Quelle est la porte du vol OS830?" → NO
 Q: "ما هو مطار الوصول؟" → NO
-Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
 Q: "في أي دولة يقع مطار أثينا؟" → NO
 
 Answer only YES or NO.

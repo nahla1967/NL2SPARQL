@@ -403,7 +403,12 @@
     "ground speed":           ["hasFlightEvent", "gspeed"],
     "vertical speed":         ["hasFlightEvent", "vspeed"],
     "transponder code":       ["hasAircraft", "TransponderCode"],
-    "transponder":            ["hasAircraft", "TransponderCode"]
+    "transponder":            ["hasAircraft", "TransponderCode"],
+    "vitesse verticale":               ["hasFlightEvent", "vspeed"],
+    "vitesse sol":                     ["hasFlightEvent", "gspeed"],
+    "vitesse au sol":                  ["hasFlightEvent", "gspeed"],
+    "السرعة العمودية":                 ["hasFlightEvent", "vspeed"],
+    "السرعة الأرضية":                  ["hasFlightEvent", "gspeed"]
  
  
  
