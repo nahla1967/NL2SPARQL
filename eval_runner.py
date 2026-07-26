@@ -64,6 +64,7 @@ from pipeline.mapper import (
 from pipeline.generator import inject_and_generate, generate_open_kg_sparql
 from pipeline.executor import (
     validate_sparql, execute_sparql, format_answer, format_answer_list,
+    SURFACE_CODES,
 )
 from cross_kg_resolver import resolve_cross_kg
 from kg_registry import get_base_uri, get_endpoint, get_lexicon, get_open_kg_schema
@@ -158,6 +159,32 @@ def _canonicalize_university_names(text: str) -> str:
         return text
     return re.sub(r'www\.([A-Za-z]+\d+)(?:\.[A-Za-z]+\d+)*\.edu',
                   r'\1', text, flags=re.IGNORECASE)
+
+
+def _canonicalize_surface_code(expected):
+    """
+    Some single_kg2 runway-surface questions have expected_answer set to
+    the RAW ontology surface code ("ASP") rather than the decoded value
+    the pipeline actually returns ("Asphalt") via SURFACE_CODES in
+    pipeline/executor.py (imported above, so this stays in sync with
+    the pipeline's own mapping instead of duplicating it).
+
+    Unlike _canonicalize_airport_names, this is applied to the GOLD
+    side, not the predicted side. Several codes decode to the same
+    value (ASP, ASPH, PEM -> "Asphalt"; CON, CONC -> "Concrete"), so the
+    code -> value direction is unambiguous, but value -> code is not —
+    canonicalizing the predicted "Asphalt" back into "a" code would mean
+    guessing which of three codes was the "real" one. Decoding the gold
+    code instead avoids that guess entirely.
+
+    Only fires when expected_answer is literally a known surface code
+    (case-insensitive) — any other expected_answer passes through
+    unchanged, so this can't misfire on unrelated categories/questions.
+    """
+    if expected is None:
+        return expected
+    expected_str = str(expected).strip()
+    return SURFACE_CODES.get(expected_str.upper(), expected)
 
 
 def exact_match(predicted, expected) -> bool | None:
@@ -585,6 +612,15 @@ def main():
                 # scored_value_for_match is None here.
                 scored_value_for_match = _canonicalize_university_names(scored_value_for_match)
 
+                # Fix #6: some single_kg2 questions store the raw ontology
+                # surface code as expected_answer ("ASP") while the pipeline
+                # returns the decoded value ("Asphalt"). Canonicalize the
+                # GOLD side (see _canonicalize_surface_code docstring for
+                # why not the predicted side). Not category-scoped: it only
+                # fires when expected_answer is literally a known code, so
+                # it's safe to apply on every row.
+                expected_for_match = _canonicalize_surface_code(row.get("expected_answer"))
+
                 # Fix #2: ask_query ground truth is English-only ("Yes."/"No."),
                 # but final_answer is localized ("Non.", "لا."). A yes/no
                 # answer is a boolean and has no language — compare booleans,
@@ -615,9 +651,9 @@ def main():
                     "failure_type": result["failure_type"],
                     "error_detail": result.get("error_detail"),
                     "exact_match": ask_exact if row["category"] == "ask_query"
-                                   else exact_match(scored_value_for_match, row.get("expected_answer")),
+                                   else exact_match(scored_value_for_match, expected_for_match),
                     "f1": ask_f1 if row["category"] == "ask_query"
-                          else token_f1(scored_value_for_match, row.get("expected_answer")),
+                          else token_f1(scored_value_for_match, expected_for_match),
                     "duration_s": round(time.time() - t0, 2),
                 }
                 out_f.write(json.dumps(record, ensure_ascii=False) + "\n")

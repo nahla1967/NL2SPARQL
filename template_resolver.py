@@ -117,6 +117,63 @@ _UNIVERSITY_ENTITY_RE = re.compile(
     r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
     r'University|Lecturer|Publication)\d+)\b'
 )
+
+# Matches a singular-superlative phrasing ("the shortest runway", "le plus
+# court", "الأقصر") across en/fr/ar. Used only to force limit=1 for
+# ranking_kg2 — see _detect_singular_superlative() below for why.
+_SINGULAR_SUPERLATIVE_RE = re.compile(
+    r"\b(shortest|longest|highest|lowest|smallest|widest|narrowest)\b"
+    r"|(le plus court|la plus courte|le plus long|la plus longue|"
+    r"le plus haut|le plus élevé|le plus bas|le plus large|le plus étroit|"
+    r"la plus large|la plus étroite)"
+    r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق)",
+    re.IGNORECASE
+)
+
+# Any of these anywhere in the question signals the person actually wants
+# a ranked LIST, not one superlative result — this takes precedence over
+# _SINGULAR_SUPERLATIVE_RE so "the 5 shortest runways" is never forced to
+# limit=1 just because it also contains "shortest".
+_PLURAL_INTENT_RE = re.compile(
+    r"\d+"           # any explicit count: "top 5", "the 5 shortest"
+    r"|\bairports\b"  # plural noun, English
+    r"|aéroports"     # plural noun, French
+    r"|مطارات",       # plural noun, Arabic
+    re.IGNORECASE
+)
+
+
+def _detect_singular_superlative(question: str) -> bool:
+    """
+    Returns True when `question` is phrased as a singular superlative
+    ("the shortest runway", "le plus court", "الأقصر") rather than a
+    ranked list ("the 5 shortest", "top 10 airports by...").
+
+    WHY THIS EXISTS:
+        The ranking_kg2 extraction prompt (see _extract_params, template
+        "ranking_kg2") tells the LLM `"limit": number of results
+        (default 5)`, but never tells it that a singular phrasing means
+        limit=1. Nothing in the code enforced that distinction — it
+        relied entirely on the LLM correctly inferring limit=1 from
+        context each time. That is fine most of the time, but it is not
+        guaranteed, and a drift to limit=5 on a singular question would
+        return a 5-row ranking where the ground truth expects one bare
+        identifier (this is what "Which airport has the shortest
+        runway?" → expected_answer "STR" depends on getting right).
+
+        This mirrors the existing precedent in this file,
+        _detect_university_entity_for_template() above: a structural
+        fact (singular vs. plural — or here, "is this entity present")
+        is resolved with a deterministic regex instead of trusted to the
+        LLM, because it doesn't need judgement — only the genuinely
+        LLM-dependent decisions (which property, which order) are left
+        to the LLM.
+    """
+    if _PLURAL_INTENT_RE.search(question):
+        return False
+    return bool(_SINGULAR_SUPERLATIVE_RE.search(question))
+
+
 def _sanitize_sparql_literal(value: str) -> str:
     """
     Cleans a value before it's embedded inside a SPARQL string literal
@@ -1124,6 +1181,18 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             result["failure_type"] = "param_extraction_failure"
             return result
         params["entity_name"] = entity_name
+    # Deterministic override: force limit=1 for singular-superlative
+    # ranking_kg2 questions ("the shortest runway"), instead of trusting
+    # the LLM's own limit extraction for this specific structural fact.
+    # See _detect_singular_superlative() for the full rationale.
+    if template_name == "ranking_kg2" and _detect_singular_superlative(question):
+        if params.get("limit") != 1:
+            print(f"[template] Singular-superlative override: limit "
+                  f"{params.get('limit')!r} -> 1")
+        else:
+            print(f"[template] Singular-superlative detected — limit already 1, "
+                  f"override redundant this run")
+        params["limit"] = 1
     if template_name not in builders:
         result["failure_type"] = "unknown_template"
         return result
