@@ -316,7 +316,8 @@ Return only the SPARQL query. No explanation. No markdown."""
 
     response = ollama.chat(
         model="llama3",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        options={"temperature": 0}
     )
     return extract_sparql(response["message"]["content"])
 
@@ -432,7 +433,8 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
         )
         sparql = extract_sparql(response["message"]["content"])
 

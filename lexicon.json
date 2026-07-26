@@ -46,6 +46,8 @@
     "من أين تقلع":                "hasOriginCity",
     "مدينة الإقلاع":              "hasOriginCity",
     "منطلق الرحلة":               "hasOriginCity",
+    "انطلاق":                     "hasOriginCity",
+    "مدينة انطلاق":               "hasOriginCity",
 
     "arrival city":               "hasDestinationCity",
     "destination":                "hasDestinationCity",

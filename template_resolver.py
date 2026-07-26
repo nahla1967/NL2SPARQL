@@ -359,7 +359,9 @@ Return ONLY the JSON. No explanation.""",
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
+
         )
         raw  = response["message"]["content"].strip()
         # Strip markdown code fences if present

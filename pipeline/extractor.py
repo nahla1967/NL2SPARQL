@@ -84,7 +84,8 @@ Question: {question}
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
         )
         raw    = response["message"]["content"]
         prop   = ""
@@ -169,7 +170,8 @@ Question: {question}
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
         )
         raw    = response["message"]["content"]
         prop   = ""
@@ -240,7 +242,8 @@ Question: {question}
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
         )
         raw    = response["message"]["content"]
         prop   = ""
@@ -321,7 +324,8 @@ Question: {question}
     try:
         response = ollama.chat(
             model="llama3",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0}
         )
         raw    = response["message"]["content"]
         parsed = safe_json_parse(raw)

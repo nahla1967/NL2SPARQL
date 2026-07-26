@@ -505,7 +505,8 @@ def main():
                     scored_value = result.get("raw_answer")
                 if isinstance(scored_value, list):
                     scored_value = "\n".join(str(v) for v in scored_value)
-
+                elif isinstance(scored_value, bool):
+                    scored_value = "yes" if scored_value else "no"
                 # Fix #3: ranking_kg2 / filter_numeric_kg2 ground truth uses
                 # IATA codes ("ESB"), the pipeline outputs full names
                 # ("Esenboğa International Airport") — same entity, different

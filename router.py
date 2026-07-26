@@ -892,6 +892,11 @@ def _has_ask_signal(question: str) -> bool:
         print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word opener)")
         return False
 
+    _early_tokens = re.findall(r"\w+", q_stripped)[:3]
+    if any(tok in WH_WORDS for tok in _early_tokens):
+        print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word in opening tokens)")
+        return False
+
     prompt = f"""Does this question ask to CONFIRM whether a specific
 property already has a specific value (a yes/no question)? Or does it
 ASK for information (what/which/how much)?
@@ -992,7 +997,8 @@ def _llm_classify(question: str, max_attempts: int = 2) -> dict:
         try:
             response = ollama.chat(
                 model="llama3",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0}
             )
             raw = response["message"]["content"].strip()
             raw = re.sub(r"```json|```", "", raw).strip()
