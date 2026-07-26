@@ -44,7 +44,8 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-     "open_kg_002"
+    "open_kg_002",
+
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -193,6 +194,27 @@ def _split_list_answer(text) -> list[str] | None:
     # ("ESB, 3125.00") — keep only the first field, the identifier.
     primary = [item.split(",")[0].strip() for item in items]
     return [_normalise_for_scoring(p) for p in primary if p.strip()]
+
+
+def _strip_value_suffix_if_gold_is_bare(predicted, expected) -> str:
+    """
+    Handles single-item ranking answers (e.g. ranking_kg2 with limit=1),
+    where the pipeline correctly returns "name, value" (matching the
+    multi-row ranking format), but the dataset's expected_answer is a
+    bare identifier only (e.g. "STR"), since a single superlative answer
+    doesn't need its value spelled out to be verified as correct.
+
+    Without this, "STR, 98.00" is compared as one whole string against
+    "STR" and fails exact_match outright, even though the identifier
+    portion is correct — the same class of format mismatch already
+    handled separately for compare_two_airports and ask_query.
+    """
+    if predicted is None or expected is None:
+        return predicted
+    expected_str = str(expected).strip()
+    if "," not in expected_str and isinstance(predicted, str) and "," in predicted:
+        return predicted.split(",")[0].strip()
+    return predicted
 
 
 def list_exact_match(predicted: list[str], expected: list[str]) -> bool:
@@ -543,8 +565,16 @@ def main():
                 # newline structure list-scoring depends on. Both are fixed
                 # here: scoped to just these 2 categories, and substituting
                 # directly on the original text instead.
+                #
+                # Fix #5: single-item ranking answers (limit=1) come back
+                # from the pipeline as "name, value" but the gold answer is
+                # a bare identifier only ("STR") — strip the value suffix
+                # before comparing so the identifier still matches exactly.
                 if row["category"] in ("ranking_kg2", "filter_numeric_kg2"):
                     scored_value_for_match = _canonicalize_airport_names(scored_value)
+                    scored_value_for_match = _strip_value_suffix_if_gold_is_bare(
+                        scored_value_for_match, row.get("expected_answer")
+                    )
                 else:
                     scored_value_for_match = scored_value
                 # Fix #4: LUBM entity answers ("www.University0.edu") vs.

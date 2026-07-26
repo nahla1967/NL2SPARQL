@@ -398,7 +398,8 @@ SELECT ?name WHERE {{
   ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#airportName> ?name .
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
-  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> "GRS" .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
+  FILTER(CONTAINS(LCASE(?surface), "gr"))
 }} LIMIT 10
 
 Q: "How many airports are in the dataset?"
@@ -421,6 +422,7 @@ SELECT ?value WHERE {{
   ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasAircraft> ?aircraft .
   ?aircraft <http://www.semanticweb.org/ontologies/flight_ontology#reg> ?value .
 }}
+
 
 Q: "How many airports in the dataset have a grass runway?"
 SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
