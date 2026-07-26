@@ -234,6 +234,7 @@ EXAMPLES:
 "What is Department2's name?"                    → "name"
 "Quel est le titre de AssociateProfessor1?"      → "titre"
 "من كتب Publication12؟"                          → "كتب"
+"إلى أي جامعة ينتمي Department7؟"                 → "أي جامعة"
 
 Return ONLY a JSON object with key "property". No explanation. No extra text.
 

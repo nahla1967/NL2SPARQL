@@ -474,6 +474,9 @@ A: {"query_type": "compare_two_airports", "params": {"airport1": "VIE", "airport
 Q: "Comparez CDG et LHR par longueur de piste."
 A: {"query_type": "compare_two_airports", "params": {"airport1": "CDG", "airport2": "LHR", "property": "lengthFt"}}
 
+Q: "قارن ارتفاع مطار ATH ومطار IST."
+A: {"query_type": "compare_two_airports", "params": {"airport1": "ATH", "airport2": "IST", "property": "elevationFt"}}
+
 Q: "How many flights are operated by Lufthansa?"
 A: {"query_type": "count_kg1", "params": {"filter_property": "hasAirline", "filter_value": "Lufthansa", "mode": "count"}}
 

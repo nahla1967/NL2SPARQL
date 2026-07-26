@@ -236,10 +236,13 @@ Question: "{question}"
 
 Step 1 — find two IATA codes (3 uppercase letters each).
 Step 2 — identify the property being compared using this mapping:
-  "elevation" or "altitude" or "height"  → "elevationFt"
+   "elevation" or "altitude" or "height"  → "elevationFt"
   "runway length" or "length" or "longer" or "longest" → "lengthFt"
   "runway width" or "width" or "wider" or "widest" → "widthFt"
   "type" or "airport type" or "kind"     → "airportType"
+  "الارتفاع" or "أعلى" or "أدنى" (with no مدرج mention)   → "elevationFt"
+  "مدرج" + "أقصر" or "أطول" or "طول"                      → "lengthFt"
+  "مدرج" + "أعرض" or "أضيق" or "عرض"                      → "widthFt"
 
 Return ONLY a JSON object:
 {{"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}

@@ -25,7 +25,7 @@ WHY THIS DOESN'T DUPLICATE test_pipeline.py:
 OUTPUT SCHEMA (one JSON object per line in eval_results.jsonl):
     id, tier, category, kg, language, strategy, expected_type, query_type,
     routing_ok, sparql, sparql_valid, raw_answer, final_answer,
-    failure_type, exact_match, f1, duration_s
+    failure_type, error_detail, exact_match, f1, duration_s
 """
 
 import json
@@ -44,7 +44,7 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "single_kg1_006",
+     "compare_two_airports_001", "compare_two_airports_003"
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -138,6 +138,27 @@ def _canonicalize_airport_names(text: str) -> str:
     return text
 
 
+def _canonicalize_university_names(text: str) -> str:
+    """
+    Shortens LUBM URI-derived names like 'www.University0.edu' or
+    'www.Department0.University0.edu' down to the bare entity name
+    ('University0', 'Department0'), so scoring can match ground truth
+    that uses the short form.
+
+    Matches on the naming pattern itself, not a category list — it can
+    only fire on text shaped like www.<Name><Digits>....edu, so it
+    can't misfire on unrelated answers.
+
+    Guards against None/empty the same way _canonicalize_airport_names
+    does — scored_value_for_match is None whenever a run failed and
+    produced no answer at all, and re.sub crashes on None otherwise.
+    """
+    if not text:
+        return text
+    return re.sub(r'www\.([A-Za-z]+\d+)(?:\.[A-Za-z]+\d+)*\.edu',
+                  r'\1', text, flags=re.IGNORECASE)
+
+
 def exact_match(predicted, expected) -> bool | None:
     if expected is None or (isinstance(expected, float) and pd.isna(expected)):
         return None
@@ -146,6 +167,7 @@ def exact_match(predicted, expected) -> bool | None:
         predicted_list = _split_list_answer(predicted) or [_normalise_for_scoring(predicted)]
         return list_exact_match(predicted_list, expected_list)
     return _normalise_for_scoring(predicted) == _normalise_for_scoring(expected)
+
 
 def _split_list_answer(text) -> list[str] | None:
     """
@@ -171,6 +193,8 @@ def _split_list_answer(text) -> list[str] | None:
     # ("ESB, 3125.00") — keep only the first field, the identifier.
     primary = [item.split(",")[0].strip() for item in items]
     return [_normalise_for_scoring(p) for p in primary if p.strip()]
+
+
 def list_exact_match(predicted: list[str], expected: list[str]) -> bool:
     return set(predicted) == set(expected)
 
@@ -184,6 +208,8 @@ def list_f1(predicted: list[str], expected: list[str]) -> float:
     precision = overlap / len(set(predicted))
     recall = overlap / len(set(expected))
     return round(2 * precision * recall / (precision + recall), 4)
+
+
 def token_f1(predicted, expected) -> float | None:
     if expected is None or (isinstance(expected, float) and pd.isna(expected)):
         return None
@@ -308,7 +334,6 @@ def _run_single_kg3(question, routing, strategy, lang):
         entities["property"], lexicon, lexicon_path)
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
 
-    
     FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
 
     if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
@@ -483,7 +508,7 @@ def main():
                 except Exception as e:
                     result = {"query_type": None, "sparql": None, "sparql_valid": False,
                               "raw_answer": None, "final_answer": None,
-                              "failure_type": f"exception: {e}"}
+                              "failure_type": "exception", "error_detail": str(e)}
 
                 expected_type = row["expected_type"]
                 routing_ok = (expected_type == "VARIES") or (result["query_type"] == expected_type)
@@ -522,6 +547,13 @@ def main():
                     scored_value_for_match = _canonicalize_airport_names(scored_value)
                 else:
                     scored_value_for_match = scored_value
+                # Fix #4: LUBM entity answers ("www.University0.edu") vs.
+                # ground truth's short form ("University0") — same entity,
+                # different identifier, same shape of problem as Fix #3.
+                # Pattern-matched, not category-scoped (see function
+                # docstring), and guarded against None since a failed run's
+                # scored_value_for_match is None here.
+                scored_value_for_match = _canonicalize_university_names(scored_value_for_match)
 
                 # Fix #2: ask_query ground truth is English-only ("Yes."/"No."),
                 # but final_answer is localized ("Non.", "لا."). A yes/no
@@ -551,6 +583,7 @@ def main():
                     "raw_answer": result["raw_answer"],
                     "final_answer": result["final_answer"],
                     "failure_type": result["failure_type"],
+                    "error_detail": result.get("error_detail"),
                     "exact_match": ask_exact if row["category"] == "ask_query"
                                    else exact_match(scored_value_for_match, row.get("expected_answer")),
                     "f1": ask_f1 if row["category"] == "ask_query"
