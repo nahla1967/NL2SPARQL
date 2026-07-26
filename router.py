@@ -66,6 +66,12 @@ Priority 2   — Flight number detected (regex)
 
 Priority 2.5 — Airport entity detected (deterministic)
 
+Priority 2.6 — Two airports named + a compare signal ("compare", "قارن"...)
+    → compare_two_airports, deterministic. Added because Priority 3's LLM
+    classifier reliably lost this case to cross_kg_filter regardless of
+    language (see Priority 2.6's own comment in route() for the eval
+    evidence).
+
 Priority 2.7 — University entity detected (deterministic), unless the
     question has a count/list or filter signal, in which case it falls
     through to the LLM so it can reach count_kg3 / filter_string_kg3.
@@ -777,6 +783,57 @@ def _has_compare_signal(q: str) -> bool:
     return False
 
 
+_COMPARE_PROPERTY_KEYWORDS = [
+    (["elevation", "altitude", "height", "élévation", "ارتفاع", "أعلى", "أدنى"], "elevationFt"),
+    (["runway length", "length", "longer", "longest", "longueur", "أطول", "أقصر"], "lengthFt"),
+    (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق"], "widthFt"),
+    (["airport type", "type", "kind", "نوع"], "airportType"),
+]
+
+def _detect_compare_property(q: str) -> str | None:
+    """
+    Deterministic keyword scan for the property being compared, used by
+    Priority 2.6 below. Mirrors the same keyword mapping already given
+    to the LLM classifier prompt, just checked directly in code instead
+    of hoped-for in the model's output.
+    """
+    q_lower = q.lower()
+    for keywords, prop in _COMPARE_PROPERTY_KEYWORDS:
+        if any(k.lower() in q_lower for k in keywords):
+            return prop
+    return None
+
+
+def _detect_two_airport_codes(q: str) -> list[str] | None:
+    """
+    Finds every IATA code in the question (not just the first, unlike
+    _detect_airport_entity), for two-airport comparison questions.
+    Reuses _IATA_RE and _AIRPORT_ENTITIES — the same regex and lexicon
+    that already power the single-airport detector — so a code only
+    counts if it's a real known airport, not just any 3-letter word.
+    Returns the two codes only when exactly two distinct ones are found;
+    anything else (0, 1, or 3+) is not a clean two-airport comparison.
+
+    Arabic attaches "و" (and) directly onto the next word with no space
+    ("مطار BLQ وNAP" — "waNAP", not "wa NAP") — the same gluing pattern
+    already handled for "ال" via _strip_arabic_al, but that helper only
+    strips a leading article from Arabic words, not a connector fused
+    onto a following LATIN token. Without unglueing it here, \\b in
+    _IATA_RE never finds a boundary between "و" and "N" (both count as
+    \\w characters to Python's regex engine), so the second airport code
+    is silently missed. Inserting a space after a bare "و" whenever it's
+    immediately followed by 2+ uppercase Latin letters fixes just that
+    one gluing pattern, the same narrow, targeted way _strip_arabic_al
+    does for "ال".
+    """
+    q = re.sub(r'و(?=[A-Z]{2,})', 'و ', q)
+    codes = []
+    for code in _IATA_RE.findall(q.upper()):
+        if code in _AIRPORT_ENTITIES and code not in codes:
+            codes.append(_AIRPORT_ENTITIES[code])
+    return codes if len(codes) == 2 else None
+
+
 # ─────────────────────────────────────────────
 # LLM MAJORITY-VOTE HELPER
 # ─────────────────────────────────────────────
@@ -1189,6 +1246,7 @@ def route(question: str) -> dict:
         Priority 1.5 → ASK-style question + known entity → ask_query
         Priority 2   → flight number → single_kg1 or cross_kg
         Priority 2.5 → airport entity → single_kg2
+        Priority 2.6 → two airports + compare signal → compare_two_airports (deterministic)
         Priority 2.7 → university entity → single_kg3 (unless count/filter signal)
         Priority 3   → LLM classifies → template / single_kg2 / open_kg
                        (with smart reroute for known misclassification patterns)
@@ -1323,6 +1381,36 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["airports"],
         }
+
+    # ── Priority 2.6: Two airports + compare signal (deterministic) ───────────
+    # Priority 2.5 above deliberately skips its shortcut when a compare
+    # signal is present ("not _has_compare_signal(question)"), but nothing
+    # ever caught that case afterward — it fell through to the LLM
+    # classifier, which reliably lost to cross_kg_filter's much larger,
+    # similarly-shaped example set (see the cross_kg_filter reroute
+    # comment below, Case 1.5). Confirmed by eval logs: EVERY language
+    # (en/fr/ar) was misclassified as cross_kg_filter for genuine
+    # two-airport comparisons, so this was never a language/example-count
+    # problem — it's a structural gap. A "compare A and B" question
+    # naming two real, known airport codes has no ambiguity at all, so
+    # skip the LLM here the same way Priority 2.5 already does for a
+    # single airport.
+    if _has_compare_signal(question):
+        two_airports = _detect_two_airport_codes(question)
+        compare_property = _detect_compare_property(question)
+        if two_airports and compare_property:
+            print(f"[router] Priority 2.6: compare signal + two airports "
+                  f"{two_airports} → compare_two_airports")
+            return {
+                "query_type": "template",
+                "kg":         "airports",
+                "entity":     None,
+                "direction":  None,
+                "template":   "compare_two_airports",
+                "config":     TEMPLATE_REGISTRY["compare_two_airports"],
+                "params":     {"airport1": two_airports[0], "airport2": two_airports[1],
+                               "property": compare_property},
+            }
 
     # ── Priority 2.7: University entity detected (deterministic) ──────────────
     # Only short-circuits to single_kg3 for single-value lookups. Count/list

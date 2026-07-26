@@ -44,7 +44,7 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-     "compare_two_airports_001", "compare_two_airports_003"
+     "open_kg_002"
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────

@@ -370,7 +370,13 @@ Classes and properties:
   Runway:
     lengthFt (integer)
     widthFt (integer)
-    surface (string)             — "ASP", "CON", "GRS"
+    surface (string)             — inconsistent real-world spellings:
+                                    "ASP", "ASPH", "ASPHALT", "CON",
+                                    "Concrete", "concrete", "GRS", "GRASS",
+                                    "PEM", "UNK". Never match with a single
+                                    exact string — use a case-insensitive
+                                    CONTAINS check on a short keyword instead
+                                    (e.g. "gr" for grass, "asp" for asphalt).
     lighted (boolean)
     closed (boolean)
     runwayIdent (string)

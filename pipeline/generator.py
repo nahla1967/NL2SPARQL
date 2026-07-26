@@ -422,6 +422,21 @@ SELECT ?value WHERE {{
   ?aircraft <http://www.semanticweb.org/ontologies/flight_ontology#reg> ?value .
 }}
 
+Q: "How many airports in the dataset have a grass runway?"
+SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
+  FILTER(CONTAINS(LCASE(?surface), "gr"))
+}}
+Q: "كم عدد المطارات التي لديها مدرج إسفلتي؟"
+SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
+  FILTER(CONTAINS(LCASE(?surface), "asp"))
+}}
+
 Q: "How many runways in the dataset are closed?"
 SELECT (COUNT(?runway) AS ?count) WHERE {{
   ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .
