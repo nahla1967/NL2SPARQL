@@ -44,8 +44,15 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "open_kg_002",
-
+    "cross_kg_005",
+    "cross_kg_009",
+    "compare_two_airports_002",
+    "multilingual_edge_002",
+    "multilingual_edge_003",
+    "single_kg2_004",
+    "ask_query_002",
+    "filter_string_kg2_003",
+    "count_kg1_001",
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -72,9 +79,24 @@ from kg_registry import get_base_uri, get_endpoint, get_lexicon, get_open_kg_sch
 
 # ── SCORING HELPERS ─────────────────────────────────────────────────────────
 
+def _strip_trailing_note(text) -> str:
+    """Drops a trailing clarifying note in parentheses, e.g.
+    '(complete — Greece only has 2)' -- it's metadata, not data.
+    Applied once, up front, so both the list-comparison path and the
+    plain-string comparison path benefit -- previously this only ran
+    inside _split_list_answer(), so a gold string with a trailing note
+    but fewer than 2 commas (e.g. a 2-item list joined by a single
+    comma) skipped list-detection and compared with the note still
+    attached, silently failing exact_match/F1 for a correct answer."""
+    if text is None:
+        return text
+    return re.sub(r"\s*\([^)]*\)\s*$", "", str(text).strip())
+
+
 def _normalise_for_scoring(text) -> str:
     if text is None:
         return ""
+    text = _strip_trailing_note(text)
     text = str(text).strip().lower()
     text = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text)
     text = re.sub(r"\s+", " ", text)

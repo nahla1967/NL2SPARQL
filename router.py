@@ -171,7 +171,17 @@ _KG1_ONLY_SIGNALS = {
     "flying to",               # "What country is flight LO225 flying to?"
     "vole vers",               # French equivalent
     "تغادر",                   # Arabic: departs
-    "وجهة الرحلة",
+    # NOTE: "وجهة الرحلة" ("the flight's destination") used to live here,
+    # but it's a substring of cross-KG questions too — e.g. "طول المدرج
+    # في وجهة الرحلة FR947" ("runway length AT THE DESTINATION of flight
+    # FR947") legitimately needs cross_kg, not single_kg1. Matching this
+    # bare phrase short-circuited straight to single_kg1 before the LLM
+    # (or even Priority 2's cross_kg_filter path) ever saw the question,
+    # silently answering with the wrong KG1 property (e.g. a runway
+    # designator like "RWY4L" queried directly off the Flight node)
+    # instead of the actual cross-KG runway length. The more specific
+    # "مدينة وصول" ("arrival city") below already covers the genuine
+    # KG1-literal destination-city case, since it requires the city noun.
     # City of the FLIGHT itself (hasOriginCity / hasDestinationCity — a
     # KG1 literal, not the destination airport's own properties). Without
     # these, "What is the departure city of flight X?" falls through to
@@ -1511,6 +1521,30 @@ def route(question: str) -> dict:
             a1 = (params.get("airport1") or "").strip()
             a2 = (params.get("airport2") or "").strip()
             if not a1 or not a2:
+                # Guard added: the LLM sometimes fails to extract IATA
+                # codes it was given -- e.g. Arabic questions where the
+                # codes sit as plain Latin-letter tokens inside Arabic
+                # text ("قارن طول مدرج KRK و LUX"). That's an extraction
+                # failure, not a ranking question, and blindly rerouting
+                # it to ranking_kg2 silently answers with the globally
+                # highest/lowest airport instead of failing loudly.
+                # _detect_two_airport_codes() re-scans the raw text
+                # deterministically (same regex as Priority 2.6) --
+                # if it finds two real codes, this reroute doesn't apply.
+                text_codes = _detect_two_airport_codes(question)
+                if text_codes:
+                    print(f"[router] compare_two_airports missing codes in "
+                          f"LLM params, but {text_codes} found in question "
+                          f"text -- treating as extraction failure, not "
+                          f"rerouting to ranking_kg2")
+                    return {
+                        "query_type": "extraction_failure",
+                        "kg":         "airports",
+                        "entity":     None,
+                        "direction":  None,
+                        "template":   None,
+                        "config":     None,
+                    }
                 prop = (params.get("property") or "").strip()
                 if prop in KG2_NUMERIC_PROPS:
                     ASC_SIGNALS = [

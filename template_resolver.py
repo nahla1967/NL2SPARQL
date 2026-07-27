@@ -759,6 +759,37 @@ def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     return sparql, label
     
 
+# ── COUNTRY NAME → CANONICAL (KG) NAME LOOKUP ──────────────────────────────
+# extract_ask_entities() deliberately extracts the asserted value "exactly
+# as written, do not translate" (see pipeline/extractor.py docstring), so
+# a French/Arabic ASK question keeps its own-language country name
+# ("Pologne" / "بولندا"). But the KG2 countryName literal is stored in
+# English only ("Poland"), and build_ask_query()'s FILTER does a literal
+# string comparison, so fr/ar ASK questions about country membership were
+# silently returning False even when the entity/property resolution was
+# entirely correct. Only the countries appearing in the current evaluation
+# dataset are verified below; extend as needed rather than guessing.
+COUNTRY_NAME_TO_EN = {
+    # French
+    "pologne": "Poland", "italie": "Italy", "allemagne": "Germany",
+    "autriche": "Austria", "france": "France", "espagne": "Spain",
+    "grèce": "Greece", "grece": "Greece",
+    # Arabic
+    "بولندا": "Poland", "إيطاليا": "Italy", "ايطاليا": "Italy",
+    "ألمانيا": "Germany", "المانيا": "Germany", "النمسا": "Austria",
+    "فرنسا": "France", "إسبانيا": "Spain", "اسبانيا": "Spain",
+    "اليونان": "Greece",
+}
+
+
+def _resolve_country_value(value: str) -> str:
+    """Map a localized country name to its KG-canonical English form if
+    known; otherwise pass the raw value through unchanged (preserves
+    prior behavior for English questions, where extraction already
+    matches the KG's own literal)."""
+    return COUNTRY_NAME_TO_EN.get(value.strip().lower(), value)
+
+
 # ── AIRLINE NAME → ICAO CODE LOOKUP ────────────────────────────────────────
 # The KG1 Airline nodes only store ICAO 3-letter codes (operating_as /
 # painted_as), never a human-readable name. The LLM extraction prompt for
@@ -1450,11 +1481,19 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
     full_property_uri  = base_uri + property_uri
     full_property2_uri = (base_uri + property2_uri) if property2_uri else None
     result["property_uri"] = full_property_uri
-    result["value"]        = entities["value"]
+
+    # Country-membership ASK questions ("Is KRK located in Poland?") need
+    # the asserted value translated back to the KG's English countryName
+    # literal — see COUNTRY_NAME_TO_EN docstring above. Scoped to only
+    # this property so no other ASK category is affected.
+    ask_value = entities["value"]
+    if full_property2_uri and full_property2_uri.endswith("countryName"):
+        ask_value = _resolve_country_value(ask_value)
+    result["value"] = ask_value
 
     # ── Step 4: build SPARQL ASK ─────────────────────────────────────────────
     sparql = build_ask_query(
-        entity_uri, full_property_uri, entities["value"],
+        entity_uri, full_property_uri, ask_value,
         property2_uri=full_property2_uri
     )
     result["sparql"] = sparql
