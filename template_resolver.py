@@ -25,7 +25,7 @@ TEMPLATE CATEGORIES:
 
     KG3 — University queries:
         count_kg3              : count/list entities linked to a named entity
-        filter_string_kg3      : filter people by department membership
+        filter_string_kg3       : filter people by department membership
 
     Cross-KG:
         cross_kg_filter       : flights whose airport property meets condition
@@ -851,13 +851,34 @@ def _build_count_kg1(params: dict) -> tuple[str, str] | None:
     filter_value = params.get("filter_value", "")
     mode         = params.get("mode", "count")
 
+    # The LLM prompt restricts filter_property to a fixed enum, but an
+    # enum in a prompt is a request, not a guarantee — eval runs showed
+    # the model returning synonyms like "hasOperator" (en) or
+    # "airlineName" (fr) for the same intent as "hasAirline". Normalize
+    # known synonyms to the canonical key before the KG1_STRING_PROPS
+    # lookup below, so phrasing drift doesn't cause a sparql_build_failure.
+    FILTER_PROPERTY_SYNONYMS = {
+        "hasOperator": "hasAirline",
+        "airlineName": "hasAirline",
+        "operatedBy":  "hasAirline",
+        "airline":     "hasAirline",
+    }
+    filter_prop = FILTER_PROPERTY_SYNONYMS.get(filter_prop, filter_prop)
+
     if not filter_value:
         return None
 
+    # FIX: prop_info was being looked up but never unpacked into
+    # prop_uri — the elif value_prop: branch below references
+    # {prop_uri} directly in its f-strings, so any count_kg1 question
+    # that isn't hasAirline (destination/origin city or country) hit a
+    # NameError at query-build time instead of a clean sparql_build_failure.
+    # Guarding on `not prop_info` also turns an unrecognized filter_prop
+    # into the same graceful failure path used everywhere else in this
+    # file, instead of a crash.
     prop_info = KG1_STRING_PROPS.get(filter_prop)
     if not prop_info:
         return None
-
     prop_uri = prop_info["uri"]
 
     # Determine the value property based on the filter property

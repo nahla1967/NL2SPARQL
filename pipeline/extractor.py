@@ -162,6 +162,8 @@ EXAMPLES:
 "Quel pays est l'aéroport de Munich?"            → "pays"
 "ما هو ارتفاع مطار فيينا؟"                        → "ارتفاع"
 "في أي دولة يقع مطار فرانكفورت؟"                 → "البلد"
+"Which municipality is Athens airport in?"       → "municipality"
+"في أي بلدية يقع مطار أثينا؟"                     → "بلدية"
 
 Return ONLY a JSON object with key "property". No explanation. No extra text.
 
