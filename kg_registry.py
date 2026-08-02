@@ -347,8 +347,11 @@ Classes and properties:
     hasFlightAttendant → FlightAttendant
     hasTimeInstant → TimeInstant — has eta (datetime)
 
-  Airline: operating_as (string)
-  Aircraft: type (string), reg (string)
+  Airline:
+    operating_as (string)
+  Aircraft:
+    type (string)
+    reg (string)   — registration number, e.g. "SP-RSD"
 
 KNOWLEDGE GRAPH 2 — Airports (endpoint: http://localhost:3030/airports/sparql)
 Base URI: http://www.semanticweb.org/ontologies/airport_ontology#
@@ -378,7 +381,7 @@ Classes and properties:
                                     CONTAINS check on a short keyword instead
                                     (e.g. "gr" for grass, "asp" for asphalt).
     lighted (boolean)
-    closed (boolean)
+    closed (boolean)             — true if the runway is currently closed
     runwayIdent (string)
     belongsToAirport → Airport
 

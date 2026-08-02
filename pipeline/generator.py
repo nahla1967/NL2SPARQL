@@ -111,7 +111,22 @@ def fix_misplaced_aggregate(sparql: str) -> str:
 
     return pattern.sub(fix, sparql)
 
-
+def fix_aggregate_inside_braces(sparql: str) -> str:
+    """
+    Detects an aggregate expression left as a bare statement inside the
+    WHERE braces instead of wrapped in the SELECT clause:
+        SELECT ?count WHERE { ... COUNT(?runway) AS ?count }   ← WRONG
+    Same bug family as fix_misplaced_aggregate() — one more shape of it.
+    """
+    pattern = re.compile(
+        r'SELECT\s+\?\w+\s+WHERE\s*\{\s*(.*?)\s*'
+        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*\}',
+        re.IGNORECASE | re.DOTALL
+    )
+    def fix(m):
+        body, func, agg_target, out_var = m.groups()
+        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+    return pattern.sub(fix, sparql)
 # ── SPARQL EXTRACTOR ──────────────────────────────────────────────────────────
 
 def extract_sparql(text: str) -> str:
@@ -439,10 +454,10 @@ SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
   FILTER(CONTAINS(LCASE(?surface), "asp"))
 }}
 
-Q: "How many runways in the dataset are closed?"
+Q: "How many runways in the dataset are lighted?"
 SELECT (COUNT(?runway) AS ?count) WHERE {{
   ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .
-  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#closed> true .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#lighted> true .
 }}
 
 Return ONLY the SPARQL query. No explanation. No markdown."""

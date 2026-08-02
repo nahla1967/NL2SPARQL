@@ -329,19 +329,22 @@ def execute_sparql(
     sparql_query: str,
     endpoint:     str  = KG1_URL,
     multiple:     bool = False,
-) -> str | list | None:
+) -> dict:
     """
     Executes a SPARQL SELECT query.
+
+    Returns a dict, always: {"value": ..., "error": ...}
+    Exactly one of the two keys is non-None.
+        - On success: "value" holds the result (str, list, or None if
+          the query executed fine but matched zero rows), "error" is None.
+        - On failure: "value" is None, "error" holds a message describing
+          what went wrong.
 
     Args:
         sparql_query : the SPARQL query string
         endpoint     : SPARQL endpoint URL (defaults to KG1)
         multiple     : if True, returns list of all result values
                        if False (default), returns only the first value
-
-    Fix applied (GPT point 3):
-        multiple=True mode added for template queries that return
-        multiple rows (e.g. top 10 airports, list of flights to Munich).
     """
     data = urllib.parse.urlencode({
         "query":  sparql_query,
@@ -354,17 +357,15 @@ def execute_sparql(
             raw_response = response.read()
             result = json.loads(raw_response)
             if "results" not in result:
-                return None
+                return {"value": None, "error": "malformed response: no 'results' key"}
             bindings = result["results"]["bindings"]
             if not bindings:
-                return None
+                return {"value": None, "error": None}
 
             def _resolve_binding(binding: dict) -> str | None:
                 if not binding:
                     return None
-                if len(binding) > 1:
-                    parts = [binding[k]["value"] for k in binding]
-                    return ", ".join(parts)
+                
                 first_key = list(binding.keys())[0]
                 raw       = binding[first_key]["value"]
                 if "airport_ontology" in raw:
@@ -377,28 +378,19 @@ def execute_sparql(
                     resolved = COUNTRY_CODES.get(resolved, resolved)
                 if resolved and resolved.upper() in SURFACE_CODES:
                     resolved = SURFACE_CODES[resolved.upper()]
-                return resolved          # ← Change 1 goes HERE, one line above this return.
+                return resolved
 
             if multiple:
                 resolved = [_resolve_binding(b) for b in bindings]
-                return [r for r in resolved if r is not None]
+                return {"value": [r for r in resolved if r is not None], "error": None}
             else:
-                return _resolve_binding(bindings[0])
-
-            # KNOWN FUTURE IMPROVEMENT (GPT suggestion):
-            # For multi-column results (SELECT ?name ?elevation),
-            # _resolve_binding() currently returns only the first column.
-            # If template queries later need richer row dicts, change to:
-            #   return {key: binding[key]["value"] for key in binding}
-            # All current generators produce SELECT ?value so this is safe.
+                return {"value": _resolve_binding(bindings[0]), "error": None}
 
     except urllib.error.URLError as e:
-        print(f"[execute_sparql] Fuseki unreachable ({endpoint}): {e}")
+        return {"value": None, "error": f"URLError: {e}"}
     except Exception as e:
-        print(f"[execute_sparql] Unexpected error: {e}")
-        import traceback
-        traceback.print_exc() 
-    return None
+        return {"value": None, "error": f"{type(e).__name__}: {e}"}
+    
 def execute_ask_sparql(query: str, endpoint: str) -> bool | None:
     """
     Executes a SPARQL ASK query and returns True/False.
