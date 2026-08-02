@@ -478,13 +478,31 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
     hop      = prop_info.get("hop", "direct")
 
     if hop == "runway":
-        sparql = f"""SELECT ?airport ?name ?value WHERE {{
+        # FIX (filter_numeric_kg2_002): airports with more than one
+        # runway satisfying the FILTER used to be returned once per
+        # matching runway, letting a single airport occupy several
+        # LIMIT slots that should have gone to distinct airports (e.g.
+        # İstanbul Airport and Suvarnabhumi Airport both appeared
+        # twice in a "runway length > 10000ft" ranking). Grouping by
+        # airport and taking MAX(?value) collapses each airport to one
+        # row — its longest/widest qualifying runway — before LIMIT is
+        # applied. This mirrors the same collapsing logic already used
+        # in _build_group_aggregate_kg2 for country/continent grouping,
+        # applied here at the per-airport level instead.
+        # NOTE: the aggregate's AS target must not reuse a variable name
+        # already bound in WHERE — (MAX(?value) AS ?value) is a variable
+        # collision and SPARQL 1.1 rejects it outright (Jena returns
+        # HTTP 400, caught the hard way on the first eval run). The raw
+        # per-runway values are bound to ?rawValue instead; the aggregate
+        # still surfaces as ?value so downstream code (columns=["name",
+        # "value"], _format_rows) needs no changes.
+        sparql = f"""SELECT ?airport ?name (MAX(?rawValue) AS ?value) WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
   ?airport <{KG2}hasRunway> ?runway .
-  ?runway <{prop_uri}> ?value .
-  FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) ?airport LIMIT {limit}"""
+  ?runway <{prop_uri}> ?rawValue .
+  FILTER(?rawValue {operator} {threshold})
+}} GROUP BY ?airport ?name ORDER BY DESC(?value) ?airport LIMIT {limit}"""
     else:
         sparql = f"""SELECT ?airport ?name ?value WHERE {{
   ?airport a <{KG2}Airport> .

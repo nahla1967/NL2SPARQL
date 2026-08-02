@@ -44,9 +44,9 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   
-    "property_ambiguity_003"
-    
+
+    "filter_numeric_kg2_002"
+
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -330,13 +330,16 @@ def _run_single_kg1(question, entity_hint, strategy, lang):
         is_valid = is_valid and (full_prop2 in sparql)
     out["sparql_valid"] = is_valid
     if is_valid:
-        raw = execute_sparql(sparql, endpoint=get_endpoint("flights"))
-        out["raw_answer"] = raw
-        if raw:
-            out["final_answer"] = format_answer(question, raw, lang)
+        result = execute_sparql(sparql, endpoint=get_endpoint("flights"))
+        out["raw_answer"] = result["value"]
+        if result["error"] is not None:
+            out["failure_type"] = "execution_failure"
+            out["error_detail"] = result["error"]
+        elif result["value"]:
+            out["final_answer"] = format_answer(question, result["value"], lang)
             out["failure_type"] = "success"
         else:
-            out["failure_type"] = "execution_failure"
+            out["failure_type"] = "no_results"
     else:
         out["failure_type"] = "generation_failure"
     return out
@@ -380,7 +383,7 @@ def _run_single_kg2(question, entity_hint, strategy, lang):
             out["final_answer"] = format_answer(question, result["value"], lang)
             out["failure_type"] = "success"
         else:
-            out["failure_type"] = "execution_failure"
+            out["failure_type"] = "no_results"
     else:
         out["failure_type"] = "generation_failure"
     return out
@@ -442,7 +445,7 @@ def _run_single_kg3(question, routing, strategy, lang):
             out["final_answer"] = format_answer_list(question, result["value"], lang)
             out["failure_type"] = "success"
         else:
-            out["failure_type"] = "execution_failure"
+            out["failure_type"] = "no_results"
     else:
         out["failure_type"] = "generation_failure"
     return out
@@ -490,17 +493,17 @@ def _run_open_kg(question, lang):
     if not is_valid:
         out["failure_type"] = "generation_failure"
         return out
-    if is_valid:
-        result = execute_sparql(sparql, endpoint=get_endpoint("flights"))
-        out["raw_answer"] = result["value"]
-        if result["error"] is not None:
-            out["failure_type"] = "execution_failure"
-            out["error_detail"] = result["error"]
-        elif result["value"]:
-            out["final_answer"] = format_answer(question, result["value"], lang)
-            out["failure_type"] = "success"
-        else:
-            out["failure_type"] = "execution_failure"
+    result = execute_sparql(sparql, endpoint=endpoint, multiple=True)
+    out["raw_answer"] = result["value"]
+    if result["error"] is not None:
+        out["failure_type"] = "execution_failure"
+        out["error_detail"] = result["error"]
+    elif result["value"]:
+        out["final_answer"] = format_answer_list(question, result["value"], lang)
+        out["failure_type"] = "success"
+    else:
+        out["failure_type"] = "no_results"
+    return out
 
 def _run_template(question, routing, lang):
     tr = resolve_template(question, routing["template"], lang, router_params=routing.get("params"))
@@ -651,7 +654,6 @@ def main():
                 # fires when expected_answer is literally a known code, so
                 # it's safe to apply on every row.
                 expected_for_match = _canonicalize_surface_code(row.get("expected_answer"))
-                expected_for_match = _canonicalize_university_names(expected_for_match)
 
                 # Fix #2: ask_query ground truth is English-only ("Yes."/"No."),
                 # but final_answer is localized ("Non.", "لا."). A yes/no
