@@ -161,9 +161,12 @@ elif query_type == "single_kg1":
 
     # Step 5: execute
     if is_valid:
-        raw = execute_sparql(sparql_query, endpoint=get_endpoint("flights"))
+        result = execute_sparql(sparql_query, endpoint=get_endpoint("flights"))
+        raw = result["value"]
         log["raw_answer"] = raw
         print(f"\nRaw answer: {raw}")
+        if result["error"]:
+            print(f"[main] execute_sparql error: {result['error']}")
         if raw:
             answer = format_answer(question, raw, lang)
             log["final_answer"]  = answer
@@ -237,9 +240,12 @@ elif query_type == "single_kg2":
 
     # Step 5: execute against KG2
     if is_valid:
-        raw = execute_sparql(sparql_query, endpoint=get_endpoint("airports"))
+        result = execute_sparql(sparql_query, endpoint=get_endpoint("airports"))
+        raw = result["value"]
         log["raw_answer"] = raw
         print(f"\nRaw answer: {raw}")
+        if result["error"]:
+            print(f"[main] execute_sparql error: {result['error']}")
         if raw:
             answer = format_answer(question, raw, lang)
             log["final_answer"]  = answer
@@ -400,11 +406,14 @@ elif query_type == "single_kg3":
     # Step 5: execute against KG3 (multiple=True — university properties
     # like teacherOf/takesCourse are naturally one-to-many)
     if is_valid:
-        raw = execute_sparql(sparql_query, endpoint=get_endpoint("university"), multiple=True)
+        result = execute_sparql(sparql_query, endpoint=get_endpoint("university"))
+        raw = result["value"]
         log["raw_answer"] = raw
         print(f"\nRaw answer: {raw}")
+        if result["error"]:
+            print(f"[main] execute_sparql error: {result['error']}")
         if raw:
-            answer = format_answer_list(question, raw, lang)
+            answer = format_answer(question, raw, lang)
             log["final_answer"]  = answer
             log["failure_type"]  = "success"
             print(f"Final answer: {answer}")

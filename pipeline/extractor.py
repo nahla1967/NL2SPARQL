@@ -235,6 +235,7 @@ EXAMPLES:
 "Is Lecturer3 tenured?"                          → "tenured"
 "What is Department2's name?"                    → "name"
 "Quel est le titre de AssociateProfessor1?"      → "titre"
+"Qui sont les étudiants de Department3?"         → "étudiants de"
 "من كتب Publication12؟"                          → "كتب"
 "إلى أي جامعة ينتمي Department7؟"                 → "أي جامعة"
 
