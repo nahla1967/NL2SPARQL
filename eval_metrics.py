@@ -37,7 +37,7 @@ PCT_FORMAT  = "0.0%"
 RAW_COLUMNS = [
     "id", "tier", "category", "kg", "language", "strategy",
     "expected_type", "query_type", "routing_ok", "sparql_valid",
-    "failure_type", "exact_match", "f1", "duration_s",
+    "failure_type", "error_detail", "exact_match", "f1", "duration_s",
 ]
 
 LANGUAGES  = ["en", "fr", "ar"]

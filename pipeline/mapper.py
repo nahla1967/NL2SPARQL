@@ -45,6 +45,7 @@ WHAT CHANGED (this revision — scored cascade for ASK queries)
 
 import json
 import re
+import time
 import urllib.parse
 import urllib.request
 import numpy as np
@@ -448,6 +449,42 @@ def map_property_cascade_scored(
 
 
 # ── FLIGHT MAPPING (KG1) — UNCHANGED ─────────────────────────────────────────
+# ── SHARED FUSEKI RETRY HELPER ───────────────────────────────────────────────
+# Both map_flight() and map_airport() do the same thing: POST a SPARQL query,
+# read one binding out of the JSON response. Centralising the retry logic here
+# means a transient Fuseki hiccup (seen during the 324-run batch — see eval
+# session notes) gets the same handling in both places instead of being
+# duplicated and potentially drifting out of sync.
+def _query_fuseki_with_retry(endpoint: str, query: str, binding_var: str,
+                              caller: str, max_retries: int = 2,
+                              backoff_seconds: float = 1.5) -> str | None:
+    data = urllib.parse.urlencode({
+        "query":  query,
+        "format": "application/sparql-results+json"
+    }).encode()
+
+    for attempt in range(max_retries + 1):
+        req = urllib.request.Request(endpoint, data=data)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result   = json.loads(response.read())
+                bindings = result["results"]["bindings"]
+                if bindings:
+                    return bindings[0][binding_var]["value"]
+                return None  # query succeeded, genuinely no match — don't retry
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < max_retries:
+                print(f"[{caller}] attempt {attempt + 1} failed ({e}), retrying...")
+                time.sleep(backoff_seconds)
+            else:
+                print(f"[{caller}] Fuseki unreachable after {max_retries + 1} attempts: {e}")
+        except Exception as e:
+            print(f"[{caller}] Unexpected error: {e}")
+            return None  # not a connectivity issue — retrying won't help
+    return None
+
+
+# ── FLIGHT MAPPING (KG1) — UNCHANGED ─────────────────────────────────────────
 _flight_uri_cache: dict[str, str] = {}
 
 def map_flight(flight_number: str) -> str | None:
@@ -463,24 +500,10 @@ SELECT ?flight WHERE {{
 }}
 LIMIT 1
 """
-    data = urllib.parse.urlencode({
-        "query":  query,
-        "format": "application/sparql-results+json"
-    }).encode()
-    req = urllib.request.Request(FUSEKI_URL, data=data)
-    try:
-        with urllib.request.urlopen(req) as response:
-            result   = json.loads(response.read())
-            bindings = result["results"]["bindings"]
-            if bindings:
-                uri = bindings[0]["flight"]["value"]
-                _flight_uri_cache[flight_number] = uri
-                return uri
-    except urllib.error.URLError as e:
-        print(f"[map_flight] Fuseki unreachable: {e}")
-    except Exception as e:
-        print(f"[map_flight] Unexpected error: {e}")
-    return None
+    uri = _query_fuseki_with_retry(FUSEKI_URL, query, "flight", "map_flight")
+    if uri:
+        _flight_uri_cache[flight_number] = uri
+    return uri
 
 
 # ── AIRPORT MAPPING (KG2) — NEW ───────────────────────────────────────────────
@@ -508,24 +531,10 @@ SELECT ?airport WHERE {{
 }}
 LIMIT 1
 """
-    data = urllib.parse.urlencode({
-        "query":  query,
-        "format": "application/sparql-results+json"
-    }).encode()
-    req = urllib.request.Request(endpoint, data=data)
-    try:
-        with urllib.request.urlopen(req) as response:
-            result   = json.loads(response.read())
-            bindings = result["results"]["bindings"]
-            if bindings:
-                uri = bindings[0]["airport"]["value"]
-                _airport_uri_cache[iata] = uri
-                return uri
-    except urllib.error.URLError as e:
-        print(f"[map_airport] Fuseki unreachable: {e}")
-    except Exception as e:
-        print(f"[map_airport] Unexpected error: {e}")
-    return None
+    uri = _query_fuseki_with_retry(endpoint, query, "airport", "map_airport")
+    if uri:
+        _airport_uri_cache[iata] = uri
+    return uri
 
 _university_uri_cache: dict[str, str] = {}
 

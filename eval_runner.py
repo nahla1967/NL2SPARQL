@@ -44,15 +44,7 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "cross_kg_005",
-    "cross_kg_009",
-    "compare_two_airports_002",
-    "multilingual_edge_002",
-    "multilingual_edge_003",
-    "single_kg2_004",
-    "ask_query_002",
-    "filter_string_kg2_003",
-    "count_kg1_001",
+    "single_kg2_004","count_kg1_001"
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -362,6 +354,10 @@ def _run_single_kg2(question, entity_hint, strategy, lang):
     airport_uri = map_airport(entities["entity"]) if entities["entity"] else None
     if not airport_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
+        out["error_detail"] = (
+            f"entity={entities.get('entity')!r} -> airport_uri={airport_uri!r} | "
+            f"property_text={entities.get('property')!r} -> property_uri={property_uri!r}"
+        )
         return out
     base = get_base_uri("airports")
     full_prop = base + property_uri
@@ -498,11 +494,14 @@ def _run_open_kg(question, lang):
 
 def _run_template(question, routing, lang):
     tr = resolve_template(question, routing["template"], lang, router_params=routing.get("params"))
-    return {
+    out = {
         "sparql": tr.get("sparql"), "sparql_valid": tr.get("success", False),
         "raw_answer": tr.get("raw_data"), "final_answer": tr.get("final_answer"),
         "failure_type": tr.get("failure_type"),
     }
+    if not tr.get("success"):
+        out["error_detail"] = f"params={tr.get('params')!r}"
+    return out
 
 
 def _run_ask_query(question, routing, lang):
