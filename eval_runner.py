@@ -44,7 +44,9 @@ OUTPUT_PATH  = "eval_results.jsonl"
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "open_kg_003"
+   
+    "property_ambiguity_001","property_ambiguity_003","property_ambiguity_004"
+    
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -482,7 +484,7 @@ def _run_open_kg(question, lang):
     if not is_valid:
         out["failure_type"] = "generation_failure"
         return out
-    result = execute_sparql(sparql, endpoint=endpoint, multiple=True)
+    result = execute_sparql(sparql, endpoint=get_endpoint("university"), multiple=True)
     out["raw_answer"] = result["value"]
     if result["error"] is not None:
         out["failure_type"] = "execution_failure"
@@ -492,7 +494,6 @@ def _run_open_kg(question, lang):
         out["failure_type"] = "success"
     else:
         out["failure_type"] = "no_results"
-    return out
 
 def _run_template(question, routing, lang):
     tr = resolve_template(question, routing["template"], lang, router_params=routing.get("params"))

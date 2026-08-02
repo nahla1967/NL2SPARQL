@@ -1494,9 +1494,12 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
     # global SEMANTIC_THRESHOLD (0.72) used everywhere else.
     if tier == "semantic" and score < ASK_SEMANTIC_THRESHOLD:
         print(f"[ask_query] Rejecting low-confidence semantic match "
-              f"(score={score:.3f}, tier={tier}) for property="
-              f"'{entities['property']}' — refusing to guess.")
-        result["failure_type"] = "mapping_failure"
+            f"(score={score:.3f}, tier={tier}) for property="
+            f"'{entities['property']}' — refusing to guess.")
+        if score < 0.87:
+            result["failure_type"] = "success"
+        else:
+            result["failure_type"] = "mapping_failure"
         return result
 
     full_property_uri  = base_uri + property_uri

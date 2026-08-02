@@ -1592,7 +1592,8 @@ def route(question: str) -> dict:
         if query_type == "filter_string_kg2":
             value = params.get("value", "")
             if any(v in str(value).lower() for v in
-                   ["grass", "closed", "grs", "closed_runway", "fermée", "مغلق"]):
+                   ["grass", "closed", "grs", "closed_runway", "fermée", "مغلق",
+                   "asphalt", "asp", "concrete", "con", "إسفلت", "إسفلتي"]):
                 print(f"[router] Smart reroute: runway property → open_kg")
                 return {
                     "query_type": "open_kg",

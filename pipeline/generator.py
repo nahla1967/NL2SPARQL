@@ -34,8 +34,13 @@ WHAT CHANGED (this revision — removed hardcoded BASE)
 """
 
 import re
+import difflib
 import ollama
-from kg_registry import get_base_uri
+from kg_registry import get_base_uri, get_open_kg_schema
+
+_KNOWN_OPEN_KG_PROPERTIES = set(
+    re.findall(r'^\s*(\w+)\s*(?:\(|→)', get_open_kg_schema(), re.MULTILINE)
+)
 
 # Used ONLY for the static few-shot examples below. Resolved from the
 # shared registry instead of hardcoded, so this file has a single
@@ -104,12 +109,91 @@ def fix_misplaced_aggregate(sparql: str) -> str:
     )
 
     def fix(m):
-        body, func, agg_target, out_var, limit = m.groups()
-        print(f"[generator] Misplaced aggregate detected — auto-correcting")
-        limit_clause = f" {limit}" if limit else ""
-        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {body}{limit_clause}"
+        body, func, agg_target, out_var = m.groups()
+        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+    return pattern.sub(fix, sparql)
+
+
+def fix_aggregate_in_filter(sparql: str) -> str:
+    """
+    Detects an aggregate expression used inside FILTER() instead of the
+    SELECT clause — a fourth shape in the misplaced-aggregate bug family,
+    observed on an Arabic COUNT question:
+
+        SELECT ?count WHERE { ... FILTER(COUNT(?runway) = ?count) }  ← WRONG
+        (invalid SPARQL: aggregates cannot appear inside FILTER without
+        GROUP BY — Fuseki rejects this with HTTP 400)
+
+    instead of:
+
+        SELECT (COUNT(?runway) AS ?count) WHERE { ... }              ← CORRECT
+
+    Same bug family as fix_misplaced_aggregate() / fix_aggregate_inside_braces()
+    — the model moves the aggregate out of the SELECT clause. The backreference
+    \\1 ensures the variable used inside FILTER matches the one declared in
+    SELECT, so this only fires on the exact malformed shape, not on
+    legitimate FILTER usage elsewhere.
+    """
+    pattern = re.compile(
+        r'SELECT\s+\?(\w+)\s+WHERE\s*\{\s*(.*?)\s*'
+        r'FILTER\s*\(\s*(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s*=\s*\?\1\s*\)\s*\}',
+        re.IGNORECASE | re.DOTALL
+    )
+
+    def fix(m):
+        out_var, body, func, agg_target = m.groups()
+        print(f"[generator] Aggregate-in-FILTER detected — auto-correcting")
+        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
 
     return pattern.sub(fix, sparql)
+
+
+# ── UNKNOWN PREDICATE VALIDATOR (open_kg branch only) ─────────────────────────
+
+def fix_unknown_predicate(sparql: str) -> str:
+    """
+    Validates every predicate local name in a generated query against
+    _KNOWN_OPEN_KG_PROPERTIES and auto-corrects near-miss hallucinations —
+    observed on an Arabic run that generated "closes" instead of "closed".
+
+    WHY THIS IS GENERAL rather than a one-word patch: the open_kg branch
+    (generate_open_kg_sparql) is the one generation path that does NOT go
+    through the Hybrid Mapping Layer (mapper.py) — the LLM writes raw
+    predicate URIs directly from the schema text, with nothing checking
+    them before execution. This validator closes that gap for ANY
+    near-miss property name, not just "closed", so it also protects
+    against future hallucinations like "iataCod" or "municipalty".
+
+    A correction is applied only when:
+      - the predicate's local name is not already a known property, AND
+      - exactly one known property is within similarity of the fuzzy-match
+        threshold (cutoff=0.75).
+    If zero or multiple candidates match, the predicate is left untouched
+    rather than guessed at — an ambiguous case is safer to fail loudly
+    (execution error) than to silently substitute the wrong property.
+
+    Class names in triples like "?x a <...#Runway>" are skipped (checked
+    via the leading uppercase letter), since this validator only concerns
+    itself with predicate positions, not rdf:type objects.
+    """
+    pattern = re.compile(r'<([^#>]+#)(\w+)>')
+
+    def fix(m):
+        base, local_name = m.group(1), m.group(2)
+        if local_name in _KNOWN_OPEN_KG_PROPERTIES or local_name[:1].isupper():
+            return m.group(0)
+        candidates = difflib.get_close_matches(
+            local_name, _KNOWN_OPEN_KG_PROPERTIES, n=2, cutoff=0.75
+        )
+        if len(candidates) == 1:
+            print(f"[generator] Unknown predicate '{local_name}' auto-corrected to '{candidates[0]}'")
+            return f"<{base}{candidates[0]}>"
+        return m.group(0)
+
+    return pattern.sub(fix, sparql)
+
+
+# ── SPARQL EXTRACTOR ──────────────────────────────────────────────────────────
 
 def fix_aggregate_inside_braces(sparql: str) -> str:
     """
@@ -148,8 +232,9 @@ def extract_sparql(text: str) -> str:
 
         # Fix reversed triples before returning
         query = fix_reversed_triple(query)
-        # Fix misplaced aggregates (same bug family, Arabic-specific)
         query = fix_misplaced_aggregate(query)
+        query = fix_aggregate_inside_braces(query)
+        query = fix_aggregate_in_filter(query)
         return query
 
     return text.strip()
@@ -469,6 +554,18 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
             options={"temperature": 0}
         )
         sparql = extract_sparql(response["message"]["content"])
+        select_vars = re.findall(r'SELECT\s+(.*?)\s+WHERE', sparql, re.IGNORECASE)
+        if select_vars:
+            requested = re.findall(r'\?(\w+)', select_vars[0])
+            where_body = sparql[sparql.find("WHERE"):]
+            for var in requested:
+                if sparql.count(f"?{var}") < 2:  # appears in SELECT but nowhere else
+                    print(f"[generator] SELECT variable ?{var} never bound in WHERE — discarding query")
+                    sparql = ""
+                    break
+        sparql = fix_unknown_predicate(sparql)
+
+        # ── Endpoint detection from namespace markers ──────────────────────────
 
         # ── Endpoint detection from namespace markers ──────────────────────────
         # The generated query will contain full URIs from whichever ontology
