@@ -265,10 +265,10 @@ Classify the question into exactly one of these query types and extract its para
 ── QUERY TYPES AND THEIR PARAMETERS ──────────────────────────────────────────
 
 1. filter_numeric_kg2 — airports filtered by a numeric property
-   params: property, operator, threshold, limit (default 10)
+   params: property, operator, threshold
 
 2. filter_string_kg2 — airports filtered by a text/categorical property
-   params: property, value, limit (default 10)
+   params: property, value
 
 3. ranking_kg2 — airports ranked by a numeric property (top/bottom N)
    params: property, order (ASC or DESC), limit (default 5)
@@ -280,7 +280,7 @@ Classify the question into exactly one of these query types and extract its para
    params: filter_property, filter_value, mode (count or list)
 
 6. filter_numeric_kg1 — flights filtered by a numeric flight property
-   params: property, operator, threshold, limit (default 10)
+   params: property, operator, threshold
 
 7. cross_kg_filter — a specific flight is mentioned AND the question asks
    about a property of its origin or destination airport.
@@ -461,13 +461,13 @@ OPEN_KG: Use when the question asks about aviation data that exists in the
 ── EXAMPLES ──────────────────────────────────────────────────────────────────
 
 Q: "Which airports have an elevation above 1000 feet?"
-A: {"query_type": "filter_numeric_kg2", "params": {"property": "elevationFt", "operator": ">", "threshold": 1000, "limit": 10}}
+A: {"query_type": "filter_numeric_kg2", "params": {"property": "elevationFt", "operator": ">", "threshold": 1000}}
 
 Q: "Show all large airports."
-A: {"query_type": "filter_string_kg2", "params": {"property": "airportType", "value": "large_airport", "limit": 10}}
+A: {"query_type": "filter_string_kg2", "params": {"property": "airportType", "value": "large_airport"}}
 
 Q: "Which airports are located in Germany?"
-A: {"query_type": "filter_string_kg2", "params": {"property": "countryName", "value": "Germany", "limit": 10}}
+A: {"query_type": "filter_string_kg2", "params": {"property": "countryName", "value": "Germany"}}
 
 Q: "What are the top 5 airports with the highest elevation?"
 A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 5}}
@@ -504,10 +504,10 @@ A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity
 Q: "How many flights arrive in Vienna?"
 A: {"query_type": "count_kg1", "params": {"filter_property": "hasDestinationCity", "filter_value": "Vienna", "mode": "count"}}
 Q: "Which flights have a ground speed above 400 knots?"
-A: {"query_type": "filter_numeric_kg1", "params": {"property": "gspeed", "operator": ">", "threshold": 400, "limit": 10}}
+A: {"query_type": "filter_numeric_kg1", "params": {"property": "gspeed", "operator": ">", "threshold": 400}}
 
 Q: "Which flights have a vertical speed below -1000 feet per minute?"
-A: {"query_type": "filter_numeric_kg1", "params": {"property": "vspeed", "operator": "<", "threshold": -1000, "limit": 10}}
+A: {"query_type": "filter_numeric_kg1", "params": {"property": "vspeed", "operator": "<", "threshold": -1000}}
 
 Q: "What country does flight LO225 land in?"
 A: {"query_type": "cross_kg_filter", "params": {"direction": "destination", "airport_property": "countryName", "operator": "=", "threshold": "Poland", "limit": 1}}
@@ -590,7 +590,7 @@ Q: "Which department teaches the most courses on average per professor?"
 A: {"query_type": "group_aggregate_kg3", "params": {"group_by": "department", "property": "teacherOf", "function": "AVG"}}
 
 Q: "Which airports have a grass runway?"
-A: {"query_type": "filter_string_kg2", "params": {"property": "surface", "value": "grass", "limit": 10}}
+A: {"query_type": "filter_string_kg2", "params": {"property": "surface", "value": "grass"}}
 
 Q: "How many runways in the dataset are closed?"
 A: {"query_type": "open_kg", "params": {}}
@@ -1485,12 +1485,12 @@ def route(question: str) -> dict:
                 print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_numeric_kg2")
                 query_type = "filter_numeric_kg2"
                 params = {"property": prop, "operator": params.get("operator", ">"),
-                          "threshold": params.get("threshold"), "limit": params.get("limit", 10)}
+                          "threshold": params.get("threshold")}
                 cfg = TEMPLATE_REGISTRY[query_type]
             elif prop in KG2_STRING_PROPS:
                 print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_string_kg2")
                 query_type = "filter_string_kg2"
-                params = {"property": prop, "value": params.get("threshold"), "limit": params.get("limit", 10)}
+                params = {"property": prop, "value": params.get("threshold")}
                 cfg = TEMPLATE_REGISTRY[query_type]
             else:
                 print(f"[router] Smart reroute: cross_kg_filter with no flight entity, unrecognised property → open_kg")
@@ -1617,7 +1617,7 @@ def route(question: str) -> dict:
                 if value:
                     print(f"[router] Smart reroute: categorical property in ranking_kg2 → filter_string_kg2")
                     query_type = "filter_string_kg2"
-                    params = {"property": prop, "value": value, "limit": params.get("limit", 10)}
+                    params = {"property": prop, "value": value}
                 else:
                     print(f"[router] Smart reroute: categorical property in ranking_kg2, no value → open_kg")
                     return {
@@ -1651,7 +1651,7 @@ def route(question: str) -> dict:
                     print(f"[router] Smart reroute: filter_string_kg2 with numeric property → filter_numeric_kg2")
                     query_type = "filter_numeric_kg2"
                     params = {"property": prop, "operator": operator,
-                              "threshold": threshold, "limit": params.get("limit", 10)}
+                              "threshold": threshold}
                     cfg = TEMPLATE_REGISTRY[query_type]
                 else:
                     print(f"[router] Smart reroute: filter_string_kg2 with numeric property, "

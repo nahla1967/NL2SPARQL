@@ -45,7 +45,7 @@ LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
 
-    "filter_numeric_kg2_002"
+    "filter_numeric_kg1_001"
 
 }
 

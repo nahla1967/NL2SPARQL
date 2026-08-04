@@ -248,8 +248,7 @@ Return ONLY a JSON object with these keys:
 - "property": one of [elevationFt, lengthFt, widthFt]
 - "operator": one of [>, <, >=, <=]
 - "threshold": numeric value (integer)
-- "limit": number of results to return (default 10)
-Example: {{"property": "elevationFt", "operator": ">", "threshold": 1000, "limit": 10}}
+Example: {{"property": "elevationFt", "operator": ">", "threshold": 1000}}
 Return ONLY the JSON. No explanation.""",
 
         "filter_string_kg2": f"""Extract parameters from this airport question.
@@ -263,8 +262,8 @@ Rules:
 - If the question asks about a city/municipality, 
   set property = "municipality" and value = the city name.
 
-Return ONLY a JSON object with keys: "property", "value", "limit" (default 10).
-Example: {{"property": "countryName", "value": "France", "limit": 10}}
+Return ONLY a JSON object with keys: "property", "value".
+Example: {{"property": "countryName", "value": "France"}}
 Return ONLY the JSON. No explanation.""",
 
         "ranking_kg2": f"""Extract parameters from this airport ranking question.
@@ -328,8 +327,7 @@ Return ONLY a JSON object with these keys:
 - "property": one of [gspeed, vspeed, alt]
 - "operator": one of [>, <, >=, <=]
 - "threshold": numeric value
-- "limit": number of results (default 10)
-Example: {{"property": "alt", "operator": ">", "threshold": 30000, "limit": 10}}
+Example: {{"property": "alt", "operator": ">", "threshold": 30000}}
 Return ONLY the JSON. No explanation.""",
 
        "cross_kg_filter": f"""Extract parameters from this cross-KG flight filter question.
@@ -458,11 +456,6 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
     prop      = params.get("property", "elevationFt")
     operator  = params.get("operator") or ""
     threshold = params.get("threshold")
-    limit     = int(params.get("limit") or 10)
-
-    VALID_OPERATORS = {">", "<", ">=", "<=", "="}
-    if operator not in VALID_OPERATORS or threshold is None:
-        return None   # triggers sparql_build_failure instead of HTTP 400
 
     VALID_OPERATORS = {">", "<", ">=", "<=", "="}
     if operator not in VALID_OPERATORS or threshold is None:
@@ -502,14 +495,14 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}hasRunway> ?runway .
   ?runway <{prop_uri}> ?rawValue .
   FILTER(?rawValue {operator} {threshold})
-}} GROUP BY ?airport ?name ORDER BY DESC(?value) ?airport LIMIT {limit}"""
+}} GROUP BY ?airport ?name ORDER BY DESC(?value) ?airport"""
     else:
         sparql = f"""SELECT ?airport ?name ?value WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
   ?airport <{prop_uri}> ?value .
   FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) ?airport LIMIT {limit}"""
+}} ORDER BY DESC(?value) ?airport"""
 
     label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
     return sparql, label
@@ -530,7 +523,6 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
 }
     prop  = params.get("property", "airportType")
     value = params.get("value", "")
-    limit = int(params.get("limit") or 10)
 
     prop_info = KG2_STRING_PROPS.get(prop)
     if not prop_info or not value:
@@ -543,7 +535,7 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}airportName> ?name .
   ?airport <{KG2}locatedInCountry> ?country .
   ?country <{KG2}countryName> "{value}" .
-}} ORDER BY ?name LIMIT {limit}"""
+}} ORDER BY ?name"""
     elif prop == "surface":
         prop_uri = prop_info["uri"]
         codes = _SURFACE_SYNONYMS.get(value.lower(), [value])
@@ -553,14 +545,14 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{KG2}airportName> ?name .
   ?airport <{prop_uri}> ?surfaceVal .
   FILTER(?surfaceVal IN ({values_clause}))
-}} ORDER BY ?name LIMIT {limit}"""
+}} ORDER BY ?name"""
     else:
         prop_uri = prop_info["uri"]
         sparql = f"""SELECT ?airport ?name WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
   ?airport <{prop_uri}> "{value}" .
-}} ORDER BY ?name LIMIT {limit}"""
+}} ORDER BY ?name"""
 
     label = f"airports where {prop} = {value}"
     return sparql, label
@@ -1038,7 +1030,6 @@ def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     prop      = params.get("property", "gspeed")
     operator  = params.get("operator", ">")
     threshold = params.get("threshold", 0)
-    limit     = int(params.get("limit", 10))
 
     prop_info = KG1_NUMERIC_PROPS.get(prop)
     if not prop_info:
@@ -1047,13 +1038,23 @@ def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     prop_uri = prop_info["uri"]
     unit     = prop_info["unit"]
 
-    sparql = f"""SELECT ?flight ?number ?value WHERE {{
+    # FIX: same duplication bug as _build_filter_numeric_kg2's runway hop —
+    # a flight with multiple hasFlightEvent nodes (multiple recorded
+    # gspeed/vspeed samples) was returned once per event, not once per
+    # flight (e.g. OS631 appeared 6 times in the live Fuseki check for
+    # filter_numeric_kg1_001, at 6 different speeds). Grouping by flight
+    # and taking MAX(?rawValue) collapses each flight to a single row —
+    # its peak matching value — before results are returned. As with the
+    # KG2 fix, the raw per-event values are bound to ?rawValue so the
+    # aggregate's AS target (?value) doesn't collide with an
+    # already-bound WHERE variable, which SPARQL 1.1 rejects outright.
+    sparql = f"""SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}flightNumber> ?number .
   ?flight <{KG1}hasFlightEvent> ?event .
-  ?event <{prop_uri}> ?value .
-  FILTER(?value {operator} {threshold})
-}} ORDER BY DESC(?value) ?flight LIMIT {limit}"""
+  ?event <{prop_uri}> ?rawValue .
+  FILTER(?rawValue {operator} {threshold})
+}} GROUP BY ?flight ?number ORDER BY DESC(?value) ?flight"""
 
     label = f"flights with {prop_info['label']} {operator} {threshold} {unit}"
     return sparql, label
