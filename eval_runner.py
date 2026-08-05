@@ -128,7 +128,7 @@ def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
     }
     """
     for row in g.query(query):
-        lookup[str(row.name).strip().lower()] = str(row.code).strip().upper()
+        lookup[str(row.name).strip()] = str(row.code).strip().upper()
     return lookup
 
 

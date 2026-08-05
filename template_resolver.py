@@ -1096,7 +1096,7 @@ def _build_cross_kg_filter(params: dict) -> tuple[str, str] | None:
 
 # ── RESULT FORMATTERS ─────────────────────────────────────────────────────────
 
-def _format_rows(rows: list, columns: list, max_rows: int = 20) -> str:
+def _format_rows(rows: list, columns: list, max_rows: int = 200) -> str:
     """Converts SPARQL result rows to a readable string."""
     lines = []
     for i, row in enumerate(rows[:max_rows]):

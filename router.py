@@ -768,6 +768,8 @@ def _has_count_signal(q: str) -> bool:
     falling through to the LLM, which misrouted it to cross_kg_filter.
     """
     q_lower = q.lower()
+    if re.search(r"كم\s+(يبلغ|تبلغ)", q_lower):
+        return False
     for sig in _COUNT_SIGNALS:
         if " " in sig:
             if sig in q_lower:
@@ -795,8 +797,8 @@ def _has_compare_signal(q: str) -> bool:
 
 _COMPARE_PROPERTY_KEYWORDS = [
     (["elevation", "altitude", "height", "élévation", "ارتفاع", "أعلى", "أدنى"], "elevationFt"),
-    (["runway length", "length", "longer", "longest", "longueur", "أطول", "أقصر"], "lengthFt"),
-    (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق"], "widthFt"),
+    (["runway length", "length", "longer", "longest", "longueur", "أطول", "أقصر","طول"], "lengthFt"),
+    (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق","عرض"], "widthFt"),
     (["airport type", "type", "kind", "نوع"], "airportType"),
 ]
 
@@ -981,6 +983,7 @@ Q: "ما هو مطار الوصول؟" → NO
 Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
 Q: "Is BLQ located in France?" → YES
 Q: "هل يقع مطار بولونيا في فرنسا؟" → YES
+Q: "CDG est-il situé en Belgique?" → YES
 Q: "في أي دولة يقع مطار أثينا؟" → NO
 Q: "ما هي إشارة النداء للرحلة TK500؟" → NO
 
