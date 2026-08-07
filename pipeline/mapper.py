@@ -281,7 +281,8 @@ def _apply_hop(prop1: str | None, prop2: str | None, lexicon_path: str) -> tuple
 def map_property_cascade(
     property_text: str,
     lexicon: dict,
-    lexicon_path: str = "lexicon.json"
+    lexicon_path: str = "lexicon.json",
+    stages: set[str] = frozenset({"pre-norm", "exact", "fuzzy", "semantic"})
 ) -> tuple:
     """
     Returns (prop1, tier, prop2).
@@ -294,6 +295,13 @@ def map_property_cascade(
     resolver) keeps working exactly as before, with the same 3-value
     return. See map_property_cascade_scored() below for the ASK-only
     variant that also exposes a confidence score.
+
+    stages: which cascade tiers are allowed to run, in the usual
+    pre-norm → exact → fuzzy → semantic order. Defaults to all four,
+    so every existing caller (none of which pass this argument) is
+    completely unaffected. Only ablation runs pass a smaller set here
+    (e.g. {"exact"} or {"exact", "fuzzy"}) to measure what each tier
+    contributes on its own.
     """
     if not property_text:
         return None, None, None
@@ -305,29 +313,33 @@ def map_property_cascade(
             return None, None
         return uri, None
 
-    uri, _ = _pre_map(property_text, lexicon)
-    if uri:
-        prop1, prop2 = _unpack(uri)
-        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
-        return prop1, "pre-norm", prop2
+    if "pre-norm" in stages:
+        uri, _ = _pre_map(property_text, lexicon)
+        if uri:
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "pre-norm", prop2
 
-    uri = map_property(property_text, lexicon)
-    if uri:
-        prop1, prop2 = _unpack(uri)
-        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
-        return prop1, "exact", prop2
+    if "exact" in stages:
+        uri = map_property(property_text, lexicon)
+        if uri:
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "exact", prop2
 
-    uri = map_property_fuzzy(property_text, lexicon)
-    if uri:
-        prop1, prop2 = _unpack(uri)
-        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
-        return prop1, "fuzzy", prop2
+    if "fuzzy" in stages:
+        uri = map_property_fuzzy(property_text, lexicon)
+        if uri:
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "fuzzy", prop2
 
-    uri = map_property_with_embeddings(property_text, lexicon, lexicon_path)
-    if uri:
-        prop1, prop2 = _unpack(uri)
-        prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
-        return prop1, "semantic", prop2
+    if "semantic" in stages:
+        uri = map_property_with_embeddings(property_text, lexicon, lexicon_path)
+        if uri:
+            prop1, prop2 = _unpack(uri)
+            prop1, prop2 = _apply_hop(prop1, prop2, lexicon_path)
+            return prop1, "semantic", prop2
 
     return None, None, None
 

@@ -43,9 +43,9 @@ RAW_COLUMNS = [
 LANGUAGES  = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 CATEGORIES = [
-    "single_kg1", "single_kg2", "cross_kg", "open_kg",
-    "count_kg1", "filter_numeric_kg1", "filter_numeric_kg2",
-    "filter_string_kg2", "ranking_kg2", "compare_two_airports",
+    "single_kg1", "single_kg2", "single_kg3", "cross_kg", "open_kg",
+    "count_kg1", "count_kg3", "filter_numeric_kg1", "filter_numeric_kg2",
+    "filter_string_kg2", "filter_string_kg3", "ranking_kg2", "compare_two_airports",
     "out_of_scope", "ask_query", "typo_fuzzy",
     "multilingual_edge", "property_ambiguity",
 ]

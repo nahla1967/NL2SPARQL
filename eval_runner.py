@@ -39,14 +39,41 @@ from rdflib import Graph
 FULL_RUN = "--full" in sys.argv
 
 DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
-OUTPUT_PATH  = "eval_results.jsonl"
+
+# ── BASELINE / ABLATION MODE ────────────────────────────────────────────────
+# None            : normal run (writes to eval_results.jsonl, as always)
+# "A"             : Baseline A — LLM without knowledge injection. Forces
+#                   every question in BASELINE_A_CATEGORIES through the
+#                   schema-guided open_kg generator instead of normal
+#                   routing/URI injection.
+# "B"             : Baseline B — LLM without templates. Forces every
+#                   question in BASELINE_B_CATEGORIES through open_kg
+#                   instead of resolve_template().
+# "ablation"      : normal routing, but map_property_cascade() only runs
+#                   the tiers listed in ABLATION_STAGES (see stages= on
+#                   _run_single_kg1/2/3 and _run_cross_kg). Scoped to the
+#                   same question population as Baseline A, since that's
+#                   the only population where map_property_cascade() is
+#                   actually exercised.
+BASELINE_MODE = "A"  # None | "A" | "B" | "ablation"
+
+# Which cascade tiers to keep when BASELINE_MODE == "ablation". Edit this
+# and rerun for each ablation condition (e.g. {"pre-norm","exact"} for
+# "exact-only", {"pre-norm","exact","fuzzy"} for "exact+fuzzy").
+ABLATION_STAGES = frozenset({"pre-norm", "exact", "fuzzy"})
+
+BASELINE_A_CATEGORIES = {"single_kg1", "single_kg2", "single_kg3", "cross_kg"}
+BASELINE_B_CATEGORIES = {"count_kg1", "count_kg3", "filter_numeric_kg1",
+                          "filter_numeric_kg2", "filter_string_kg2",
+                          "filter_string_kg3", "ranking_kg2",
+                          "compare_two_airports"}
+
+OUTPUT_PATH = "baseline_results.jsonl" if BASELINE_MODE else "eval_results.jsonl"
 
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-
-    "filter_numeric_kg1_001"
-
+    "filter_string_kg3_001",
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────

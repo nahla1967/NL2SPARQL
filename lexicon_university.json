@@ -56,6 +56,8 @@
     "pour qui travaille":            "worksFor",
     "quel département emploie":      "worksFor",
     "يعمل لدى":                      "worksFor",
+    "يعملون لدى": "worksFor",
+    "الذين يعملون": "worksFor",
     "جهة العمل":                     "worksFor",
     "لصالح من يعمل":                 "worksFor",
     "أي قسم يعمل به":                "worksFor",
@@ -73,6 +75,9 @@
     "ينتمي إلى":                     "memberOf",
     "جزء من":                        "memberOf",
     "أي منظمة":                      "memberOf",
+      "member": "memberOf",
+  "member": "memberOf",
+  "عضو": "memberOf",
 
     "suborganization of":            "subOrganizationOf",
     "part of the university":        "subOrganizationOf",
@@ -232,9 +237,7 @@
 
     
 
-    "member":                         "member",
-    "membre":                         "member",
-    "عضو":                            "member",
+    
 
     "organization publication":       "orgPublication",
     "published by the organization":  "orgPublication",

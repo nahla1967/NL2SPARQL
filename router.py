@@ -612,6 +612,8 @@ A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "AS
 Q: "أي مطار لديه أطول مدرج؟"
 A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
 
+Q: "How many professors work for Department7?"
+A: {"query_type": "count_kg3", "params": {"property": "worksFor", "direction": "incoming", "mode": "count"}}
 
 
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
@@ -753,7 +755,7 @@ def _detect_university_entity(q: str):
 _COUNT_SIGNALS = ["how many", "combien de", "كم", "list all", "count"]
 _FILTER_SIGNALS = ["which professors", "which students", "who works for",
                     "who is a member of", "list the professors", "list the students",
-                    "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب"]
+                    "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب","من هم", "اذكر", "listez"]
 
 def _has_filter_signal(q: str) -> bool:
     q_lower = q.lower()

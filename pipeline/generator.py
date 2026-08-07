@@ -425,9 +425,11 @@ Return only the SPARQL query. No explanation. No markdown."""
 
 FLIGHT_ONTOLOGY_NS  = "flight_ontology"
 AIRPORT_ONTOLOGY_NS = "airport_ontology"
+UNIVERSITY_ONTOLOGY_NS = "univ-bench.owl"
 
 KG1_ENDPOINT = "http://localhost:3030/flights/sparql"
 KG2_ENDPOINT = "http://localhost:3030/airports/sparql"
+KG3_ENDPOINT = "http://localhost:3030/university/sparql"
 
 def generate_open_kg_sparql(
     question: str,
@@ -554,6 +556,7 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
             options={"temperature": 0}
         )
         sparql = extract_sparql(response["message"]["content"])
+        print(f"[DEBUG raw sparql]\n{sparql}\n")
         select_vars = re.findall(r'SELECT\s+(.*?)\s+WHERE', sparql, re.IGNORECASE)
         if select_vars:
             requested = re.findall(r'\?(\w+)', select_vars[0])
@@ -571,18 +574,20 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
         # The generated query will contain full URIs from whichever ontology
         # it targets. We inspect those URIs to determine the correct endpoint
         # rather than guessing or trying both sequentially.
-        has_kg1 = FLIGHT_ONTOLOGY_NS  in sparql
-        has_kg2 = AIRPORT_ONTOLOGY_NS in sparql
+        has_kg1 = FLIGHT_ONTOLOGY_NS     in sparql
+        has_kg2 = AIRPORT_ONTOLOGY_NS    in sparql
+        has_kg3 = UNIVERSITY_ONTOLOGY_NS in sparql
 
-        if has_kg1 and not has_kg2:
+        if has_kg3 and not has_kg1 and not has_kg2:
+            endpoint = KG3_ENDPOINT
+            print(f"[generator] open_kg → KG3 (university endpoint)")
+        elif has_kg1 and not has_kg2:
             endpoint = KG1_ENDPOINT
             print(f"[generator] open_kg → KG1 (flights endpoint)")
         elif has_kg2:
-            # covers KG2-only and both-KG cases
             endpoint = KG2_ENDPOINT
             print(f"[generator] open_kg → KG2 (airports endpoint)")
         else:
-            # no namespace detected — LLM may have generated a malformed query
             endpoint = KG2_ENDPOINT
             print(f"[generator] open_kg → no namespace detected, defaulting to KG2")
 

@@ -1,12 +1,5 @@
-from router import route
+from eval_runner import _run_open_kg
 
-tests = [
-    "ما هي السرعة العمودية للرحلة VF535؟",
-    "What airline operates flight MAE107?",
-    "Quelle compagnie aérienne opère le vol MAE107?",
-    "ما هي شركة الطيران التي تشغل الرحلة MAE107؟",
-]
-
-for q in tests:
-    r = route(q)
-    print(f"{q!r} -> {r['query_type']}")
+question = "What department does FullProfessor5 in Department0 work for?"
+result = _run_open_kg(question, "en")
+print(result)
