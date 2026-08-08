@@ -73,11 +73,13 @@ OUTPUT_PATH = "baseline_results.jsonl" if BASELINE_MODE else "eval_results.jsonl
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "filter_string_kg3_001",
+
+    "filter_numeric_kg1_001"
+
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
-from router import route
+from router import route, _is_kg_answerable
 from template_resolver import resolve_template, resolve_ask_query
 from pipeline.language import detect_language
 from pipeline.extractor import (
@@ -155,7 +157,7 @@ def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
     }
     """
     for row in g.query(query):
-        lookup[str(row.name).strip()] = str(row.code).strip().upper()
+        lookup[str(row.name).strip().lower()] = str(row.code).strip().upper()
     return lookup
 
 
@@ -331,7 +333,10 @@ def token_f1(predicted, expected) -> float | None:
 
 # ── BRANCH HANDLERS (strategy-parameterised versions of main.py's branches) ─
 
-def _run_single_kg1(question, entity_hint, strategy, lang):
+_DEFAULT_STAGES = frozenset({"pre-norm", "exact", "fuzzy", "semantic"})
+
+
+def _run_single_kg1(question, entity_hint, strategy, lang, stages=_DEFAULT_STAGES):
     out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
            "final_answer": None, "failure_type": "not_run"}
     entities = extract_entities(question, lang)
@@ -340,7 +345,7 @@ def _run_single_kg1(question, entity_hint, strategy, lang):
         return out
     lexicon = load_lexicon(get_lexicon("flights"))
     property_uri, _, property2_uri = map_property_cascade(
-        entities["property"], lexicon, get_lexicon("flights"))
+        entities["property"], lexicon, get_lexicon("flights"), stages=stages)
     flight_uri = map_flight(entities["entity"])
     if not flight_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
@@ -372,7 +377,7 @@ def _run_single_kg1(question, entity_hint, strategy, lang):
     return out
 
 
-def _run_single_kg2(question, entity_hint, strategy, lang):
+def _run_single_kg2(question, entity_hint, strategy, lang, stages=_DEFAULT_STAGES):
     out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
            "final_answer": None, "failure_type": "not_run"}
     entities = extract_airport_entities(question, lang, entity_hint)
@@ -382,7 +387,7 @@ def _run_single_kg2(question, entity_hint, strategy, lang):
     lexicon_path = get_lexicon("airports")
     lexicon = load_lexicon(lexicon_path)
     property_uri, _, property2_uri = map_property_cascade(
-        entities["property"], lexicon, lexicon_path)
+        entities["property"], lexicon, lexicon_path, stages=stages)
     airport_uri = map_airport(entities["entity"]) if entities["entity"] else None
     if not airport_uri or not property_uri:
         out["failure_type"] = "mapping_failure"
@@ -416,7 +421,7 @@ def _run_single_kg2(question, entity_hint, strategy, lang):
     return out
 
 
-def _run_single_kg3(question, routing, strategy, lang):
+def _run_single_kg3(question, routing, strategy, lang, stages=_DEFAULT_STAGES):
     """
     Branch: university entity is known (routing["entity"]).
     Mirrors test_pipeline.py's _run_single_kg3 — added here because the
@@ -433,7 +438,7 @@ def _run_single_kg3(question, routing, strategy, lang):
     lexicon_path = get_lexicon("university")
     lexicon = load_lexicon(lexicon_path)
     property_uri, _, property2_uri = map_property_cascade(
-        entities["property"], lexicon, lexicon_path)
+        entities["property"], lexicon, lexicon_path, stages=stages)
     entity_uri = map_university_entity(entities["entity"]) if entities["entity"] else None
 
     FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
@@ -478,7 +483,7 @@ def _run_single_kg3(question, routing, strategy, lang):
     return out
 
 
-def _run_cross_kg(question, routing, lang):
+def _run_cross_kg(question, routing, lang, stages=_DEFAULT_STAGES):
     out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
            "final_answer": None, "failure_type": "not_run"}
     flight_uri = map_flight(routing["entity"])
@@ -488,7 +493,7 @@ def _run_cross_kg(question, routing, lang):
     entities = extract_airport_entities(question, lang, iata_from_router=None)
     lexicon_path = get_lexicon("airports")
     lexicon = load_lexicon(lexicon_path)
-    property_uri, _, property2_uri = map_property_cascade(entities["property"], lexicon, lexicon_path)
+    property_uri, _, property2_uri = map_property_cascade(entities["property"], lexicon, lexicon_path, stages=stages)
     if not property_uri:
         out["failure_type"] = "mapping_failure"
         return out
@@ -555,23 +560,56 @@ def _run_ask_query(question, routing, lang):
 
 def _dispatch(question, lang, strategy):
     """Routes the question, then calls the matching branch handler."""
+
+    # Baseline A/B: bypass normal routing entirely and force the
+    # schema-guided open_kg generator. main() already scopes the
+    # dataframe to the right question population (BASELINE_A_CATEGORIES /
+    # BASELINE_B_CATEGORIES) before _dispatch is ever called in this mode,
+    # so there's no need to route — every question here should go through
+    # the no-injection generator regardless of what normal routing would say.
+    if BASELINE_MODE in ("A", "B"):
+        out = _run_open_kg(question, lang)
+        out["query_type"] = "open_kg"
+        return out
+
     routing = route(question)
     query_type = routing["query_type"]
 
+    # Ablation: keep normal routing, but restrict which cascade tiers
+    # map_property_cascade() is allowed to use, in whichever branch
+    # handler ends up being called below. Every other mode (None) passes
+    # _DEFAULT_STAGES, which is a no-op — identical to not passing
+    # stages= at all.
+    ablation_stages = ABLATION_STAGES if BASELINE_MODE == "ablation" else _DEFAULT_STAGES
+
     if query_type == "single_kg1":
-        out = _run_single_kg1(question, routing["entity"], strategy, lang)
+        out = _run_single_kg1(question, routing["entity"], strategy, lang, stages=ablation_stages)
     elif query_type == "single_kg2":
-        out = _run_single_kg2(question, routing["entity"], strategy, lang)
+        out = _run_single_kg2(question, routing["entity"], strategy, lang, stages=ablation_stages)
     elif query_type == "single_kg3":
-        out = _run_single_kg3(question, routing, strategy, lang)
+        out = _run_single_kg3(question, routing, strategy, lang, stages=ablation_stages)
     elif query_type == "cross_kg":
-        out = _run_cross_kg(question, routing, lang)
+        out = _run_cross_kg(question, routing, lang, stages=ablation_stages)
     elif query_type == "open_kg":
         out = _run_open_kg(question, lang)
     elif query_type == "template":
         out = _run_template(question, routing, lang)
     elif query_type == "ask_query":
         out = _run_ask_query(question, routing, lang)
+        # Fallback: a mapping_failure on an ask_query often means the
+        # question was never really about a KG property at all. The
+        # Arabic 'هل' fast-path (router.py, Priority 1.5) routes any
+        # yes/no-structured question with a known entity straight to
+        # ask_query, with no scope check at that point — unlike the
+        # airport branch (Priority 2.5), which does gate on
+        # _is_kg_answerable() before committing. Re-check scope here,
+        # only in the failure case, so this doesn't add an extra LLM
+        # call to every ask_query — only to the ones that already failed.
+        if out["failure_type"] == "mapping_failure" and not _is_kg_answerable(question):
+            print(f"[dispatch] ask_query mapping failed and question isn't KG-answerable — reclassifying as out_of_scope")
+            query_type = "out_of_scope"
+            out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
+                   "final_answer": None, "failure_type": "success"}
     else:  # out_of_scope or anything unrecognised
         out = {"sparql": None, "sparql_valid": False, "raw_answer": None,
                "final_answer": None,
@@ -585,11 +623,21 @@ def _dispatch(question, lang, strategy):
 
 def main():
     df = pd.read_excel(DATASET_PATH, sheet_name="Questions")
-    if not FULL_RUN:
+
+    if BASELINE_MODE == "A":
+        df = df[df["category"].isin(BASELINE_A_CATEGORIES)]
+    elif BASELINE_MODE == "B":
+        df = df[df["category"].isin(BASELINE_B_CATEGORIES)]
+    elif BASELINE_MODE == "ablation":
+        df = df[df["category"].isin(BASELINE_A_CATEGORIES)]
+    elif not FULL_RUN:
         df = df[df["id"].isin(BROKEN_IDS)]           # only re-run what broke
 
     old_good_rows = []
-    if not FULL_RUN and os.path.exists(OUTPUT_PATH):
+    # Baseline/ablation runs always start fresh — no incremental
+    # preservation, since baseline_results.jsonl could otherwise end up
+    # mixing rows from different ABLATION_STAGES configs in one file.
+    if BASELINE_MODE is None and not FULL_RUN and os.path.exists(OUTPUT_PATH):
         with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
             for line in f:
                 rec = json.loads(line)
@@ -604,7 +652,14 @@ def main():
     skipped = 0
 
     for _, row in df.iterrows():
-        strategies = STRATEGIES if bool(row["strategy_applicable"]) else ["zero-shot"]
+        # Baseline/ablation tracks are about the generation approach or
+        # the mapping cascade, not prompting strategy — running them
+        # across all 3 strategies would conflate two different
+        # comparisons, so force zero-shot only.
+        if BASELINE_MODE is not None:
+            strategies = ["zero-shot"]
+        else:
+            strategies = STRATEGIES if bool(row["strategy_applicable"]) else ["zero-shot"]
         for lang in LANGUAGES:
             question = row.get(f"question_{lang}")
             if pd.isna(question) or not str(question).strip():
