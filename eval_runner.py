@@ -55,7 +55,7 @@ DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
 #                   same question population as Baseline A, since that's
 #                   the only population where map_property_cascade() is
 #                   actually exercised.
-BASELINE_MODE = "B"  # None | "A" | "B" | "ablation"
+BASELINE_MODE = "ablation"  # None | "A" | "B" | "ablation"
 
 # Which cascade tiers to keep when BASELINE_MODE == "ablation". Edit this
 # and rerun for each ablation condition (e.g. {"pre-norm","exact"} for
@@ -68,7 +68,7 @@ BASELINE_B_CATEGORIES = {"count_kg1", "count_kg3", "filter_numeric_kg1",
                           "filter_string_kg3", "ranking_kg2",
                           "compare_two_airports"}
 
-OUTPUT_PATH = "baseline_results.jsonl" if BASELINE_MODE else "eval_results.jsonl"
+OUTPUT_PATH = f"baseline_{BASELINE_MODE}_results.jsonl" if BASELINE_MODE else "eval_results.jsonl"
 
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
