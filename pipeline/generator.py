@@ -559,8 +559,14 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
         print(f"[DEBUG raw sparql]\n{sparql}\n")
         select_vars = re.findall(r'SELECT\s+(.*?)\s+WHERE', sparql, re.IGNORECASE)
         if select_vars:
-            requested = re.findall(r'\?(\w+)', select_vars[0])
-            where_body = sparql[sparql.find("WHERE"):]
+            select_clause = select_vars[0]
+            # Variables introduced via an aggregate binding, e.g.
+            # "(COUNT(?x) AS ?count)", are legitimately declared only in SELECT —
+            # SPARQL computes them from the aggregation, they don't need to (and
+            # normally won't) reappear in WHERE. Excluding them here stops those
+            # queries from being wrongly discarded as "unbound".
+            agg_bound_vars = set(re.findall(r'AS\s+\?(\w+)', select_clause, re.IGNORECASE))
+            requested = [v for v in re.findall(r'\?(\w+)', select_clause) if v not in agg_bound_vars]
             for var in requested:
                 if sparql.count(f"?{var}") < 2:  # appears in SELECT but nowhere else
                     print(f"[generator] SELECT variable ?{var} never bound in WHERE — discarding query")
