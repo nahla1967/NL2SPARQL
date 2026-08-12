@@ -60,7 +60,7 @@ BASELINE_MODE = "ablation"  # None | "A" | "B" | "ablation"
 # Which cascade tiers to keep when BASELINE_MODE == "ablation". Edit this
 # and rerun for each ablation condition (e.g. {"pre-norm","exact"} for
 # "exact-only", {"pre-norm","exact","fuzzy"} for "exact+fuzzy").
-ABLATION_STAGES = frozenset({"pre-norm", "exact", "fuzzy", "semantic"})
+ABLATION_STAGES = frozenset({"pre-norm", "exact"})
 
 BASELINE_A_CATEGORIES = {"single_kg1", "single_kg2", "single_kg3", "cross_kg"}
 BASELINE_B_CATEGORIES = {"count_kg1", "count_kg3", "filter_numeric_kg1",
