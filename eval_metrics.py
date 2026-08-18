@@ -79,6 +79,12 @@ def write_raw_sheet(wb, records):
             val = rec.get(name)
             if isinstance(val, (dict, list)):
                 val = json.dumps(val, ensure_ascii=False)
+            if name == "exact_match" and isinstance(val, bool):
+                # Excel's AVERAGEIFS ignores boolean TRUE/FALSE cells in the
+                # averaged range (unlike COUNTIFS, which matches them fine).
+                # exact_match() returns bool, so it must be cast to 1/0 here
+                # or the Summary sheet's "Exact Match" column stays blank.
+                val = int(val)
             cell = ws.cell(row=r, column=c, value=val)
             cell.font = BODY_FONT
             cell.border = BORDER

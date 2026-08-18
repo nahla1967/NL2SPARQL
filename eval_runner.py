@@ -34,6 +34,7 @@ import time
 import pandas as pd
 import os
 import sys
+import socket
 from rdflib import Graph
 
 FULL_RUN = "--full" in sys.argv
@@ -55,7 +56,7 @@ DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
 #                   same question population as Baseline A, since that's
 #                   the only population where map_property_cascade() is
 #                   actually exercised.
-BASELINE_MODE ="A"  # None | "A" | "B" | "ablation"
+BASELINE_MODE = None # None | "A" | "B" | "ablation"
 
 # Which cascade tiers to keep when BASELINE_MODE == "ablation". Edit this
 # and rerun for each ablation condition (e.g. {"pre-norm","exact"} for
@@ -73,9 +74,10 @@ OUTPUT_PATH = f"baseline_{BASELINE_MODE}_results.jsonl" if BASELINE_MODE else "e
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-
-    "filter_numeric_kg1_001"
-
+    "filter_numeric_kg1_001",
+    "filter_numeric_kg1_002",
+    "filter_numeric_kg1_003",
+    "filter_numeric_kg2_003",
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -101,7 +103,16 @@ from kg_registry import get_base_uri, get_endpoint, get_lexicon, get_open_kg_sch
 
 
 # ── SCORING HELPERS ─────────────────────────────────────────────────────────
-
+def _internet_reachable(host="8.8.8.8", port=53, timeout=1.0) -> bool:
+    """Fast external-connectivity check, logged at the moment of a
+    failure so causation is evidenced directly instead of inferred
+    from a before/after rerun."""
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except OSError:
+        return False
 def _strip_trailing_note(text) -> str:
     """Drops a trailing clarifying note in parentheses, e.g.
     '(complete — Greece only has 2)' -- it's metadata, not data.
