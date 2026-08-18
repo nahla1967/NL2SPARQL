@@ -19,4 +19,4 @@ venv/
 *.onnx
 
 lexicon_phrases.json
-lexicon_embeddings.npy
+lexicon_embeddings.npy~$*
