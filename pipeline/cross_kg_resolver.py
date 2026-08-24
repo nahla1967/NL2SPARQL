@@ -50,14 +50,15 @@ def _sparql_query(endpoint: str, query: str) -> list[dict]:
 
 # ── STEP 1: GET IATA FROM KG1 ─────────────────────────────────────────────────
 
-def _get_iata_from_kg1(flight_uri: str, direction: str) -> str | None:
+def _get_iata_from_kg1(flight_uri: str, direction: str) -> tuple[str | None, str]:
     """
     Queries KG1 to get the IATA code of the origin or destination airport.
 
     direction: 'origin'      → uses orig_iata property
                'destination' → uses dest_iata property
 
-    Returns the IATA string (e.g. 'MUC'), or None if not found.
+    Returns (iata_string_or_None, query_text) — the query text is returned
+    even on failure so the caller can still show what was attempted.
     """
     kg1_base    = CROSS_KG_CONFIG["kg1_base"]
     endpoint    = CROSS_KG_CONFIG["kg1_endpoint"]
@@ -75,18 +76,18 @@ LIMIT 1
 """
     bindings = _sparql_query(endpoint, query)
     if bindings:
-        return bindings[0].get("iata", {}).get("value")
-    return None
+        return bindings[0].get("iata", {}).get("value"), query
+    return None, query
 
 
 # ── STEP 2: GET AIRPORT URI FROM KG2 ─────────────────────────────────────────
 
-def _get_airport_uri_from_kg2(iata: str) -> str | None:
+def _get_airport_uri_from_kg2(iata: str) -> tuple[str | None, str]:
     """
     Queries KG2 to find the Airport URI for a given IATA code.
 
     Example: "MUC" → ao:Airport/MUC URI
-    Returns the full URI string, or None if not found.
+    Returns (uri_string_or_None, query_text).
     """
     kg2_base   = CROSS_KG_CONFIG["kg2_base"]
     endpoint   = CROSS_KG_CONFIG["kg2_endpoint"]
@@ -100,13 +101,13 @@ LIMIT 1
 """
     bindings = _sparql_query(endpoint, query)
     if bindings:
-        return bindings[0].get("airport", {}).get("value")
-    return None
+        return bindings[0].get("airport", {}).get("value"), query
+    return None, query
 
 
 # ── STEP 3: GET PROPERTY VALUE FROM KG2 ───────────────────────────────────────
 
-def _get_airport_property(airport_uri: str, property_uri: str, property2_uri: str | None = None) -> str | None:
+def _get_airport_property(airport_uri: str, property_uri: str, property2_uri: str | None = None) -> tuple[str | None, str]:
     endpoint = CROSS_KG_CONFIG["kg2_endpoint"]
     kg2_base = CROSS_KG_CONFIG["kg2_base"]
 
@@ -122,9 +123,9 @@ LIMIT 1
         if bindings:
             raw = bindings[0].get("value", {}).get("value", "")
             if raw.startswith("http"):
-                return _resolve_uri_label(raw, endpoint, kg2_base)
-            return raw
-        return None
+                return _resolve_uri_label(raw, endpoint, kg2_base), query_two_hop
+            return raw, query_two_hop
+        return None, query_two_hop
 
     # --- Attempt 1: direct literal on the airport node itself ---
     # Handles properties like elevationFt / airportType, which sit straight
@@ -141,7 +142,7 @@ LIMIT 1
 """
     bindings = _sparql_query(endpoint, query_direct)
     if bindings:
-        return bindings[0].get("value", {}).get("value")
+        return bindings[0].get("value", {}).get("value"), query_direct
 
     # --- Attempt 2: one-hop through object property ---
     # Tries: Airport → objectProp → Node → dataProps
@@ -156,9 +157,9 @@ LIMIT 1
 """
     bindings = _sparql_query(endpoint, query_hop)
     if bindings:
-        return bindings[0].get("label", {}).get("value")
+        return bindings[0].get("label", {}).get("value"), query_direct + "\n---\n" + query_hop
 
-    return None
+    return None, query_direct + "\n---\n" + query_hop
 
 
 def _resolve_uri_label(uri: str, endpoint: str, base: str) -> str | None:
@@ -232,10 +233,12 @@ def resolve_cross_kg(
         "airport_uri":  None,
         "raw_value":    None,
         "failure_type": None,
+        "sparql_trace": [],   # every query actually executed, in order — for UI display
     }
 
     # Step 1 — KG1: flight → IATA
-    iata = _get_iata_from_kg1(flight_uri, direction)
+    iata, query1 = _get_iata_from_kg1(flight_uri, direction)
+    result["sparql_trace"].append(f"# Step 1 — KG1: flight → IATA\n{query1.strip()}")
     if not iata:
         print(f"[cross_kg] Step 1 failed: no IATA for {flight_uri} ({direction})")
         result["failure_type"] = "kg1_iata_not_found"
@@ -245,7 +248,8 @@ def resolve_cross_kg(
     print(f"[cross_kg] Step 1 ✓ IATA = {iata}")
 
     # Step 2 — KG2: IATA → Airport URI
-    airport_uri = _get_airport_uri_from_kg2(iata)
+    airport_uri, query2 = _get_airport_uri_from_kg2(iata)
+    result["sparql_trace"].append(f"# Step 2 — KG2: IATA → Airport URI\n{query2.strip()}")
     if not airport_uri:
         print(f"[cross_kg] Step 2 failed: no KG2 airport for IATA '{iata}'")
         result["failure_type"] = "kg2_airport_not_found"
@@ -255,7 +259,8 @@ def resolve_cross_kg(
     print(f"[cross_kg] Step 2 ✓ Airport URI = {airport_uri}")
 
     # Step 3 — KG2: Airport URI → property value
-    raw_value = _get_airport_property(airport_uri, property_uri, property2_uri)
+    raw_value, query3 = _get_airport_property(airport_uri, property_uri, property2_uri)
+    result["sparql_trace"].append(f"# Step 3 — KG2: Airport URI → property value\n{query3.strip()}")
     if not raw_value:
         print(f"[cross_kg] Step 3 failed: property '{property_short}' not found")
         result["failure_type"] = "kg2_property_not_found"

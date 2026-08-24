@@ -43,11 +43,18 @@ def _validate(sparql_query: str, full_prop_uri: str, full_prop2_uri: str | None)
     return is_valid
 
 
+def _short(uri: str | None) -> str:
+    """Fragment of a URI after the last '/' or '#' — used as an edge label."""
+    if not uri:
+        return "?"
+    return uri.split("#")[-1].split("/")[-1]
+
+
 def _ui_result(**kwargs) -> dict:
     """Fills in every key the UI expects, defaulting anything not passed."""
     base = {
         "language": None, "branch": None, "entity": None, "property_surface": None,
-        "resolved_uri": None, "tier": None, "sparql": None,
+        "resolved_uri": None, "property_resolved_uri": None, "tier": None, "sparql": None,
         "execution": {"value": None, "error": None}, "answer": None, "path": None,
     }
     base.update(kwargs)
@@ -86,10 +93,13 @@ def _run_single_kg1(question: str, lang: str, strategy: str) -> dict:
 
     result = execute_sparql(sparql_query, endpoint=get_endpoint("flights"))
     answer = format_answer(question, result["value"], lang) if result["value"] else None
+    path = ([{"from": entities["entity"], "to": str(result["value"])[:60],
+              "label": f"{_short(property_uri)} [{tier}]"}]
+             if result.get("value") else None)
 
     return _ui_result(language=lang, branch="single_kg1", entity=entities["entity"],
                        property_surface=entities["property"], resolved_uri=full_prop_uri,
-                       tier=tier, sparql=sparql_query, execution=result, answer=answer)
+                       tier=tier, sparql=sparql_query, execution=result, answer=answer, path=path)
 
 
 def _run_single_kg2(question: str, routing: dict, lang: str, strategy: str) -> dict:
@@ -125,10 +135,13 @@ def _run_single_kg2(question: str, routing: dict, lang: str, strategy: str) -> d
 
     result = execute_sparql(sparql_query, endpoint=get_endpoint("airports"))
     answer = format_answer(question, result["value"], lang) if result["value"] else None
+    path = ([{"from": entities["entity"], "to": str(result["value"])[:60],
+              "label": f"{_short(property_uri)} [{tier}]"}]
+             if result.get("value") else None)
 
     return _ui_result(language=lang, branch="single_kg2", entity=entities["entity"],
                        property_surface=entities["property"], resolved_uri=full_prop_uri,
-                       tier=tier, sparql=sparql_query, execution=result, answer=answer)
+                       tier=tier, sparql=sparql_query, execution=result, answer=answer, path=path)
 
 
 def _run_single_kg3(question: str, routing: dict, lang: str, strategy: str) -> dict:
@@ -176,10 +189,13 @@ def _run_single_kg3(question: str, routing: dict, lang: str, strategy: str) -> d
     # multiple=True — university properties are naturally one-to-many
     result = execute_sparql(sparql_query, endpoint=get_endpoint("university"), multiple=True)
     answer = format_answer_list(question, result["value"], lang) if result["value"] else None
+    path = ([{"from": entities["entity"], "to": str(result["value"])[:60],
+              "label": f"{_short(property_uri)} [{tier}]"}]
+             if result.get("value") else None)
 
     return _ui_result(language=lang, branch="single_kg3", entity=entities["entity"],
                        property_surface=entities["property"], resolved_uri=full_prop_uri,
-                       tier=tier, sparql=sparql_query, execution=result, answer=answer)
+                       tier=tier, sparql=sparql_query, execution=result, answer=answer, path=path)
 
 
 def _run_cross_kg(question: str, routing: dict, lang: str) -> dict:
@@ -223,20 +239,30 @@ def _run_cross_kg(question: str, routing: dict, lang: str) -> dict:
     if result.get("iata"):
         path = [
             {"from": flight_number, "to": result["iata"], "label": f"IATA ({direction})"},
-            {"from": result["iata"], "to": property_uri, "label": property_uri},
+            {"from": result["iata"], "to": str(result.get("raw_value") or property_uri)[:60],
+             "label": f"{_short(property_uri)} [{tier}]"},
         ]
+
+    # cross_kg never calls the LLM generator — it runs up to three hand-built
+    # SPARQL queries in sequence (flight→IATA, IATA→airport, airport→property).
+    # Join whichever ones actually ran so the UI's "Generated SPARQL" panel
+    # shows the real trace instead of staying empty for this branch.
+    sparql_trace = "\n\n".join(result.get("sparql_trace", [])) or None
 
     if result["success"]:
         answer = format_answer(question, result["raw_value"], lang)
         return _ui_result(language=lang, branch="cross_kg", entity=flight_number,
                            property_surface=entities["property"], resolved_uri=result.get("airport_uri"),
-                           tier=tier, sparql=None,
+                           property_resolved_uri=full_prop_uri,
+                           tier=tier, sparql=sparql_trace,
                            execution={"value": result["raw_value"], "error": None},
                            answer=answer, path=path)
 
     return _ui_result(language=lang, branch="cross_kg", entity=flight_number,
                        property_surface=entities["property"], resolved_uri=result.get("airport_uri"),
-                       tier=tier, execution={"value": None, "error": result.get("failure_type")},
+                       property_resolved_uri=full_prop_uri,
+                       tier=tier, sparql=sparql_trace,
+                       execution={"value": None, "error": result.get("failure_type")},
                        path=path)
 
 
