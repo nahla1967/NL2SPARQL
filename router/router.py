@@ -1,11 +1,19 @@
 """
 Main routing logic for the NL2SPARQL pipeline.
+
+FIXED vs the draft you pasted: _RANKING_SIGNALS and _ASC_SIGNALS were
+redefined locally here even though rules.py already defines them —
+harmless while the two copies match, but a duplication trap if either
+list is ever tuned without the other. Now imported from rules.py so
+there's one source of truth.
 """
+
+import re
 
 from template_resolver import KG2_NUMERIC_PROPS, KG2_STRING_PROPS
 from kg_registry import KG_REGISTRY, CROSS_KG_CONFIG, TEMPLATE_REGISTRY
 
-from .rules import _has_minimum_structure
+from .rules import _has_minimum_structure, _normalise, _RANKING_SIGNALS, _ASC_SIGNALS
 from .detectors import (
     _detect_flight_number,
     _detect_flight_number_first,
@@ -25,22 +33,6 @@ from .classifier import (
     _llm_classify,
     _is_kg_answerable,
 )
-from .rules import _normalise
-
-import re
-
-
-# ── RANKING / ASC SIGNALS (used by smart reroutes) ───────────────
-_RANKING_SIGNALS = [
-    "highest", "lowest", "fastest", "slowest",
-    "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
-    "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
-]
-_ASC_SIGNALS = [
-    "shortest", "lowest", "smallest", "narrowest",
-    "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
-    "أقصر", "أدنى", "أضيق"
-]
 
 
 def route(question: str) -> dict:
