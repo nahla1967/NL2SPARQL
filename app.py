@@ -63,24 +63,244 @@ st.markdown(RTL_CSS, unsafe_allow_html=True)
 # button and hamburger menu, which aren't relevant for a local demo.
 COMPACT_CSS = """
 <style>
+/* ---------- Hide Streamlit chrome ---------- */
 #MainMenu {visibility: hidden;}
 .stDeployButton {display: none;}
 header [data-testid="stToolbar"] {visibility: hidden;}
-.block-container {padding-top: 1.5rem; padding-bottom: 1rem;}
-h1 {font-size: 1.35rem !important;}
-h2 {font-size: 1.05rem !important;}
-h3 {font-size: 0.95rem !important;}
-p, li, .stMarkdown, .stCaption, .stCode, .stAlert {font-size: 0.85rem !important;}
-.answer-box {
-    font-size: 1.15rem !important;
+footer {visibility: hidden;}
+
+/* ---------- Page ---------- */
+.stApp {
+    background:
+        radial-gradient(circle at 8% 10%, rgba(139, 92, 246, 0.08), transparent 25%),
+        #faf9ff;
+    color: #182033;
+}
+
+.block-container {
+    max-width: 1450px;
+    padding: 1.8rem 2.2rem 1.2rem;
+}
+
+/* ---------- Typography ---------- */
+html, body, [class*="css"] {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+                 "Segoe UI", sans-serif;
+}
+
+h1 {
+    font-size: 2rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.035em;
+    color: #151a2d;
+}
+
+h2, h3 {
+    color: #1c2238;
+}
+
+p, li, .stMarkdown, .stCaption, .stCode, .stAlert {
+    font-size: 0.9rem !important;
+    color: #697187;
+}
+
+/* ---------- Sidebar ---------- */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #f7f3ff 0%, #fbfaff 100%);
+    border-right: 1px solid #eeeafd;
+}
+
+section[data-testid="stSidebar"] .block-container {
+    padding: 2rem 1.4rem;
+}
+
+section[data-testid="stSidebar"] h2 {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+}
+
+/* History buttons */
+section[data-testid="stSidebar"] .stButton > button {
+    border: 0 !important;
+    background: transparent !important;
+    color: #60687d !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    border-radius: 12px !important;
+    min-height: 2.55rem !important;
+    box-shadow: none !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: #eee8ff !important;
+    color: #7048d8 !important;
+}
+
+/* ---------- Main white card ---------- */
+.main-card {
+    background: rgba(255,255,255,0.96);
+    border: 1px solid #f0edf8;
+    border-radius: 24px;
+    padding: 3.2rem 3.8rem 2.2rem;
+    box-shadow: 0 18px 55px rgba(57, 42, 104, 0.08);
+    min-height: 720px;
+}
+
+/* ---------- Brand / welcome ---------- */
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    margin-bottom: 2.8rem;
+}
+
+.brand-icon {
+    width: 43px;
+    height: 43px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f0e9ff;
+    color: #8055e8;
+    font-size: 22px;
+    box-shadow: 0 6px 18px rgba(128, 85, 232, 0.14);
+}
+
+.brand-name {
+    font-size: 1.22rem;
+    line-height: 1.05;
+    font-weight: 800;
+    color: #17203a;
+}
+
+.brand-sub {
+    color: #8055e8;
+    font-size: 0.92rem;
     font-weight: 600;
-    line-height: 1.5;
-    padding: 0.4rem 0;
-    margin-bottom: 0.5rem;
+    margin-top: 4px;
+}
+
+.welcome-title {
+    font-size: 1.72rem;
+    font-weight: 800;
+    color: #182033;
+    letter-spacing: -0.025em;
+    margin-bottom: 0.55rem;
+}
+
+.welcome-text {
+    color: #727b90;
+    line-height: 1.75;
+    margin-bottom: 2.25rem;
+}
+
+/* ---------- Search ---------- */
+.search-label {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #252c42;
+    margin-bottom: 0.45rem;
+}
+
+div[data-testid="stTextInput"] > div > div {
+    border: 1.5px solid #9d70f3 !important;
+    border-radius: 15px !important;
+    background: white !important;
+    box-shadow: 0 0 0 4px rgba(157, 112, 243, 0.07);
+}
+
+div[data-testid="stTextInput"] input {
+    font-size: 0.98rem !important;
+    color: #293148 !important;
+    padding: 0.9rem 1rem !important;
+}
+
+div[data-testid="stTextInput"] input::placeholder {
+    color: #9aa1b1 !important;
+}
+
+/* Submit button */
+button[kind="primary"] {
+    background: #8055e8 !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    color: white !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 18px rgba(128, 85, 232, 0.18);
+}
+
+button[kind="primary"]:hover {
+    background: #7046d5 !important;
+    transform: translateY(-1px);
+}
+
+/* ---------- Example chips ---------- */
+.examples-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #4e566b;
+    margin: 1.65rem 0 0.65rem;
+}
+
+.example-chip {
+    border: 1px solid #e3dfec;
+    border-radius: 11px;
+    padding: 0.75rem 0.95rem;
+    background: #fff;
+    color: #596176;
+    font-size: 0.86rem;
+    text-align: center;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ---------- Pipeline collapsed panel ---------- */
+.pipeline-wrap {
+    margin-top: 1.35rem;
+}
+
+div[data-testid="stExpander"] {
+    border: 1px solid #ece8f5 !important;
+    border-radius: 14px !important;
+    background: #fbfaff !important;
+    box-shadow: none !important;
+}
+
+div[data-testid="stExpander"] summary {
+    color: #454d62 !important;
+    font-weight: 700 !important;
+}
+
+.answer-box {
+    background: #f5f0ff;
+    border: 1px solid #e5dafd;
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    font-size: 1.02rem !important;
+    font-weight: 600;
+    line-height: 1.55;
+    color: #2b2440;
+}
+
+/* ---------- Footer ---------- */
+.app-footer {
+    text-align: center;
+    color: #9299aa;
+    font-size: 0.78rem;
+    margin-top: 5rem;
+}
+
+/* RTL */
+.rtl-text {
+    direction: rtl;
+    text-align: right;
+    font-size: 1.05rem;
 }
 </style>
 """
-st.markdown(COMPACT_CSS, unsafe_allow_html=True)
 
 
 def render_answer(text: str, lang: str):
@@ -112,34 +332,63 @@ if "show_result" not in st.session_state:
     st.session_state.show_result = False  # False = nothing shown below the input yet
 
 
-# --- Header ------------------------------------------------------------------
-st.title("NL2SPARQL Assistant")
-st.caption("Trilingual (AR / FR / EN) question answering over flight, airport, and university knowledge graphs")
+# --- Main dashboard ----------------------------------------------------------
+st.markdown("""
+<div class="main-card">
+    <div class="brand">
+        <div class="brand-icon">✦</div>
+        <div>
+            <div class="brand-name">NL2SPARQL</div>
+            <div class="brand-sub">Assistant</div>
+        </div>
+    </div>
 
-# --- Input ---------------------------------------------------------------
+    <div class="welcome-title">✦ Hello! I'm your NL2SPARQL Assistant</div>
+    <div class="welcome-text">
+        Ask me anything about flights, airports, airlines or universities.<br>
+        I'll translate your question and search the knowledge graphs.
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Put the real Streamlit input visually inside the card area.
+st.markdown('<div style="margin:-430px 3.8rem 0;">', unsafe_allow_html=True)
+st.markdown('<div class="search-label">Ask a question</div>', unsafe_allow_html=True)
+
 question = st.text_input(
-    "Ask a question",
-    placeholder="e.g. What is the departure city of flight OS295?",
+    "",
+    placeholder="Type your question in natural language...",
     key=f"question_input_{st.session_state.input_key}",
+    label_visibility="collapsed",
 )
+
 col1, col2, col3 = st.columns([1, 1, 4])
 with col1:
-    # Arrow icon instead of the "Ask" label — same primary (accent-colored) style.
-    submitted = st.button("➜", type="primary", help="Submit question")
+    submitted = st.button("➜", type="primary", help="Submit question", use_container_width=True)
 with col2:
-    # Clears the input AND hides the answer/pipeline panel below — a true
-    # blank slate — without deleting anything from st.session_state.history.
     if st.button("New question", type="primary", help="Start fresh (keeps your history)"):
         st.session_state.selected_idx = None
         st.session_state.input_key += 1
         st.session_state.show_result = False
         st.rerun()
 
+st.markdown('<div class="examples-title">Try an example</div>', unsafe_allow_html=True)
+
+e1, e2, e3 = st.columns(3)
+with e1:
+    st.markdown('<div class="example-chip">✈️ &nbsp; What is the departure city of flight OS295?</div>', unsafe_allow_html=True)
+with e2:
+    st.markdown('<div class="example-chip">▦ &nbsp; Find all flights to Paris</div>', unsafe_allow_html=True)
+with e3:
+    st.markdown('<div class="example-chip">🎓 &nbsp; Which universities are in Berlin?</div>', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
+
 if submitted and question.strip():
     result = process_question(question)
     st.session_state.history.append({"question": question, **result})
-    st.session_state.selected_idx = None  # always show the freshly-run question
-    st.session_state.input_key += 1       # clear the box for the next question
+    st.session_state.selected_idx = None
+    st.session_state.input_key += 1
     st.session_state.show_result = True
 
 # --- Show selected result (a history entry if clicked, otherwise the newest) --
@@ -149,8 +398,6 @@ if st.session_state.history and st.session_state.show_result:
         idx = len(st.session_state.history) - 1
     latest = st.session_state.history[idx]
     lang = latest["language"]
-
-    st.divider()
 
     # --- Answer first, and made visually prominent, per your request ---
     st.subheader("Answer")
@@ -162,7 +409,7 @@ if st.session_state.history and st.session_state.show_result:
         st.caption("No answer available for this entry.")
 
     # --- Everything else: collapsed by default so the answer stays the focus ---
-    with st.expander("Show pipeline trace (routing, mapping, graph, SPARQL)"):
+    with st.expander("✦  Pipeline details · routing, mapping, graph & SPARQL", expanded=False):
         # Step 1: language
         st.subheader("Detected language")
         st.write(f"`{lang}`")
@@ -221,6 +468,12 @@ if st.session_state.history and st.session_state.show_result:
         # Step 4: generated SPARQL (debug view)
         st.subheader("Generated SPARQL")
         st.code(latest["sparql"], language="sparql")
+
+
+st.markdown(
+    '<div class="app-footer">© 2024 NL2SPARQL Assistant · Powered by Knowledge Graphs</div>',
+    unsafe_allow_html=True,
+)
 
 # --- History (replaces the reference UI's separate "Mémoire" page) -------
 # Sidebar list, newest first. Clicking a question loads its full trace into
