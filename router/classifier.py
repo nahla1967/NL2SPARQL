@@ -10,8 +10,8 @@ import ollama
 from rapidfuzz import process, fuzz
 
 from kg_registry import TEMPLATE_REGISTRY, get_open_kg_schema
-from router.rules import _WH_WORDS
-from router.detectors import (
+from .rules import _WH_WORDS
+from router.detectors import  (
     _detect_flight_number_first,
     _detect_airport_entity,
     _detect_airport_keyword,

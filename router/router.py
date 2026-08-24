@@ -5,8 +5,8 @@ Main routing logic for the NL2SPARQL pipeline.
 from template_resolver import KG2_NUMERIC_PROPS, KG2_STRING_PROPS
 from kg_registry import KG_REGISTRY, CROSS_KG_CONFIG, TEMPLATE_REGISTRY
 
-from router.rules import _has_minimum_structure
-from router.detectors import (
+from .rules import _has_minimum_structure
+from .detectors import (
     _detect_flight_number,
     _detect_flight_number_first,
     _detect_airport_entity,
@@ -18,12 +18,14 @@ from router.detectors import (
     _has_compare_signal,
     _has_count_signal,
     _has_filter_signal,
+    _AIRPORT_ENTITIES,
 )
-from router.classifier import (
+from .classifier import (
     _has_ask_signal,
     _llm_classify,
     _is_kg_answerable,
 )
+from .rules import _normalise
 
 import re
 
@@ -380,11 +382,9 @@ def route(question: str) -> dict:
         entity = params.get("entity")
         if entity:
             entity_upper = entity.upper().strip()
-            from router.detectors import _AIRPORT_ENTITIES
             if entity_upper in _AIRPORT_ENTITIES:
                 entity = _AIRPORT_ENTITIES[entity_upper]
             else:
-                from router.rules import _normalise
                 entity_norm = _normalise(entity)
                 if entity_norm in _AIRPORT_ENTITIES:
                     entity = _AIRPORT_ENTITIES[entity_norm]

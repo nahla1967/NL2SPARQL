@@ -81,7 +81,8 @@ BROKEN_IDS = {
 }
 
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
-from router import route, _is_kg_answerable
+from router import route
+from router.classifier import _is_kg_answerable
 from template_resolver import resolve_template, resolve_ask_query
 from pipeline.language import detect_language
 from pipeline.extractor import (

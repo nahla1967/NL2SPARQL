@@ -8,7 +8,7 @@ import re
 from rapidfuzz import process, fuzz
 
 from kg_registry import KG_REGISTRY, get_lexicon
-from router.rules import (
+from .rules import  (
     _FLIGHT_RE,
     _IATA_RE,
     _UNIVERSITY_ENTITY_RE,
