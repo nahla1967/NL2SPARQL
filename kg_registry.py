@@ -1,3 +1,6 @@
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+
 """
 kg_registry.py
 --------------
@@ -38,7 +41,7 @@ KG_REGISTRY = {
         "endpoint":    "http://localhost:3030/flights/sparql",
 
         # Multilingual lexicon file
-        "lexicon":     "lexicon.json",
+        "lexicon":     str(PROJECT_ROOT / "lexicons/lexicon.json"),
 
         # What the extractor looks for as the main entity.
         # "flight_number" → router uses regex [A-Za-z]{2,3}\d+ exclusively.
@@ -54,7 +57,7 @@ KG_REGISTRY = {
         "endpoint":    "http://localhost:3030/airports/sparql",
 
         # Multilingual airport lexicon
-        "lexicon":     "lexicon_airports.json",
+        "lexicon":     str(PROJECT_ROOT / "lexicons/lexicon_airports.json"),
 
         # What the extractor looks for as the main entity.
         # "airport_name" → IATA code (regex [A-Z]{3}) or city/airport name
@@ -82,7 +85,7 @@ KG_REGISTRY = {
         "endpoint":    "http://localhost:3030/university/sparql",
 
         # Multilingual university lexicon
-        "lexicon":     "lexicon_university.json",
+        "lexicon":     str(PROJECT_ROOT / "lexicons/lexicon_university.json"),
 
         # What the extractor looks for as the main entity.
         "entity_type": "person_name",
