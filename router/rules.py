@@ -83,7 +83,25 @@ _ASC_SIGNALS = [
 def _strip_arabic_al(text: str) -> str:
     """Strip leading Arabic definite article 'ال' from each word."""
     return re.sub(r'(?<=^)ال|(?<=\s)ال', '', text)
+# rules.py — add near _strip_arabic_al
 
+_ARABIC_POSSESSIVE_SUFFIXES = ("ها", "هم", "هن", "كم", "كن", "نا", "ه", "ك", "ي")
+
+def _strip_arabic_possessive(word: str) -> str:
+    """Strip a trailing possessive pronoun suffix for SIGNAL MATCHING only
+    (سرعتها -> سرعة). Not used for entity detection, where surface form
+    still matters."""
+    for suf in _ARABIC_POSSESSIVE_SUFFIXES:
+        if word.endswith(suf) and len(word) > len(suf) + 2:
+            stem = word[: -len(suf)]
+            if stem.endswith("ت"):          # سرعت + ها -> سرعة (ت->ة)
+                stem = stem[:-1] + "ة"
+            return stem
+    return word
+
+def _normalise_for_signal_match(text: str) -> str:
+    text = _strip_arabic_al(text)
+    return " ".join(_strip_arabic_possessive(w) for w in text.split())
 
 def _normalise(text: str) -> str:
     """Normalize text for matching: lowercase, strip punctuation, collapse whitespace."""

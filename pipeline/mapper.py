@@ -173,8 +173,9 @@ def _load_or_build_cache(lexicon: dict, lexicon_path: str):
     """
     import os
     stem         = os.path.splitext(os.path.basename(lexicon_path))[0]
-    emb_cache    = f"{stem}_embeddings.npy"
-    phrase_cache = f"{stem}_phrases.json"
+    lexicon_dir  = os.path.dirname(os.path.abspath(lexicon_path))
+    emb_cache    = os.path.join(lexicon_dir, f"{stem}_embeddings.npy")
+    phrase_cache = os.path.join(lexicon_dir, f"{stem}_phrases.json")
 
     if emb_cache in _cached_embeddings:
         return _cached_phrases[emb_cache], _cached_embeddings[emb_cache]

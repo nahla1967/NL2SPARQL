@@ -27,6 +27,7 @@ from .detectors import (
     _has_count_signal,
     _has_filter_signal,
     _AIRPORT_ENTITIES,
+    
 )
 from .classifier import (
     _has_ask_signal,
@@ -244,9 +245,11 @@ def route(question: str) -> dict:
 
         # Case 1.6: compare_two_airports classified with a missing airport code
         if query_type == "compare_two_airports":
-            a1 = (params.get("airport1") or "").strip()
-            a2 = (params.get("airport2") or "").strip()
-            if not a1 or not a2:
+            a1 = (params.get("airport1") or "").strip().upper()
+            a2 = (params.get("airport2") or "").strip().upper()
+
+            # was: if not a1 or not a2:
+            if not a1 or not a2 or a1 not in _AIRPORT_ENTITIES or a2 not in _AIRPORT_ENTITIES:
                 text_codes = _detect_two_airport_codes(question)
                 if text_codes:
                     print(f"[router] compare_two_airports missing codes in "

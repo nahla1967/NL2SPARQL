@@ -164,25 +164,42 @@ University properties (only when a LUBM entity name like "FullProfessor0",
   "departments" (of a university)              → property=subOrganizationOf, direction=incoming
 
 Group-by / aggregate signal words:
-  "average", "mean"                                          → function=AVG
-  "moyenne", "moyen"                                         → function=AVG
-  "متوسط", "معدل"                                            → function=AVG
 
-  "total", "sum"                                              → function=SUM
-  "total", "somme"                                            → function=SUM
-  "مجموع", "إجمالي"                                          → function=SUM
+  Determine "function" using this SEQUENTIAL PROCEDURE — check each step
+  in order, and STOP at the first match. Do not treat these as independent
+  keyword-to-value mappings; later steps must NOT be checked if an earlier
+  step already matched.
 
-  "highest", "most", "maximum"                                → function=MAX
-  "le plus élevé", "maximum", "le plus"                       → function=MAX
-  "الأعلى", "الأكثر", "أقصى"                                  → function=MAX
+  STEP 1 — Does the question contain "average"/"mean"/"moyenne"/"moyen"/
+  "متوسط"/"معدل"?
+    If YES → function = "AVG". STOP HERE.
+    Ignore any other words in the question like "highest"/"most"/"le plus
+    élevé"/"الأعلى" — those describe which group ranks first (handled
+    elsewhere, not by this field), NOT the aggregate itself. Example:
+    "which country has the highest average elevation?" → function="AVG",
+    because Step 1 matched on "average" — "highest" is never evaluated.
 
-  "lowest", "least", "minimum"                                → function=MIN
-  "le plus bas", "minimum", "le moins"                        → function=MIN
-  "الأدنى", "الأقل", "أدنى"                                   → function=MIN
+  STEP 2 — (only reached if Step 1 did NOT match) Does the question
+  contain "total"/"sum"/"total"/"somme"/"مجموع"/"إجمالي"?
+    If YES → function = "SUM". STOP HERE.
+
+  STEP 3 — (only reached if Steps 1-2 did NOT match) Does the question
+  contain "highest"/"most"/"maximum"/"le plus élevé"/"maximum"/"le plus"/
+  "الأعلى"/"الأكثر"/"أقصى"?
+    If YES → function = "MAX". STOP HERE.
+    (Reaching this step means the question has no averaging language at
+    all — e.g. "what is the maximum elevation per country?" — so "highest"
+    genuinely means the max value here, not a ranking-of-averages.)
+
+  STEP 4 — (only reached if Steps 1-3 did NOT match) Does the question
+  contain "lowest"/"least"/"minimum"/"le plus bas"/"minimum"/"le moins"/
+  "الأدنى"/"الأقل"/"أدنى"?
+    If YES → function = "MIN".
 
   "per airline", "by airline", "for each airline"             → group_by=airline
   "par compagnie", "par compagnie aérienne"                   → group_by=airline
   "لكل شركة طيران", "حسب شركة الطيران"                        → group_by=airline
+
 
   "per country", "by country"                                 → group_by=country
   "par pays"                                                  → group_by=country
@@ -369,6 +386,9 @@ A: {"query_type": "group_aggregate_kg1", "params": {"group_by": "airline", "prop
 Q: "What is the maximum elevation per country?"
 A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "MAX"}}
 
+Q: "Which country has the highest average airport elevation?"
+A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "AVG"}}
+
 Q: "Quelle est la longueur de piste moyenne par pays?"
 A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "lengthFt", "function": "AVG"}}
 
@@ -429,8 +449,8 @@ def _has_ask_signal(question: str) -> bool:
         return False
 
     _early_tokens = re.findall(r"\w+", q_stripped)[:3]
-    if any(tok in _WH_WORDS for tok in _early_tokens):
-        print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word in opening tokens)")
+    tokens = re.findall(r"\w+", q_stripped)
+    if any(t in _WH_WORDS for t in tokens):
         return False
 
     prompt = f'''Does this question ask to CONFIRM whether a specific

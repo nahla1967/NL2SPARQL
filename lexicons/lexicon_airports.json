@@ -55,6 +55,9 @@
     "يقلع من": { "cross_kg": true, "direction": "origin" }
   },
   "properties": {
+      "مطار شارل ديغول": "CDG",
+  "شارل ديغول": "CDG",
+  "مطار شارل ديغول الدولي": "CDG",
     
     "elevation": "elevationFt",
     "altitude": "elevationFt",

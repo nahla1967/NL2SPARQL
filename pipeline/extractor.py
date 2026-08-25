@@ -238,6 +238,8 @@ EXAMPLES:
 "Qui sont les étudiants de Department3?"         → "étudiants de"
 "من كتب Publication12؟"                          → "كتب"
 "إلى أي جامعة ينتمي Department7؟"                 → "أي جامعة"
+# extractor.py — inside extract_university_entities()'s EXAMPLES block, add:
+"يتابع GraduateStudent5 درجة علمية متقدمة — من أي جامعة أتم دراسته الجامعية الأولى قبل بدء الماجستير هنا؟" → "درجة البكالوريوس من"
 
 Return ONLY a JSON object with key "property". No explanation. No extra text.
 

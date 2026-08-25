@@ -29,12 +29,13 @@ html, body, [class*="css"] {
 
 /* ── Sidebar ────────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
-    background: #f8f8fb !important;
+    background: #f3f2f8 !important;
     border-right: 1px solid #ecebf3;
     height: 100vh;
+    position: relative !important;
 }
 section[data-testid="stSidebar"] > div:first-child {
-    background: #f8f8fb !important;
+    background: #f3f2f8 !important;
     height: 100%;
 }
 /* Force flex column so tip can be pushed to bottom */
@@ -43,7 +44,7 @@ section[data-testid="stSidebar"] .block-container {
     flex-direction: column !important;
     height: 100% !important;
     box-sizing: border-box;
-    padding: 1.5rem 1.1rem 0rem;
+    padding: 1.5rem 1.1rem 1rem;
 }
 
 .sidebar-brand {
@@ -87,10 +88,15 @@ section[data-testid="stSidebar"] .block-container {
     text-align: left !important;
     position: relative !important;
 }
+/* Ask a question — oval, light purple, compact */
 .st-key-nav_ask button {
     background: #f3f0ff !important;
     color: #7c3aed !important;
     font-weight: 600 !important;
+    border-radius: 999px !important;
+    padding: 0.5rem 1.0rem 0.5rem 2.4rem !important;
+    width: auto !important;
+    min-width: unset !important;
 }
 .st-key-nav_ask button::before {
     content: "";
@@ -162,7 +168,7 @@ section[data-testid="stSidebar"] .block-container {
 .st-key-main_card {
     background: #ffffff;
     border-radius: 24px;
-    padding: 7rem 2.2rem 2.3rem;  /* MORE top padding to drop content down */
+    padding: 7rem 2.2rem 2.3rem;
     box-shadow: 0 4px 24px rgba(0,0,0,0.04);
     min-height: calc(100vh - 1.2rem);
     box-sizing: border-box;
@@ -178,7 +184,7 @@ section[data-testid="stSidebar"] .block-container {
     font-size: 0.95rem;
     color: #8a8a9a;
     line-height: 1.6;
-    margin-bottom: 6rem;  /* MORE space before search bar */
+    margin-bottom: 6rem;
 }
 
 /* ── Search bar ─────────────────────────────────────────────────────── */
@@ -234,19 +240,22 @@ section[data-testid="stSidebar"] .block-container {
 /* Arrow button: centered vertically on the right */
 .st-key-search_btn {
     position: absolute !important;
-    right: 12px !important;
+    right: 18px !important;
     top: 50% !important;
     transform: translateY(-50%) !important;
     z-index: 5;
-    width: 48px !important;
-    height: 48px !important;
+    width: 44px !important;
+    height: 44px !important;
     pointer-events: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 .st-key-search_btn button {
-    width: 48px !important;
-    height: 48px !important;
-    min-height: 48px !important;
-    border-radius: 14px !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 12px !important;
     background: #ede9fe !important;
     border: 1px solid #ddd6fe !important;
     color: #7c3aed !important;
@@ -257,21 +266,25 @@ section[data-testid="stSidebar"] .block-container {
     margin: 0 !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 .st-key-search_btn button:hover { background: #ddd6fe !important; }
 .st-key-search_btn button:active { background: #c4b5fd !important; }
 
-/* ── Examples (violet outline, wider, tight gap, dropped down) ─────── */
+/* ── Examples (violet outline, wider, tiny gap) ─────── */
 .st-key-examples_row {
-    margin-top: 4.5rem;  /* DROPPED down */
+    margin-top: 2.5rem;
 }
 .st-key-examples_row [data-testid="stHorizontalBlock"] {
-    gap: 0px !important;
+    gap: 0.3rem !important;
     width: 100%;
 }
 .st-key-examples_row [data-testid="stColumn"] {
-    padding: 0 2px !important;
-    gap: 0px !important;
+    padding: 0 !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
 }
 .st-key-examples_row button {
     background: #ffffff !important;
@@ -280,7 +293,7 @@ section[data-testid="stSidebar"] .block-container {
     color: #52525b !important;
     font-size: 0.88rem !important;
     font-weight: 500 !important;
-    padding: 0 1.5rem 0 2.6rem !important;
+    padding: 0 1.2rem 0 2.6rem !important;
     height: 54px !important;
     min-height: 54px !important;
     max-height: 54px !important;
@@ -413,6 +426,7 @@ def run_question(question_text: str):
         st.session_state.history.append({"question": question_text, **result})
         st.session_state.selected_idx = None
         st.session_state.show_result = True
+        st.session_state.search_input = ""
     except Exception as e:
         st.session_state.pending_error = str(e)
 
@@ -428,6 +442,8 @@ if "show_result" not in st.session_state:
     st.session_state.show_result = False
 if "pending_error" not in st.session_state:
     st.session_state.pending_error = None
+if "search_input" not in st.session_state:
+    st.session_state.search_input = ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +462,7 @@ with st.sidebar:
 
     with st.container(key="sidebar_nav"):
         if st.button("Ask a question", key="nav_ask", use_container_width=False):
+            st.session_state.search_input = ""
             st.session_state.selected_idx = None
             st.session_state.show_result = False
             st.rerun()
@@ -494,6 +511,7 @@ with st.container(key="main_card"):
         question = st.text_input(
             "", placeholder="Type your question in natural language...",
             label_visibility="collapsed",
+            key="search_input",
         )
         with st.container(key="search_btn"):
             submitted = st.button("→", key="submit_search")
@@ -519,6 +537,7 @@ with st.container(key="main_card"):
 
     if submitted and question.strip():
         run_question(question)
+        st.rerun()
 
     if st.session_state.pending_error:
         st.error(f"Something went wrong while processing your question: {st.session_state.pending_error}")
