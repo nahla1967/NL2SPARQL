@@ -36,10 +36,25 @@ import os
 import sys
 import socket
 from rdflib import Graph
+import sys
+import os
+import sys
+import os
 
+# ── PATH FIX : eval_runner.py is in evaluation/, but needs root-level modules ──
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# ── TTL PATH FIX : ontology files live in data/ ──
+_AIRPORT_TTL_PATH = os.path.join(_REPO_ROOT, "data", "airport_ontology_kg1_aligned.ttl")
+# Add parent directory to path so root-level modules (router, kg_registry, etc.) are importable
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 FULL_RUN = "--full" in sys.argv
 
-DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
+DATASET_PATH = os.path.join(os.path.dirname(__file__), "results", "NL2SPARQL_Evaluation_Dataset.xlsx")
 
 # ── BASELINE / ABLATION MODE ────────────────────────────────────────────────
 # None            : normal run (writes to eval_results.jsonl, as always)
@@ -56,7 +71,7 @@ DATASET_PATH = "NL2SPARQL_Evaluation_Dataset.xlsx"
 #                   same question population as Baseline A, since that's
 #                   the only population where map_property_cascade() is
 #                   actually exercised.
-BASELINE_MODE = "A" # None | "A" | "B" | "ablation"
+BASELINE_MODE = None # None | "A" | "B" | "ablation"
 
 # Which cascade tiers to keep when BASELINE_MODE == "ablation". Edit this
 # and rerun for each ablation condition (e.g. {"pre-norm","exact"} for
@@ -74,15 +89,32 @@ OUTPUT_PATH = f"baseline_{BASELINE_MODE}_results.jsonl" if BASELINE_MODE else "e
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "filter_numeric_kg1_001",
-    "filter_numeric_kg1_002",
-    "filter_numeric_kg1_003",
-    "filter_numeric_kg2_003",
+    # --- 20 nouvelles questions ---
+    "single_kg1_010",
+    "single_kg1_011",
+    "single_kg1_012",
+    "single_kg1_013",
+    "single_kg2_010",
+    "single_kg2_011",
+    "single_kg2_012",
+    "single_kg3_005",
+    "single_kg3_006",
+    "single_kg3_007",
+    "single_kg3_008",
+    "cross_kg_013",
+    "cross_kg_014",
+    "cross_kg_015",
+    "group_agg_kg2_001",
+    "filter_string_kg3_003",
+    "ranking_kg2_004",
+    "ask_query_005",
+    "open_kg_007",
 }
-
-# ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
-from router import route, _is_kg_answerable
 from template_resolver import resolve_template, resolve_ask_query
+# ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
+from router.router import route, _is_kg_answerable
+from router.classifier import _is_kg_answerable
+
 from pipeline.language import detect_language
 from pipeline.extractor import (
     extract_entities, validate_extraction, is_flight_question,
@@ -137,7 +169,7 @@ def _normalise_for_scoring(text) -> str:
     return text.strip()
 
 
-def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
+def _load_airport_code_lookup(ttl_path=None):
     """
     Builds a {airport name (lower-cased only) → IATA code} lookup from
     OUR OWN KG2 ontology (58 airports) — not the global airports.csv,
@@ -157,6 +189,8 @@ def _load_airport_code_lookup(ttl_path="airport_ontology_kg1_aligned.ttl"):
     is enough since matching is already case-insensitive
     (re.IGNORECASE) in _canonicalize_airport_names().
     """
+    if ttl_path is None:
+        ttl_path = _AIRPORT_TTL_PATH
     g = Graph()
     g.parse(ttl_path, format="turtle")
     lookup = {}

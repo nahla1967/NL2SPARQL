@@ -8,7 +8,7 @@ import re
 from rapidfuzz import process, fuzz
 
 from kg_registry import KG_REGISTRY, get_lexicon
-from router.rules import (
+from .rules import (
     _FLIGHT_RE,
     _IATA_RE,
     _UNIVERSITY_ENTITY_RE,
@@ -19,6 +19,7 @@ from router.rules import (
     _COMPARE_SIGNALS,
     _COMPARE_PROPERTY_KEYWORDS,
     _normalise,
+    _normalise_for_signal_match,
     _strip_arabic_al,
 )
 
@@ -117,10 +118,12 @@ def _has_open_kg_signal(q_lower: str) -> bool:
     return any(sig in q_lower for sig in _OPEN_KG_SIGNALS)
 
 
+# detectors.py — _has_kg1_signal, replace the two _strip_arabic_al calls
+
 def _has_kg1_signal(q_lower: str) -> bool:
-    q_lower = _strip_arabic_al(q_lower)
+    q_lower = _normalise_for_signal_match(q_lower)          # was _strip_arabic_al
     for sig in _KG1_ONLY_SIGNALS:
-        sig_stripped = _strip_arabic_al(sig)
+        sig_stripped = _normalise_for_signal_match(sig)     # was _strip_arabic_al
         if " " in sig_stripped:
             if sig_stripped in q_lower:
                 return True
@@ -135,10 +138,17 @@ def _has_filter_signal(q: str) -> bool:
     return any(sig in q_lower for sig in _FILTER_SIGNALS)
 
 
+# detectors.py — _has_count_signal, add one regex check before the loop
+
 def _has_count_signal(q: str) -> bool:
     q_lower = q.lower()
     if re.search(r"كم\s+(يبلغ|تبلغ)", q_lower):
         return False
+    # "combien de" elides to "combien d'" before a vowel — combien d'étudiants,
+    # combien d'aéroports — so a plain substring check for "combien de" misses
+    # every elided case. Handle it with a regex instead.
+    if re.search(r"\bcombien\s+d[e']", q_lower):
+        return True
     for sig in _COUNT_SIGNALS:
         if " " in sig:
             if sig in q_lower:

@@ -124,7 +124,8 @@ _UNIVERSITY_ENTITY_RE = re.compile(
 _SINGULAR_SUPERLATIVE_RE = re.compile(
     r"\b(shortest|longest|highest|lowest|smallest|widest|narrowest)\b"
     r"|(le plus court|la plus courte|le plus long|la plus longue|"
-    r"le plus haut|le plus élevé|le plus bas|le plus large|le plus étroit|"
+    r"le plus haut|le plus élevé|la plus haute|la plus élevée|"
+    r"le plus bas|la plus basse|le plus large|le plus étroit|"
     r"la plus large|la plus étroite)"
     r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق)",
     re.IGNORECASE
@@ -397,7 +398,22 @@ Return ONLY a JSON object with these keys:
 - "group_by": "country" or "continent"
 - "property": one of [elevationFt, lengthFt, widthFt]
 - "function": one of [AVG, SUM, MAX, MIN]
+
+IMPORTANT — "function" is which aggregate is computed PER GROUP, not which
+group ranks highest. A question can ask "which country has the highest
+average elevation" — here "average"/"moyenne"/"متوسط" sets function=AVG;
+"highest"/"la plus haute"/"أعلى" is asking which country's average ranks
+first, it does NOT mean function=MAX. Only use MAX/MIN when the question
+itself asks for a maximum/minimum value (e.g. "highest single runway
+length", "longest single runway" — no averaging language present).
+
+- "average"/"moyenne"/"متوسط" (mean of values) → function="AVG"
+- "total"/"somme"/"مجموع" (sum of values) → function="SUM"
+- "maximum"/"highest value"/"أقصى قيمة" (the single max value itself, no averaging) → function="MAX"
+- "minimum"/"lowest value"/"أدنى قيمة" (the single min value itself, no averaging) → function="MIN"
+
 Example: {{"group_by": "country", "property": "elevationFt", "function": "AVG"}}
+Example (question: "which country has the highest average airport elevation?"): {{"group_by": "country", "property": "elevationFt", "function": "AVG"}}
 Return ONLY the JSON. No explanation.""",
 
         "group_aggregate_kg3": f"""Extract parameters from this university aggregation question.
@@ -660,6 +676,14 @@ def _build_group_aggregate_kg2(params: dict) -> tuple[str, str] | None:
     if not group_info or not prop_info:
         return None
 
+    # Optional limit — None/0 means "no limit" (preserves prior behavior,
+    # full list of groups). Forced to 1 for singular-superlative questions
+    # ("which country has the highest...") by the deterministic override
+    # in resolve_template(), the same pattern already used for ranking_kg2.
+    # See _detect_singular_superlative() for the full rationale.
+    limit = params.get("limit")
+    limit_clause = f" LIMIT {int(limit)}" if limit else ""
+
     if prop_info["hop"] == "hasRunway":
         sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?airport a <{KG2}Airport> .
@@ -667,14 +691,14 @@ def _build_group_aggregate_kg2(params: dict) -> tuple[str, str] | None:
   ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
   ?airport <{KG2}hasRunway> ?runway .
   ?runway <{KG2}{prop}> ?value .
-}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+}} GROUP BY ?groupName ORDER BY DESC(?agg){limit_clause}"""
     else:
         sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}{group_info['hop_property']}> ?groupNode .
   ?groupNode <{KG2}{group_info['name_property']}> ?groupName .
   ?airport <{KG2}{prop}> ?value .
-}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+}} GROUP BY ?groupName ORDER BY DESC(?agg){limit_clause}"""
 
     label = f"{function} of {prop} grouped by {group_by}"
     return sparql, label
@@ -1257,6 +1281,27 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     # the LLM's own limit extraction for this specific structural fact.
     # See _detect_singular_superlative() for the full rationale.
     if template_name == "ranking_kg2" and _detect_singular_superlative(question):
+        if params.get("limit") != 1:
+            print(f"[template] Singular-superlative override: limit "
+                  f"{params.get('limit')!r} -> 1")
+        else:
+            print(f"[template] Singular-superlative detected — limit already 1, "
+                  f"override redundant this run")
+        params["limit"] = 1
+    # Same override, same rationale, for group_aggregate_kg2 questions like
+    # "which country has the highest average elevation?" — without this,
+    # the LLM's own limit extraction is untrusted for this structural fact,
+    # same as ranking_kg2 above.
+    #
+    # NOTE: uses _SINGULAR_SUPERLATIVE_RE directly, NOT the wrapping
+    # _detect_singular_superlative() helper. That helper vetoes on
+    # _PLURAL_INTENT_RE ("airports"/"aéroports"/"مطارات"), which is the
+    # right call for ranking_kg2 (plural noun there really does mean "give
+    # me a list"). For group_aggregate_kg2 the noun is inherently plural —
+    # you're averaging ACROSS a country's airports even for a singular
+    # "which country" question — so that veto has no signal here and would
+    # wrongly suppress the limit=1 override on realistic phrasing.
+    if template_name == "group_aggregate_kg2" and _SINGULAR_SUPERLATIVE_RE.search(question):
         if params.get("limit") != 1:
             print(f"[template] Singular-superlative override: limit "
                   f"{params.get('limit')!r} -> 1")

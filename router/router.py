@@ -1,12 +1,20 @@
 """
 Main routing logic for the NL2SPARQL pipeline.
+
+FIXED vs the draft you pasted: _RANKING_SIGNALS and _ASC_SIGNALS were
+redefined locally here even though rules.py already defines them —
+harmless while the two copies match, but a duplication trap if either
+list is ever tuned without the other. Now imported from rules.py so
+there's one source of truth.
 """
+
+import re
 
 from template_resolver import KG2_NUMERIC_PROPS, KG2_STRING_PROPS
 from kg_registry import KG_REGISTRY, CROSS_KG_CONFIG, TEMPLATE_REGISTRY
 
-from router.rules import _has_minimum_structure
-from router.detectors import (
+from .rules import _has_minimum_structure, _normalise, _RANKING_SIGNALS, _ASC_SIGNALS
+from .detectors import (
     _detect_flight_number,
     _detect_flight_number_first,
     _detect_airport_entity,
@@ -18,27 +26,14 @@ from router.detectors import (
     _has_compare_signal,
     _has_count_signal,
     _has_filter_signal,
+    _AIRPORT_ENTITIES,
+    
 )
-from router.classifier import (
+from .classifier import (
     _has_ask_signal,
     _llm_classify,
     _is_kg_answerable,
 )
-
-import re
-
-
-# ── RANKING / ASC SIGNALS (used by smart reroutes) ───────────────
-_RANKING_SIGNALS = [
-    "highest", "lowest", "fastest", "slowest",
-    "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
-    "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
-]
-_ASC_SIGNALS = [
-    "shortest", "lowest", "smallest", "narrowest",
-    "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
-    "أقصر", "أدنى", "أضيق"
-]
 
 
 def route(question: str) -> dict:
@@ -250,9 +245,11 @@ def route(question: str) -> dict:
 
         # Case 1.6: compare_two_airports classified with a missing airport code
         if query_type == "compare_two_airports":
-            a1 = (params.get("airport1") or "").strip()
-            a2 = (params.get("airport2") or "").strip()
-            if not a1 or not a2:
+            a1 = (params.get("airport1") or "").strip().upper()
+            a2 = (params.get("airport2") or "").strip().upper()
+
+            # was: if not a1 or not a2:
+            if not a1 or not a2 or a1 not in _AIRPORT_ENTITIES or a2 not in _AIRPORT_ENTITIES:
                 text_codes = _detect_two_airport_codes(question)
                 if text_codes:
                     print(f"[router] compare_two_airports missing codes in "
@@ -380,11 +377,9 @@ def route(question: str) -> dict:
         entity = params.get("entity")
         if entity:
             entity_upper = entity.upper().strip()
-            from router.detectors import _AIRPORT_ENTITIES
             if entity_upper in _AIRPORT_ENTITIES:
                 entity = _AIRPORT_ENTITIES[entity_upper]
             else:
-                from router.rules import _normalise
                 entity_norm = _normalise(entity)
                 if entity_norm in _AIRPORT_ENTITIES:
                     entity = _AIRPORT_ENTITIES[entity_norm]
