@@ -42,7 +42,8 @@
   },
 
   "properties": {
-
+    "مادة تدريس": "teacherOf",
+"المواد التي يدرّسها": "teacherOf",
     "works for":                     "worksFor",
     "employed by":                   "worksFor",
     "employer":                      "worksFor",

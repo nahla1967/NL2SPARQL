@@ -56,6 +56,7 @@
   },
   "properties": {
       "مطار شارل ديغول": "CDG",
+      
   "شارل ديغول": "CDG",
   "مطار شارل ديغول الدولي": "CDG",
     
@@ -511,6 +512,9 @@
 
   "_runway_note": "An airport may have multiple runways with different lengths. When runway length is queried without a specific runway identifier, the system returns the longest runway by default.",
   "airport_entities": {
+        "شارل ديغول": "CDG",
+    "مطار شارل ديغول": "CDG",
+    "باريس": "CDG",
     "vienne": "VIE",
     "francfort": "FRA",
     "frankfort": "FRA",
