@@ -90,7 +90,8 @@ LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
        # Bug 2 fix — group_aggregate_kg2 → ranking_kg2 reroute
-    "open_kg_007",       # Bug 3 + Bug 4 fixes — malformed COUNT SPARQL + hallucination misroute
+   "single_kg2_010", "cross_kg_014", "cross_kg_015",
+    "group_agg_kg2_001", "ask_query_005", "single_kg3_008"  , "single_kg1_011", "single_kg1_012" , "ask_query_005" # Bug 3 + Bug 4 fixes — malformed COUNT SPARQL + hallucination misroute
 }
 from template_resolver import resolve_template, resolve_ask_query
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
