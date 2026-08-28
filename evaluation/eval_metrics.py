@@ -18,12 +18,17 @@ while the dataset is still being filled in incrementally).
 """
 
 import json
+import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-RESULTS_PATH = "eval_results.jsonl"
-OUT_PATH     = "NL2SPARQL_Evaluation_Results.xlsx"
+# Anchored to this script's own folder (not the current working directory)
+# so RESULTS_PATH/OUT_PATH resolve to the same file regardless of which
+# directory you launch this script from — matches eval_runner.py.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+RESULTS_PATH = os.path.join(_HERE, "results", "eval_results.jsonl")
+OUT_PATH     = os.path.join(_HERE, "results", "NL2SPARQL_Evaluation_Results.xlsx")
 
 FONT_NAME   = "Arial"
 HEADER_FILL = PatternFill("solid", fgColor="2D3B4F")

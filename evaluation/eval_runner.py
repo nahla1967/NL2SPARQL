@@ -28,6 +28,7 @@ OUTPUT SCHEMA (one JSON object per line in eval_results.jsonl):
     failure_type, error_detail, exact_match, f1, duration_s
 """
 
+import ast
 import json
 import re
 import time
@@ -84,31 +85,16 @@ BASELINE_B_CATEGORIES = {"count_kg1", "count_kg3", "filter_numeric_kg1",
                           "filter_string_kg3", "ranking_kg2",
                           "compare_two_airports"}
 
-OUTPUT_PATH = f"baseline_{BASELINE_MODE}_results.jsonl" if BASELINE_MODE else "eval_results.jsonl"
+OUTPUT_PATH = os.path.join(
+    os.path.dirname(__file__), "results",
+    f"baseline_{BASELINE_MODE}_results.jsonl" if BASELINE_MODE else "eval_results.jsonl"
+)
 
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
        # Bug 2 fix — group_aggregate_kg2 → ranking_kg2 reroute
-    "single_kg1_010",
-"single_kg1_011",
-"single_kg1_012",
-"single_kg1_013",
-"single_kg2_010",
-"single_kg2_011",
-"single_kg2_012",
-"single_kg3_005",
-"single_kg3_006",
-"single_kg3_007",
-"single_kg3_008",
-"cross_kg_013",
-"cross_kg_014",
-"cross_kg_015",
-"group_agg_kg2_001",
-"filter_string_kg3_003",
-"ranking_kg2_004",
-"ask_query_005",
-"open_kg_007"
+    "filter_string_kg2_001","filter_string_kg2_002","filter_string_kg2_003"
        # Bug 3 + Bug 4 fixes — malformed COUNT SPARQL + hallucination misroute
 }
 from template_resolver import resolve_template, resolve_ask_query
@@ -300,6 +286,29 @@ def _split_list_answer(text) -> list[str] | None:
     # Drop a trailing clarifying note in parentheses, e.g.
     # "(top 10 by gspeed, highest first)" — it's metadata, not data.
     text = re.sub(r"\s*\([^)]*\)\s*$", "", text)
+
+    # Gold answers stored as a Python-list literal ("['x']", "['x', 'y']")
+    # — parse as a real list regardless of item count. Doing this before
+    # the comma-count check below matters: a single-item literal has 0
+    # commas and would otherwise be compared as a raw string, brackets
+    # and quotes included, against the plain predicted value.
+    # Some spreadsheet cells wrap the whole literal in one extra layer
+    # of quotes (e.g. the cell content is literally `"['x']"`, quotes
+    # included) — strip one such layer before checking, so this works
+    # regardless of whether that extra wrapping is present.
+    list_candidate = text
+    if (len(list_candidate) >= 2
+            and list_candidate[0] == list_candidate[-1]
+            and list_candidate[0] in ("'", '"')):
+        list_candidate = list_candidate[1:-1].strip()
+
+    if list_candidate.startswith("[") and list_candidate.endswith("]"):
+        try:
+            parsed = ast.literal_eval(list_candidate)
+            if isinstance(parsed, list):
+                return [_normalise_for_scoring(str(p)) for p in parsed if str(p).strip()]
+        except (ValueError, SyntaxError):
+            pass  # not a valid literal — fall through to normal handling
 
     # A "list" is either multiple lines, or a single line with 2+ commas.
     lines = [l for l in text.split("\n") if l.strip()]
@@ -818,6 +827,20 @@ def main():
                           else token_f1(scored_value_for_match, expected_for_match),
                     "duration_s": round(time.time() - t0, 2),
                 }
+                # Fix #7: _dispatch() marks any out_of_scope routing as
+                # "success" by design — a question the pipeline decides
+                # isn't KG-answerable is correctly resolved. That's only
+                # true when out_of_scope really was the expected outcome.
+                # When an in-scope question (expected_type != out_of_scope)
+                # gets misrouted to out_of_scope, no answer is produced —
+                # that's a routing miss, not a success. Pattern-matched on
+                # "no answer + wrongly-expected out_of_scope", not on any
+                # specific question, so it applies to every future row.
+                if (record["failure_type"] == "success"
+                        and record["raw_answer"] is None
+                        and expected_type != "out_of_scope"):
+                    record["failure_type"] = "routing_miss"
+
                 out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_runs += 1
                 print(f"[{total_runs}] {row['id']} | {lang} | {strategy} | "
