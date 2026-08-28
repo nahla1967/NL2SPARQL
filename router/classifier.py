@@ -283,7 +283,14 @@ A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "AS
 
 Q: "أي مطار لديه أطول مدرج؟"
 A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+Q: "Considering every airport on record, which single one has the greatest elevation of them all?"
+A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
 
+Q: "Parmi tous les aéroports enregistrés, lequel affiche à lui seul l'élévation la plus haute?"
+A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
+
+Q: "من بين جميع المطارات المسجلة، أيها يملك وحده أعلى ارتفاع على الإطلاق؟"
+A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
 Q: "Compare VIE and FRA by elevation."
 A: {"query_type": "compare_two_airports", "params": {"airport1": "VIE", "airport2": "FRA", "property": "elevationFt"}}
 
@@ -594,6 +601,14 @@ def _normalize_query_type(query_type, question: str = "") -> str:
                     print(f"[router] Correcting hallucinated query_type '{query_type}' "
                           f"→ '{t}' (kg={kg_guess})")
                     return t
+            # kg_guess identified but no template for that KG exists in this
+            # family (e.g. hallucinated count_kg2 — no airport count template
+            # exists) — don't fall through to blind string similarity, which
+            # can land on an unrelated KG's template. Force unclassified so
+            # the router's clean gate sends it to open_kg instead.
+            print(f"[router] '{query_type}' → kg={kg_guess} but no matching "
+                  f"template exists; leaving unclassified (will fall to open_kg)")
+            return ""
 
     match = process.extractOne(query_type, list(_VALID_QUERY_TYPES), scorer=fuzz.WRatio)
     if match and match[1] >= 85:

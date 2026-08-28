@@ -55,7 +55,20 @@ COUNTRY_CODES = {
     "RS": "Serbia", "AL": "Albania", "US": "United States",
     "EG": "Egypt", "IQ": "Iraq", "RO": "Romania", "CH": "Switzerland",
 }
+# Inverse mapping: translated surface names → canonical KG code
+# Used by build_ask_query() to normalize values extracted from non-English
+# questions before injecting them into the SPARQL FILTER.
+_SURFACE_NAME_TO_CODE = {
 
+    "asphalt":    "ASP", "asphalte":    "ASP", "en asphalte":   "ASP",
+    "concrete":   "CON", "béton":       "CON", "beton":         "CON",
+    "grass":      "GRS", "herbe":       "GRS",
+    "gravel":     "GRV", "gravier":     "GRV",
+    "bitumen":    "BIT", "bitume":      "BIT",
+    "clay":       "CLA", "argile":      "CLA",
+    "sand":       "SAN", "sable":       "SAN",
+    "water":      "WAT", "eau":         "WAT",
+}
 SURFACE_CODES = {
     "ASP":  "Asphalt", "ASPH": "Asphalt", "CON": "Concrete",
     "GRS":  "Grass",   "GRV":  "Gravel",  "PEM": "Asphalt",
@@ -422,29 +435,14 @@ def build_ask_query(
     """
     Builds a SPARQL ASK query checking whether an entity has a specific
     property value — direct (one-hop) or via an intermediate node (two-hop).
-
-    TWO-HOP CASE (property2_uri given):
-        Some properties require an intermediate node — e.g. an airport's
-        country is not a direct property; it requires:
-            <airport> <locatedInCountry> ?intermediate .
-            ?intermediate <countryName> ?value .
-        This mirrors the two-hop pattern already used in
-        inject_and_generate() for SELECT queries and get_property_hop()
-        in kg_registry.py — the hop structure is defined once, in the
-        registry, and reused consistently across SELECT and ASK.
-
-    See build_ask_query's original docstring for the FILTER(STR(...))
-    and local-name-stripping reasoning — both apply identically here.
-
-    Args:
-        entity_uri    : full URI of the subject
-        property_uri  : full URI of the (first-hop) property
-        value         : the value to compare against
-        property2_uri : full URI of the second-hop property, if any
-
-    Returns:
-        A SPARQL ASK query string.
     """
+    # Normalize surface values before injecting into SPARQL
+    # (handles translations like "en asphalte" → "ASP")
+    lookup = value.lower().strip().strip('"')
+    if lookup in _SURFACE_NAME_TO_CODE:
+        value = _SURFACE_NAME_TO_CODE[lookup]
+        print(f"[build_ask_query] Normalized '{lookup}' → '{value}'")
+
     safe_value = value.replace('"', '\\"')
 
     if property2_uri:

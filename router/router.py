@@ -218,6 +218,30 @@ def route(question: str) -> dict:
                     "config":     None,
                 }
 
+        # Case 1.6b: group_aggregate_kg2 with group_by == the KG's own entity
+        # ("which airport has the highest X") — this is a ranking, not a
+        # group-aggregate. GROUP_AGGREGATE_KG2 only defines group_by =
+        # country/continent, so group_by="airport" always fails template
+        # build (_build_group_aggregate_kg2 returns None → sparql_build_failure).
+        if query_type == "group_aggregate_kg2":
+            from kg_registry import GROUP_AGGREGATE_KG2
+            if params.get("group_by") not in GROUP_AGGREGATE_KG2["group_by"]:
+                prop = params.get("property", "")
+                if prop in KG2_NUMERIC_PROPS:
+                    print(f"[router] Smart reroute: group_aggregate_kg2 with invalid "
+                          f"group_by='{params.get('group_by')}' → ranking_kg2")
+                    order = "ASC" if any(sig in question.lower() for sig in _ASC_SIGNALS) else "DESC"
+                    query_type = "ranking_kg2"
+                    params = {"property": prop, "order": order, "limit": params.get("limit") or 1}
+                    cfg = TEMPLATE_REGISTRY[query_type]
+                else:
+                    print(f"[router] Smart reroute: group_aggregate_kg2 with invalid "
+                          f"group_by='{params.get('group_by')}', unrecognised property → open_kg")
+                    return {
+                        "query_type": "open_kg", "kg": "cross", "entity": None,
+                        "direction": None, "template": None, "config": None,
+                    }
+
         # Case 1.5: cross_kg_filter classified with no flight entity
         if query_type == "cross_kg_filter":
             prop = params.get("airport_property", "")

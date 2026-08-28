@@ -103,14 +103,15 @@ def fix_misplaced_aggregate(sparql: str) -> str:
     """
     pattern = re.compile(
         r'SELECT\s+\?\w+\s+WHERE\s*(\{.*?\})\s*'
-        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*'
+        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*'
         r'(LIMIT\s+\d+)?',
         re.IGNORECASE | re.DOTALL
     )
 
     def fix(m):
-        body, func, agg_target, out_var = m.groups()
-        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+        body, func, distinct, agg_target, out_var, limit = m.groups()
+        distinct = distinct or ""
+        return f"SELECT ({func.upper()}({distinct}?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
     return pattern.sub(fix, sparql)
 
 
@@ -136,14 +137,15 @@ def fix_aggregate_in_filter(sparql: str) -> str:
     """
     pattern = re.compile(
         r'SELECT\s+\?(\w+)\s+WHERE\s*\{\s*(.*?)\s*'
-        r'FILTER\s*\(\s*(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s*=\s*\?\1\s*\)\s*\}',
+        r'FILTER\s*\(\s*(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s*=\s*\?\1\s*\)\s*\}',
         re.IGNORECASE | re.DOTALL
     )
 
     def fix(m):
-        out_var, body, func, agg_target = m.groups()
+        out_var, body, func, distinct, agg_target = m.groups()
+        distinct = distinct or ""
         print(f"[generator] Aggregate-in-FILTER detected — auto-correcting")
-        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+        return f"SELECT ({func.upper()}({distinct}?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
 
     return pattern.sub(fix, sparql)
 
@@ -199,17 +201,29 @@ def fix_aggregate_inside_braces(sparql: str) -> str:
     """
     Detects an aggregate expression left as a bare statement inside the
     WHERE braces instead of wrapped in the SELECT clause:
-        SELECT ?count WHERE { ... COUNT(?runway) AS ?count }   ← WRONG
+        SELECT ?count WHERE { ... COUNT(?runway) AS ?count }              ← WRONG
+    Also handles the variant where the model additionally invents a bogus
+    leading "subject" token right before it, as if it were a triple:
+        SELECT ?count WHERE { ... ?count (COUNT(?runway) AS ?count) }     ← WRONG
+    (observed on open_kg COUNT questions — see eval log, open_kg_007 en)
+    and preserves DISTINCT when present, e.g. COUNT(DISTINCT ?airport) —
+    previously the regex required a bare ?var with no DISTINCT keyword,
+    so it silently failed to match and the malformed query passed through
+    unfixed instead of being repaired.
     Same bug family as fix_misplaced_aggregate() — one more shape of it.
     """
     pattern = re.compile(
         r'SELECT\s+\?\w+\s+WHERE\s*\{\s*(.*?)\s*'
-        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*\?(\w+)\s*\)\s+AS\s+\?(\w+)\s*\}',
+        r'(?:\?\w+\s+)?'                                                    # optional bogus leading "subject" token
+        r'\(?\s*(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s*AS\s*\?(\w+)\s*\)?'
+        r'\s*\.?\s*\}',
         re.IGNORECASE | re.DOTALL
     )
     def fix(m):
-        body, func, agg_target, out_var = m.groups()
-        return f"SELECT ({func.upper()}(?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+        body, func, distinct, agg_target, out_var = m.groups()
+        distinct = distinct or ""
+        body = body.rstrip().rstrip(".").rstrip()  # drop stray trailing "." left after removing the fake triple
+        return f"SELECT ({func.upper()}({distinct}?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
     return pattern.sub(fix, sparql)
 # ── SPARQL EXTRACTOR ──────────────────────────────────────────────────────────
 
@@ -492,6 +506,11 @@ STRICT RULES:
 - Do not invent properties that are not listed above.
 - Only include the triple patterns strictly needed to answer the question — do not add extra properties the question didn't ask about
 - If multiple results are possible, add LIMIT 10.
+- An aggregate like COUNT(...)/AVG(...)/MAX(...) belongs ONLY inside the
+  SELECT clause, wrapped as "(COUNT(?x) AS ?count)". It is never a
+  standalone line inside WHERE{{}} — WHERE only contains triple patterns
+  (subject predicate object), never an aggregate expression by itself.
+- Never repeat the same triple pattern twice in one query.
 
 EXAMPLES of correct queries:
 
@@ -508,6 +527,19 @@ Q: "How many airports are in the dataset?"
 SELECT (COUNT(?airport) AS ?count) WHERE {{
   ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
 }}
+
+WRONG — do NOT do this (aggregate placed inside WHERE, and the type
+triple repeated twice):
+SELECT ?count WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#airportName> ?name .
+  (COUNT(DISTINCT ?airport) AS ?count)
+}}
+The COUNT(...) AS ?count must be moved into the SELECT clause, the
+duplicate triple removed, and the unused ?name triple dropped since the
+question never asked for airport names — the correct query is the
+"How many airports are in the dataset?" example directly above.
 
 
 Q: "Which flight has the highest ground speed?"
