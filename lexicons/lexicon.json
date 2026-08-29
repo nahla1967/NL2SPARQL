@@ -261,7 +261,7 @@
     "وين الطيارة الحين":               "hasLocation",
     "فين الطايرة":                     "hasLocation",
 
-    "speed":                           "hasFlightEvent",
+    
     "ground speed":                    "hasFlightEvent",
     "vertical speed":                  "hasFlightEvent",
     "how fast":                        "hasFlightEvent",
@@ -410,7 +410,10 @@
     "vitesse sol":                     ["hasFlightEvent", "gspeed"],
     "vitesse au sol":                  ["hasFlightEvent", "gspeed"],
     "السرعة العمودية":                 ["hasFlightEvent", "vspeed"],
-    "السرعة الأرضية":                  ["hasFlightEvent", "gspeed"]
+    "السرعة الأرضية":                  ["hasFlightEvent", "gspeed"],
+    "ground speed": ["hasFlightEvent", "gspeed"],
+"vitesse sol": ["hasFlightEvent", "gspeed"],
+"السرعة الأرضية": ["hasFlightEvent", "gspeed"]
  
  
  

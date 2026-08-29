@@ -21,7 +21,7 @@ _KG1_ONLY_SIGNALS = {
     "بوابة", "مبنى", "صالة", "إشارة النداء", "الإشارة",
     "سرعة أرضية", "سرعة عمودية", "شركة الطيران",
     "تشغل الرحلة", "تشغل رحلة",
-    "depart from", "flying to", "vole vers", "تغادر",
+    
     "departure city", "origin city", "destination city",
     "ville de départ", "ville de destination", "ville d'origine",
     "مدينة مغادرة", "مدينة انطلاق", "مدينة وصول",

@@ -136,10 +136,10 @@ _SINGULAR_SUPERLATIVE_RE = re.compile(
 # _SINGULAR_SUPERLATIVE_RE so "the 5 shortest runways" is never forced to
 # limit=1 just because it also contains "shortest".
 _PLURAL_INTENT_RE = re.compile(
-    r"\d+"           # any explicit count: "top 5", "the 5 shortest"
-    r"|\bairports\b"  # plural noun, English
-    r"|aéroports"     # plural noun, French
-    r"|مطارات",       # plural noun, Arabic
+    r"\d+"                                    # explicit count: "top 5", "the 5 shortest"
+    r"|\b(list|show all|enumerate)\b"         # English list-intent verbs
+    r"|(listez|montrez tous|montrer tous)"    # French
+    r"|(اذكر|أظهر جميع|قائمة)",                # Arabic
     re.IGNORECASE
 )
 
@@ -532,16 +532,16 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
       ?airport ao:airportType "large_airport" .
     } LIMIT 10
     """
-    _SURFACE_SYNONYMS = {
-    "asphalt":  ["ASP", "ASPH", "PEM", "ASPHALT"],
-    "concrete": ["CON", "CONC", "concrete", "Concrete"],
-    "grass":    ["GRS", "GRASS"],
-}
     prop  = params.get("property", "airportType")
     value = params.get("value", "")
 
     prop_info = KG2_STRING_PROPS.get(prop)
-    if not prop_info or not value:
+    if not prop_info:
+        print(f"[filter_string_kg2] build failed: property '{prop}' not in KG2_STRING_PROPS "
+              f"(known: {sorted(KG2_STRING_PROPS.keys())})")
+        return None
+    if not value:
+        print(f"[filter_string_kg2] build failed: empty value for property '{prop}'")
         return None
 
     # Country requires a hop through locatedInCountry
@@ -554,7 +554,7 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
 }} ORDER BY ?name"""
     elif prop == "surface":
         prop_uri = prop_info["uri"]
-        codes = _SURFACE_SYNONYMS.get(value.lower(), [value])
+        codes = _SURFACE_SYNONYMS.get(value.strip().lower(), [value])
         values_clause = ", ".join(f'"{c}"' for c in codes)
         sparql = f"""SELECT ?airport ?name WHERE {{
   ?airport a <{KG2}Airport> .
@@ -573,6 +573,21 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
     label = f"airports where {prop} = {value}"
     return sparql, label
 
+
+# module level, near COUNTRY_NAME_TO_EN
+_SURFACE_SYNONYMS = {
+    "asphalt": ["ASP", "ASPH", "PEM", "ASPHALT"], "asphalte": ["ASP", "ASPH", "PEM", "ASPHALT"],
+    "إسفلت": ["ASP", "ASPH", "PEM", "ASPHALT"], "الإسفلت": ["ASP", "ASPH", "PEM", "ASPHALT"],
+    "concrete": ["CON", "CONC", "concrete", "Concrete"], "béton": ["CON", "CONC", "concrete", "Concrete"],
+    "خرسانة": ["CON", "CONC", "concrete", "Concrete"],
+    "grass": ["GRS", "GRASS"], "herbe": ["GRS", "GRASS"], "عشب": ["GRS", "GRASS"],
+}
+
+
+def _resolve_surface_value(value: str) -> str:
+    """Same shape as _resolve_country_value() — first KG-stored code for
+    a surface synonym in any supported language, or value unchanged."""
+    return _SURFACE_SYNONYMS.get(value.strip().lower(), [value])[0]
 
 def _build_ranking_kg2(params: dict) -> tuple[str, str] | None:
     """
@@ -1577,6 +1592,8 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
     ask_value = entities["value"]
     if full_property2_uri and full_property2_uri.endswith("countryName"):
         ask_value = _resolve_country_value(ask_value)
+    elif full_property2_uri and full_property2_uri.endswith("surface"):
+        ask_value = _resolve_surface_value(ask_value)
     result["value"] = ask_value
 
     # ── Step 4: build SPARQL ASK ─────────────────────────────────────────────

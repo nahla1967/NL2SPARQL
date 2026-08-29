@@ -388,28 +388,28 @@ Q: "List students who are members of Department1."
 A: {"query_type": "filter_string_kg3", "params": {"property": "memberOf", "value": "Department1", "limit": 10}}
 
 Q: "What is the average ground speed per airline?"
-A: {"query_type": "group_aggregate_kg1", "params": {"group_by": "airline", "property": "gspeed", "function": "AVG"}}
+A: {"query_type": "group_aggregate_kg1", "params": {"group_by": "airline", "property": "gspeed", "function": "AVG"}}}
 
 Q: "What is the maximum elevation per country?"
-A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "MAX"}}
+A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "MAX"}}}
 
 Q: "Which country has the highest average airport elevation?"
-A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "AVG"}}
+A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "elevationFt", "function": "AVG"}}}
 
 Q: "Quelle est la longueur de piste moyenne par pays?"
-A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "lengthFt", "function": "AVG"}}
+A: {"query_type": "group_aggregate_kg2", "params": {"group_by": "country", "property": "lengthFt", "function": "AVG"}}}
 
 Q: "Which department teaches the most courses on average per professor?"
-A: {"query_type": "group_aggregate_kg3", "params": {"group_by": "department", "property": "teacherOf", "function": "AVG"}}
+A: {"query_type": "group_aggregate_kg3", "params": {"group_by": "department", "property": "teacherOf", "function": "AVG"}}}
 
 Q: "Which airports have a grass runway?"
-A: {"query_type": "filter_string_kg2", "params": {"property": "surface", "value": "grass"}}
+A: {"query_type": "filter_string_kg2", "params": {"property": "surface", "value": "grass"}}}
 
 Q: "How many runways in the dataset are closed?"
-A: {"query_type": "open_kg", "params": {}}
+A: {"query_type": "open_kg", "params": {}}}
 
 Q: "How many professors work for Department7?"
-A: {"query_type": "count_kg3", "params": {"property": "worksFor", "direction": "incoming", "mode": "count"}}
+A: {"query_type": "count_kg3", "params": {"property": "worksFor", "direction": "incoming", "mode": "count"}}}
 
 ── NOW CLASSIFY THIS QUESTION ────────────────────────────────────────────────
 
@@ -455,9 +455,11 @@ def _has_ask_signal(question: str) -> bool:
         print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word opener)")
         return False
 
+    # FIX: only check the first 3 tokens for WH-words, not the entire question.
+    # This prevents Arabic questions like "أريد التأكد — هل..." from being
+    # misclassified because "ما" appears later in the sentence.
     _early_tokens = re.findall(r"\w+", q_stripped)[:3]
-    tokens = re.findall(r"\w+", q_stripped)
-    if any(t in _WH_WORDS for t in tokens):
+    if any(t in _WH_WORDS for t in _early_tokens):
         return False
 
     prompt = f'''Does this question ask to CONFIRM whether a specific
