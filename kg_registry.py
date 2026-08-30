@@ -188,6 +188,14 @@ TEMPLATE_REGISTRY = {
         "base_uri":    KG_REGISTRY["airports"]["base_uri"],
         "description": "Compare two airports on a property",
     },
+        "count_kg2": {
+        "kg":          "airports",
+        "endpoint":    KG_REGISTRY["airports"]["endpoint"],
+        "base_uri":    KG_REGISTRY["airports"]["base_uri"],
+        "description": "Count airports matching a numeric or categorical condition",
+    },
+
+ 
 
     "count_kg1": {
         "kg":          "flights",
@@ -229,6 +237,20 @@ TEMPLATE_REGISTRY = {
         "endpoint":    KG_REGISTRY["flights"]["endpoint"],
         "base_uri":    KG_REGISTRY["flights"]["base_uri"],
         "description": "Aggregate a numeric flight property grouped by airline",
+    },
+
+    "ranking_kg1": {
+        "kg":          "flights",
+        "endpoint":    KG_REGISTRY["flights"]["endpoint"],
+        "base_uri":    KG_REGISTRY["flights"]["base_uri"],
+        "description": "Rank flights by a numeric property (deduped by flight number)",
+    },
+
+    "compare_two_flights": {
+        "kg":          "flights",
+        "endpoint":    KG_REGISTRY["flights"]["endpoint"],
+        "base_uri":    KG_REGISTRY["flights"]["base_uri"],
+        "description": "Compare two flight numbers on a numeric property (deduped by flight number)",
     },
 
     "group_aggregate_kg2": {

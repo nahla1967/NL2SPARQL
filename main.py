@@ -478,7 +478,7 @@ elif query_type == "open_kg":
     sparql_query, endpoint = generate_open_kg_sparql(question, lang, schema)
 
     log["sparql"] = sparql_query
-    log["kg"]     = "kg1" if "flights" in endpoint else "kg2"
+    log["kg"] = ("kg1" if "flights" in endpoint else "kg2") if endpoint else None
     print(f"\nGenerated SPARQL:\n{sparql_query}")
     print(f"[Branch F] Target endpoint: {endpoint}")
 

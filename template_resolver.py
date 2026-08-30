@@ -266,7 +266,26 @@ Rules:
 Return ONLY a JSON object with keys: "property", "value".
 Example: {{"property": "countryName", "value": "France"}}
 Return ONLY the JSON. No explanation.""",
+        "count_kg2": f"""Extract parameters from this airport counting question.
+Question: "{question}"
 
+This question asks for a COUNT of airports matching ONE condition, which is
+either numeric or categorical — pick whichever applies.
+
+Numeric condition — identify the property using this mapping:
+  "elevation" or "altitude" or "height"                → "elevationFt"
+  "runway length" or "length" or "longer" or "longest"  → "lengthFt"
+  "runway width" or "width" or "wider" or "widest"      → "widthFt"
+Return: {{"property": "elevationFt", "operator": ">", "threshold": 1000}}
+
+Categorical condition:
+- Airports "in [country]" or "located in [country]"     → property="countryName", value=country name
+- Airport type (large, small, medium)                   → property="airportType", value e.g. "small_airport"
+Return: {{"property": "countryName", "value": "Germany"}}
+
+Return ONLY the JSON object for whichever condition applies. No explanation.""",
+
+        
         "ranking_kg2": f"""Extract parameters from this airport ranking question.
 Question: "{question}"
 
@@ -520,8 +539,16 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
   FILTER(?value {operator} {threshold})
 }} ORDER BY DESC(?value) ?airport"""
 
-    label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
-    return sparql, label
+        label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
+
+        if params.get("mode") == "count":
+            sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
+            label  = f"count of {label}"
+
+        return sparql, label
+
+
+
 
 
 def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
@@ -570,8 +597,13 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{prop_uri}> "{value}" .
 }} ORDER BY ?name"""
 
-    label = f"airports where {prop} = {value}"
-    return sparql, label
+        label = f"airports where {prop} = {value}"
+
+        if params.get("mode") == "count":
+            sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
+            label  = f"count of {label}"
+
+        return sparql, label
 
 
 # module level, near COUNTRY_NAME_TO_EN
@@ -588,6 +620,16 @@ def _resolve_surface_value(value: str) -> str:
     """Same shape as _resolve_country_value() — first KG-stored code for
     a surface synonym in any supported language, or value unchanged."""
     return _SURFACE_SYNONYMS.get(value.strip().lower(), [value])[0]
+
+def _build_count_kg2(params: dict) -> tuple[str, str] | None:
+    """
+    Dispatches to the numeric or string KG2 filter builder in count mode,
+    based on which extraction fields the LLM populated.
+    """
+    count_params = {**params, "mode": "count"}
+    if params.get("operator") and params.get("threshold") is not None:
+        return _build_filter_numeric_kg2(count_params)
+    return _build_filter_string_kg2(count_params)
 
 def _build_ranking_kg2(params: dict) -> tuple[str, str] | None:
     """
@@ -1271,6 +1313,7 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     builders = {
         "filter_numeric_kg2":   (_build_filter_numeric_kg2,   KG2_EP, ["name", "value"]),
         "filter_string_kg2":    (_build_filter_string_kg2,    KG2_EP, ["name"]),
+        "count_kg2":            (_build_count_kg2,            KG2_EP, ["count"]),
         "ranking_kg2":          (_build_ranking_kg2,          KG2_EP, ["name", "value"]),
         "compare_two_airports": (_build_compare_two_airports, KG2_EP, ["name", "iata", "value"]),
         "count_kg1":            (_build_count_kg1,            KG1_EP, ["count"]),
@@ -1279,6 +1322,8 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         "count_kg3": (_build_count_kg3, KG3_EP, ["name"]),
         "filter_string_kg3": (_build_filter_string_kg3, KG3_EP, ["name"]),
         "group_aggregate_kg1": (_build_group_aggregate_kg1, KG1_EP, ["groupName", "agg"]),
+        "ranking_kg1":          (_build_ranking_kg1,          KG1_EP, ["number", "value"]),
+        "compare_two_flights":  (_build_compare_two_flights,  KG1_EP, ["number", "value"]),
         "group_aggregate_kg2": (_build_group_aggregate_kg2, KG2_EP, ["groupName", "agg"]),
         "group_aggregate_kg3": (_build_group_aggregate_kg3, KG3_EP, ["deptName", "agg"]),
     }

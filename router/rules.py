@@ -53,7 +53,10 @@ _COMPARE_PROPERTY_KEYWORDS = [
     (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق", "عرض"], "widthFt"),
     (["airport type", "type", "kind", "نوع"], "airportType"),
 ]
-
+_COMPARE_PROPERTY_KEYWORDS_KG1 = [
+    (["vertical speed", "vitesse verticale", "vspeed", "السرعة العمودية"], "vspeed"),
+    (["ground speed", "vitesse sol", "vitesse au sol", "gspeed", "السرعة الأرضية"], "gspeed"),
+]
 # ── UNIVERSITY ENTITY REGEX ─────────────────────────────────────
 _UNIVERSITY_ENTITY_RE = re.compile(
     r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
@@ -69,14 +72,19 @@ _WH_WORDS = (
 
 # ── RANKING / ASC SIGNALS (used by smart reroutes) ───────────────
 _RANKING_SIGNALS = [
-    "highest", "lowest", "fastest", "slowest",
+     "highest", "lowest", "fastest", "slowest",
     "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
+    "la plus élevée", "la plus grande",
     "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
 ]
 _ASC_SIGNALS = [
     "shortest", "lowest", "smallest", "narrowest",
     "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
     "أقصر", "أدنى", "أضيق"
+]
+_SUPERLATIVE_COUNT_SIGNALS = [
+    "the most", "the least", "le plus de", "le moins de",
+    "أكبر عدد", "أقل عدد",
 ]
 
 

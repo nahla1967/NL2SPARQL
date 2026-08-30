@@ -94,8 +94,9 @@ Classify the question into exactly one of these query types and extract its para
     params: {}
 
     Examples:
-    - "Which flight has the highest ground speed?" → ranking, use ranking_kg2 or filter_numeric_kg1
-    - "How many airports are in the dataset?" → open_kg
+    - "Which flight has the highest ground speed?" → ranking_kg1
+    - "How many airports are in Germany?" → count_kg2
+    - "How many airports are in the dataset?" (no condition) → open_kg
     - "Which airports have a grass runway?" → open_kg
     - "What is the registration number of the aircraft on flight BR62?" → open_kg
     - "Quel vol a la vitesse verticale la plus basse?" → open_kg
@@ -112,6 +113,17 @@ Classify the question into exactly one of these query types and extract its para
     by name, not about one already-named person.
     params: property, value, limit
 
+16. count_kg2 — COUNT of airports matching one numeric or categorical
+    condition (e.g. "how many airports are in Germany", "how many small
+    airports are there", "how many airports are above 1000ft elevation").
+    params: property, operator, threshold (numeric) OR property, value (categorical)
+17. ranking_kg1 — flights ranked by a numeric property (top/bottom N),
+    with no specific flight named (e.g. "top 3 flights by vertical speed").
+    params: property (vspeed or gspeed), order (ASC or DESC), limit (default 5)
+
+    Note: comparing exactly two NAMED flights on a property is handled
+    deterministically before this classifier ever runs — you should not
+    need to return "compare_two_flights".
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
 
 Airport numeric properties:
@@ -458,8 +470,8 @@ def _has_ask_signal(question: str) -> bool:
     # FIX: only check the first 3 tokens for WH-words, not the entire question.
     # This prevents Arabic questions like "أريد التأكد — هل..." from being
     # misclassified because "ما" appears later in the sentence.
-    _early_tokens = re.findall(r"\w+", q_stripped)[:3]
-    if any(t in _WH_WORDS for t in _early_tokens):
+    _all_tokens = re.findall(r"\w+", q_stripped)
+    if any(t in _WH_WORDS for t in _all_tokens):
         return False
 
     prompt = f'''Does this question ask to CONFIRM whether a specific
@@ -505,6 +517,8 @@ The knowledge graph contains:
 - Airports: name, type, elevation, country, region, city,
   IATA code, ICAO code, coordinates
 - Runways: length, width, surface, lighting, identifier
+- University: departments, professors, students, courses, advisors,degrees, email/phone, and headcount or membership per department
+  
 
 The knowledge graph does NOT contain: weather, prices/tickets, passenger
 policies (pets, baggage, check-in), history, news, opinions, safety
@@ -522,6 +536,8 @@ Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
 Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
 Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
 Q: "في أي دولة يقع مطار أثينا؟"                    → NO
+Q: "How many students are in Department0?"                → YES (department membership is in KG)
+Q: "Who is GraduateStudent3's academic advisor?"           → YES (advisor is in KG)
 
 Answer only YES or NO:
 Can this question be answered using only the data described above?
@@ -580,45 +596,34 @@ def _normalize_query_type(query_type, question: str = "") -> str:
     if query_type in _VALID_QUERY_TYPES:
         return query_type
 
+    # AFTER — kg_guess computed once, unconditionally, before either family case
     base = re.sub(r"_kg\d+$", "", query_type)
     family = [t for t in _VALID_QUERY_TYPES
-              if re.sub(r"_kg\d+$", "", t) == base and t != query_type]
+            if re.sub(r"_kg\d+$", "", t) == base and t != query_type]
 
     if len(family) == 1:
         corrected = family[0]
         print(f"[router] Correcting hallucinated query_type '{query_type}' "
-              f"→ '{corrected}' (family match)")
+            f"→ '{corrected}' (family match)")
         return corrected
 
-    if len(family) > 1:
-        if _detect_university_entity(question) or _has_filter_signal(question):
-            kg_guess = "university"
-        elif _detect_airport_keyword(question) or _detect_airport_entity(question):
-            kg_guess = "airports"
-        else:
-            kg_guess = None
-        if kg_guess:
-            for t in family:
-                if TEMPLATE_REGISTRY[t]["kg"] == kg_guess:
-                    print(f"[router] Correcting hallucinated query_type '{query_type}' "
-                          f"→ '{t}' (kg={kg_guess})")
-                    return t
-            # kg_guess identified but no template for that KG exists in this
-            # family (e.g. hallucinated count_kg2 — no airport count template
-            # exists) — don't fall through to blind string similarity, which
-            # can land on an unrelated KG's template. Force unclassified so
-            # the router's clean gate sends it to open_kg instead.
-            print(f"[router] '{query_type}' → kg={kg_guess} but no matching "
-                  f"template exists; leaving unclassified (will fall to open_kg)")
-            return ""
+    if _detect_university_entity(question) or _has_filter_signal(question):
+        kg_guess = "university"
+    elif _detect_airport_keyword(question) or _detect_airport_entity(question):
+        kg_guess = "airports"
+    else:
+        kg_guess = None
 
-    match = process.extractOne(query_type, list(_VALID_QUERY_TYPES), scorer=fuzz.WRatio)
-    if match and match[1] >= 85:
-        corrected, score, _ = match
-        print(f"[router] Correcting hallucinated query_type '{query_type}' "
-              f"→ '{corrected}' (score={score})")
-        return corrected
-    return query_type
+    if kg_guess:
+        for t in family:
+            if TEMPLATE_REGISTRY[t]["kg"] == kg_guess:
+                print(f"[router] Correcting hallucinated query_type '{query_type}' "
+                    f"→ '{t}' (kg={kg_guess})")
+                return t
+
+    print(f"[router] '{query_type}' (family={family}, kg_guess={kg_guess}) has no "
+        f"safe same-KG correction; leaving unclassified (will fall to open_kg)")
+    return ""
 
 
 # ── LLM CLASSIFIER ──────────────────────────────────────────────

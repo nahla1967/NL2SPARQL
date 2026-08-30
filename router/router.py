@@ -13,14 +13,17 @@ import re
 from template_resolver import KG2_NUMERIC_PROPS, KG2_STRING_PROPS
 from kg_registry import KG_REGISTRY, CROSS_KG_CONFIG, TEMPLATE_REGISTRY
 
-from .rules import _has_minimum_structure, _normalise, _RANKING_SIGNALS, _ASC_SIGNALS
+from .rules import _SUPERLATIVE_COUNT_SIGNALS, _has_minimum_structure, _normalise, _RANKING_SIGNALS, _ASC_SIGNALS
 from .detectors import (
     _detect_flight_number,
     _detect_flight_number_first,
     _detect_airport_entity,
+    _detect_flight_numbers_all,
     _detect_university_entity,
     _detect_two_airport_codes,
+    _detect_two_flight_numbers,
     _detect_compare_property,
+    _detect_compare_property_kg1,
     _has_open_kg_signal,
     _has_kg1_signal,
     _has_compare_signal,
@@ -90,10 +93,48 @@ def route(question: str) -> dict:
                 "entity": university_entity, "direction": None, "template": "ask_query",
             }
 
+    # ── Priority 1.9: Two flights + compare signal (deterministic) ────────────
+    if _has_compare_signal(question):
+        two_flights = _detect_two_flight_numbers(question)
+        compare_property_kg1 = _detect_compare_property_kg1(question)
+        if two_flights and compare_property_kg1:
+            return {
+                "query_type": "template",
+                "kg":         "flights",
+                "entity":     None,
+                "direction":  None,
+                "template":   "compare_two_flights",
+                "config":     TEMPLATE_REGISTRY["compare_two_flights"],
+                "params":     {"flight1": two_flights[0], "flight2": two_flights[1],
+                               "property": compare_property_kg1},
+            }
+
+    
+
     # ── Priority 2: Flight number detected ────────────────────────────────────
     flight = _detect_flight_number(question)
 
     if flight:
+          
+        # Two+ distinct flight numbers (e.g. "compare FR1565 and BR62") can't
+        # be answered by single_kg1, which only carries one entity —
+        # _detect_flight_number already discards every match but the longest,
+        # so without this check the second flight is silently dropped. No
+        # compare_two_flights template exists, so route to open_kg, same as
+        # the existing open_kg-signal fast path right below.
+        if len(_detect_flight_numbers_all(question)) > 1:
+            print(f"[router] Multiple flight numbers detected — routing to "
+                  f"open_kg (no compare_two_flights template exists)")
+            return {
+                "query_type": "open_kg",
+                "kg":         "cross",
+                "entity":     None,
+                "direction":  None,
+                "template":   None,
+                "config":     None,
+            }
+
+       
 
         # ── Fast path (2a-pre): open_kg signal word present ────────────────────
         if _has_open_kg_signal(q_lower):
@@ -105,6 +146,7 @@ def route(question: str) -> dict:
                 "template":   None,
                 "config":     None,
             }
+        
 
         # ── Fast path (2a): KG1-only signal word present ──────────────────────
         if _has_kg1_signal(q_lower):
@@ -183,7 +225,10 @@ def route(question: str) -> dict:
 
     # ── Priority 2.7: University entity detected (deterministic) ──────────────
     university_entity = _detect_university_entity(question)
-    if university_entity and not _has_count_signal(question) and not _has_filter_signal(question):
+    if (university_entity
+            and not _has_count_signal(question)
+            and not _has_filter_signal(question)
+            and not any(sig in question.lower() for sig in _SUPERLATIVE_COUNT_SIGNALS)):
         return {
             "query_type": "single_kg3",
             "kg":         "university",
@@ -325,7 +370,20 @@ def route(question: str) -> dict:
                     "template":   None,
                     "config":     None,
                 }
-
+                # Case 3: KG3 misclassification with ranking/superlative-count intent
+        if query_type in ("filter_string_kg3", "count_kg3") and (
+            any(sig in question.lower() for sig in _RANKING_SIGNALS)
+            or any(sig in question.lower() for sig in _SUPERLATIVE_COUNT_SIGNALS)
+        ):
+            print(f"[router] Smart reroute: ranking/superlative signal in KG3 query → open_kg")
+            return {
+                "query_type": "open_kg",
+                "kg":         "cross",
+                "entity":     None,
+                "direction":  None,
+                "template":   None,
+                "config":     None,
+            }
         # Case 3: filter_string_kg2 with runway surface or closed runway
         if query_type == "filter_string_kg2":
             value = params.get("value", "")
