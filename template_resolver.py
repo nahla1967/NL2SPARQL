@@ -22,10 +22,15 @@ TEMPLATE CATEGORIES:
     KG1 — Flight queries:
         count_kg1             : count/list flights matching a condition
         filter_numeric_kg1    : flights where speed > / < threshold
+        ranking_kg1           : top/bottom N flights by property
+        compare_two_flights   : compare two named flights on a property
 
     KG3 — University queries:
         count_kg3              : count/list entities linked to a named entity
         filter_string_kg3       : filter people by department membership
+        filter_numeric_kg3      : departments filtered by total headcount
+        ranking_kg3             : NOT YET IMPLEMENTED — see TODO near builders dict
+        compare_two_departments : NOT YET IMPLEMENTED — see TODO near builders dict
 
     Cross-KG:
         cross_kg_filter       : flights whose airport property meets condition
@@ -204,6 +209,16 @@ def _sanitize_params(params: dict) -> dict:
 def _detect_university_entity_for_template(q: str):
     m = _UNIVERSITY_ENTITY_RE.search(q)
     return m.group(1) if m else None
+
+def _detect_two_university_entities_for_template(q: str) -> list[str] | None:
+    """Same regex as above, findall instead of search — for templates
+    that need exactly two named entities (compare_two_departments)."""
+    matches = []
+    for m in _UNIVERSITY_ENTITY_RE.findall(q):
+        if m not in matches:
+            matches.append(m)
+    return matches if len(matches) == 2 else None
+
 # ── SPARQL HELPER ─────────────────────────────────────────────────────────────
 
 def _run_sparql(endpoint: str, query: str, multiple: bool = True):
@@ -350,6 +365,24 @@ Return ONLY a JSON object with these keys:
 Example: {{"property": "alt", "operator": ">", "threshold": 30000}}
 Return ONLY the JSON. No explanation.""",
 
+       "ranking_kg1": f"""Extract parameters from this flight ranking question.
+Question: "{question}"
+
+Identify the property being ranked:
+  "ground speed" or "speed" or "gspeed"                 → "gspeed"
+  "vertical speed" or "vspeed"                           → "vspeed"
+  "vitesse au sol" or "vitesse sol"                      → "gspeed"
+  "vitesse verticale"                                    → "vspeed"
+  "السرعة الأرضية"                                        → "gspeed"
+  "السرعة العمودية"                                       → "vspeed"
+
+Return ONLY a JSON object with these keys:
+- "property": one of [gspeed, vspeed]
+- "order": "DESC" for highest/fastest/most, "ASC" for lowest/slowest/least
+- "limit": number of results (default 5)
+Example: {{"property": "gspeed", "order": "DESC", "limit": 5}}
+Return ONLY the JSON. No explanation.""",
+
        "cross_kg_filter": f"""Extract parameters from this cross-KG flight filter question.
 Question: "{question}"
 
@@ -402,6 +435,23 @@ Return ONLY a JSON object with these keys:
 - "limit": integer, default 10 if not specified
 Example: {{"property": "worksFor", "value": "Department3", "limit": 10}}
 Return ONLY the JSON. No explanation.""",
+
+"filter_numeric_kg3": f"""Extract parameters from this university department-size question.
+Question: "{question}"
+
+This question asks to filter DEPARTMENTS by their total headcount
+(students who are members + professors/lecturers who work for the
+department, counted together as one population).
+
+Return ONLY a JSON object with these keys:
+- "operator": one of [>, <, >=, <=]
+- "threshold": numeric value (integer)
+- "operator2": optional, only if the question gives a second bound (a range)
+- "threshold2": optional, paired with operator2
+Example: {{"operator": "<", "threshold": 420}}
+Example (range): {{"operator": ">", "threshold": 300, "operator2": "<", "threshold2": 420}}
+Return ONLY the JSON. No explanation.""",
+
 "group_aggregate_kg1": f"""Extract parameters from this flight aggregation question.
 Question: "{question}"
 Return ONLY a JSON object with these keys:
@@ -509,21 +559,10 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
         # FIX (filter_numeric_kg2_002): airports with more than one
         # runway satisfying the FILTER used to be returned once per
         # matching runway, letting a single airport occupy several
-        # LIMIT slots that should have gone to distinct airports (e.g.
-        # İstanbul Airport and Suvarnabhumi Airport both appeared
-        # twice in a "runway length > 10000ft" ranking). Grouping by
-        # airport and taking MAX(?value) collapses each airport to one
-        # row — its longest/widest qualifying runway — before LIMIT is
-        # applied. This mirrors the same collapsing logic already used
-        # in _build_group_aggregate_kg2 for country/continent grouping,
-        # applied here at the per-airport level instead.
-        # NOTE: the aggregate's AS target must not reuse a variable name
-        # already bound in WHERE — (MAX(?value) AS ?value) is a variable
-        # collision and SPARQL 1.1 rejects it outright (Jena returns
-        # HTTP 400, caught the hard way on the first eval run). The raw
-        # per-runway values are bound to ?rawValue instead; the aggregate
-        # still surfaces as ?value so downstream code (columns=["name",
-        # "value"], _format_rows) needs no changes.
+        # LIMIT slots that should have gone to distinct airports.
+        # Grouping by airport and taking MAX(?value) collapses each
+        # airport to one row — its longest/widest qualifying runway —
+        # before LIMIT is applied.
         sparql = f"""SELECT ?airport ?name (MAX(?rawValue) AS ?value) WHERE {{
   ?airport a <{KG2}Airport> .
   ?airport <{KG2}airportName> ?name .
@@ -539,16 +578,19 @@ def _build_filter_numeric_kg2(params: dict) -> tuple[str, str] | None:
   FILTER(?value {operator} {threshold})
 }} ORDER BY DESC(?value) ?airport"""
 
-        label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
+    # FIX: this block used to be indented one level deeper, inside the
+    # `else:` branch only — so the runway branch (lengthFt/widthFt)
+    # built `sparql` but the function fell off the end and returned
+    # None instead, a silent sparql_build_failure on every runway-based
+    # filter_numeric_kg2 / count_kg2 call. Dedented so both branches
+    # reach it.
+    label = f"airports with {prop_info['label']} {operator} {threshold} {unit}"
 
-        if params.get("mode") == "count":
-            sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
-            label  = f"count of {label}"
+    if params.get("mode") == "count":
+        sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
+        label  = f"count of {label}"
 
-        return sparql, label
-
-
-
+    return sparql, label
 
 
 def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
@@ -597,13 +639,13 @@ def _build_filter_string_kg2(params: dict) -> tuple[str, str] | None:
   ?airport <{prop_uri}> "{value}" .
 }} ORDER BY ?name"""
 
-        label = f"airports where {prop} = {value}"
+    label = f"airports where {prop} = {value}"
 
-        if params.get("mode") == "count":
-            sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
-            label  = f"count of {label}"
+    if params.get("mode") == "count":
+        sparql = f"SELECT (COUNT(*) AS ?count) WHERE {{ {sparql} }}"
+        label  = f"count of {label}"
 
-        return sparql, label
+    return sparql, label
 
 
 # module level, near COUNTRY_NAME_TO_EN
@@ -800,6 +842,7 @@ def _build_group_aggregate_kg3(params: dict) -> tuple[str, str] | None:
 
     label = f"{function} of {prop_info['label']} per person, grouped by department"
     return sparql, label
+
 def _build_compare_two_airports(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?name ?value WHERE {
@@ -1072,6 +1115,7 @@ def _build_count_kg3(params: dict) -> tuple[str, str] | None:
 
     label = f"{mode} of {property_short} ({direction}) for {entity_name}"
     return sparql, label
+
 def _build_filter_string_kg3(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?person ?name WHERE {
@@ -1098,6 +1142,49 @@ def _build_filter_string_kg3(params: dict) -> tuple[str, str] | None:
     label = f"people where {prop} = {value}"
     return sparql, label
 
+
+def _build_filter_numeric_kg3(params: dict) -> tuple[str, str] | None:
+    """
+    SELECT ?name (COUNT(DISTINCT ?person) AS ?value) WHERE {
+      ?dept a ub:Department .
+      ?dept ub:name ?name .
+      { ?person ub:memberOf ?dept . } UNION { ?person ub:worksFor ?dept . }
+    } GROUP BY ?name HAVING(COUNT(DISTINCT ?person) < 420) ORDER BY ?value
+
+    Filters departments by total headcount. UNION of memberOf (students)
+    and worksFor (professors/lecturers), not either alone — "enrolled or
+    working" asks for both populations together, and COUNT(DISTINCT
+    ?person) avoids double-counting anyone matching both patterns.
+
+    HAVING, not FILTER: FILTER operates on individual rows before
+    grouping; HAVING operates on the aggregated COUNT after grouping —
+    you can't FILTER on a value (COUNT(DISTINCT ?person)) that doesn't
+    exist yet at the per-row stage.
+    """
+    operator   = params.get("operator") or ""
+    threshold  = params.get("threshold")
+    operator2  = params.get("operator2")
+    threshold2 = params.get("threshold2")
+
+    VALID_OPERATORS = {">", "<", ">=", "<=", "="}
+    if operator not in VALID_OPERATORS or threshold is None:
+        return None
+
+    having = f"COUNT(DISTINCT ?person) {operator} {threshold}"
+    label  = f"departments with total headcount {operator} {threshold}"
+    if operator2 in VALID_OPERATORS and threshold2 is not None:
+        having += f" && COUNT(DISTINCT ?person) {operator2} {threshold2}"
+        label  += f" and {operator2} {threshold2}"
+
+    sparql = f"""SELECT ?name (COUNT(DISTINCT ?person) AS ?value) WHERE {{
+  ?dept a <{KG3}Department> .
+  ?dept <{KG3}name> ?name .
+  {{ ?person <{KG3}memberOf> ?dept . }} UNION {{ ?person <{KG3}worksFor> ?dept . }}
+}} GROUP BY ?name HAVING({having}) ORDER BY ?value"""
+
+    return sparql, label
+
+
 def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     """
     SELECT ?flight ?number ?value WHERE {
@@ -1122,13 +1209,9 @@ def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
     # FIX: same duplication bug as _build_filter_numeric_kg2's runway hop —
     # a flight with multiple hasFlightEvent nodes (multiple recorded
     # gspeed/vspeed samples) was returned once per event, not once per
-    # flight (e.g. OS631 appeared 6 times in the live Fuseki check for
-    # filter_numeric_kg1_001, at 6 different speeds). Grouping by flight
-    # and taking MAX(?rawValue) collapses each flight to a single row —
-    # its peak matching value — before results are returned. As with the
-    # KG2 fix, the raw per-event values are bound to ?rawValue so the
-    # aggregate's AS target (?value) doesn't collide with an
-    # already-bound WHERE variable, which SPARQL 1.1 rejects outright.
+    # flight. Grouping by flight and taking MAX(?rawValue) collapses each
+    # flight to a single row — its peak matching value — before results
+    # are returned.
     sparql = f"""SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}flightNumber> ?number .
@@ -1138,6 +1221,78 @@ def _build_filter_numeric_kg1(params: dict) -> tuple[str, str] | None:
 }} GROUP BY ?flight ?number ORDER BY DESC(?value) ?flight"""
 
     label = f"flights with {prop_info['label']} {operator} {threshold} {unit}"
+    return sparql, label
+
+
+def _build_ranking_kg1(params: dict) -> tuple[str, str] | None:
+    """
+    SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {
+      ?flight a fo:Flight .
+      ?flight fo:flightNumber ?number .
+      ?flight fo:hasFlightEvent ?event .
+      ?event fo:gspeed ?rawValue .
+    } GROUP BY ?flight ?number ORDER BY DESC(?value) LIMIT 5
+    """
+    prop  = params.get("property", "gspeed")
+    order = params.get("order", "DESC")
+    limit = int(params.get("limit", 5))
+
+    prop_info = KG1_NUMERIC_PROPS.get(prop)
+    if not prop_info:
+        return None
+
+    prop_uri = prop_info["uri"]
+
+    # Same MAX-collapse fix as _build_filter_numeric_kg1: a flight has
+    # several hasFlightEvent samples, so grouping by flight and taking
+    # MAX(?rawValue) returns one row per flight (its peak value) instead
+    # of one row per recorded event.
+    sparql = f"""SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
+  ?flight a <{KG1}Flight> .
+  ?flight <{KG1}flightNumber> ?number .
+  ?flight <{KG1}hasFlightEvent> ?event .
+  ?event <{prop_uri}> ?rawValue .
+}} GROUP BY ?flight ?number ORDER BY {order}(?value) LIMIT {limit}"""
+
+    direction_word = "highest" if order == "DESC" else "lowest"
+    label = f"top {limit} flights by {prop_info['label']} ({direction_word})"
+    return sparql, label
+
+
+def _build_compare_two_flights(params: dict) -> tuple[str, str] | None:
+    """
+    SELECT ?number (MAX(?rawValue) AS ?value) WHERE {
+      VALUES ?number { "OS631" "BR62" }
+      ?flight fo:flightNumber ?number .
+      ?flight fo:hasFlightEvent ?event .
+      ?event fo:gspeed ?rawValue .
+    } GROUP BY ?number ORDER BY DESC(?value)
+
+    Unlike compare_two_airports, a flight has no predictable URI suffix
+    to bind via VALUES — map_flight() resolves flightNumber through a
+    SPARQL lookup and returns an opaque node URI. So this VALUES clause
+    binds the flightNumber literal directly and joins outward to
+    ?flight, rather than binding ?flight itself.
+    """
+    f1   = params.get("flight1", "").strip().upper()
+    f2   = params.get("flight2", "").strip().upper()
+    prop = (params.get("property") or "gspeed").strip()
+
+    prop_info = KG1_NUMERIC_PROPS.get(prop)
+    if not prop_info or not f1 or not f2:
+        return None
+
+    prop_uri = prop_info["uri"]
+
+    # Same MAX-collapse fix as _build_filter_numeric_kg1 / _build_ranking_kg1.
+    sparql = f"""SELECT ?number (MAX(?rawValue) AS ?value) WHERE {{
+  VALUES ?number {{ "{f1}" "{f2}" }}
+  ?flight <{KG1}flightNumber> ?number .
+  ?flight <{KG1}hasFlightEvent> ?event .
+  ?event <{prop_uri}> ?rawValue .
+}} GROUP BY ?number ORDER BY DESC(?value)"""
+
+    label = f"comparison: {f1} vs {f2} by {prop}"
     return sparql, label
 
 
@@ -1301,15 +1456,19 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     params = _sanitize_params(params)
     result["params"] = params
 
-
-
     if not params:
         result["failure_type"] = "param_extraction_failure"
         return result
 
-    
-
     # ── Step 2: build SPARQL ──────────────────────────────────────────────────
+    # TODO: "ranking_kg3" and "compare_two_departments" are NOT wired in yet.
+    # Their builders (_build_ranking_kg3, _build_compare_two_departments) do
+    # not exist anywhere in this codebase — see conversation history. They
+    # also have no _extract_params prompt, no TEMPLATE_REGISTRY entry, and
+    # no router/classifier.py documentation, so the LLM router has no way to
+    # select them yet even once the builders exist. Do NOT add them to the
+    # `builders` dict below until both functions are written and reviewed —
+    # referencing an undefined name here will NameError at import time.
     builders = {
         "filter_numeric_kg2":   (_build_filter_numeric_kg2,   KG2_EP, ["name", "value"]),
         "filter_string_kg2":    (_build_filter_string_kg2,    KG2_EP, ["name"]),
@@ -1319,14 +1478,16 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         "count_kg1":            (_build_count_kg1,            KG1_EP, ["count"]),
         "filter_numeric_kg1":   (_build_filter_numeric_kg1,   KG1_EP, ["number", "value"]),
         "cross_kg_filter":      (_build_cross_kg_filter,      None,   None),
-        "count_kg3": (_build_count_kg3, KG3_EP, ["name"]),
-        "filter_string_kg3": (_build_filter_string_kg3, KG3_EP, ["name"]),
-        "group_aggregate_kg1": (_build_group_aggregate_kg1, KG1_EP, ["groupName", "agg"]),
+        "count_kg3":            (_build_count_kg3,            KG3_EP, ["name"]),
+        "filter_string_kg3":    (_build_filter_string_kg3,    KG3_EP, ["name"]),
+        "group_aggregate_kg1":  (_build_group_aggregate_kg1,  KG1_EP, ["groupName", "agg"]),
         "ranking_kg1":          (_build_ranking_kg1,          KG1_EP, ["number", "value"]),
         "compare_two_flights":  (_build_compare_two_flights,  KG1_EP, ["number", "value"]),
-        "group_aggregate_kg2": (_build_group_aggregate_kg2, KG2_EP, ["groupName", "agg"]),
-        "group_aggregate_kg3": (_build_group_aggregate_kg3, KG3_EP, ["deptName", "agg"]),
+        "group_aggregate_kg2":  (_build_group_aggregate_kg2,  KG2_EP, ["groupName", "agg"]),
+        "group_aggregate_kg3":  (_build_group_aggregate_kg3,  KG3_EP, ["deptName", "agg"]),
+        "filter_numeric_kg3":   (_build_filter_numeric_kg3,   KG3_EP, ["name", "value"]),
     }
+
     # KG3 templates need the entity name, detected deterministically —
     # same regex the router uses, not extracted by the LLM (avoids the
     # unreliability we saw with LLM-based entity extraction elsewhere).
@@ -1336,6 +1497,7 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             result["failure_type"] = "param_extraction_failure"
             return result
         params["entity_name"] = entity_name
+
     # Deterministic override: force limit=1 for singular-superlative
     # ranking_kg2 questions ("the shortest runway"), instead of trusting
     # the LLM's own limit extraction for this specific structural fact.
@@ -1369,6 +1531,7 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             print(f"[template] Singular-superlative detected — limit already 1, "
                   f"override redundant this run")
         params["limit"] = 1
+
     if template_name not in builders:
         result["failure_type"] = "unknown_template"
         return result
@@ -1599,7 +1762,6 @@ def resolve_ask_query(question: str, routing: dict, lang: str) -> dict:
         return result
     result["entity_uri"] = entity_uri
 
-    # ── Step 3: map property (direct or two-hop) ────────────────────────────────
     # ── Step 3: map property (direct or two-hop) ────────────────────────────────
     lexicon = load_lexicon(lexicon_path)
     property_uri, tier, property2_uri, score = map_property_cascade_scored(

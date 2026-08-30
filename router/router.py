@@ -29,6 +29,7 @@ from .detectors import (
     _has_compare_signal,
     _has_count_signal,
     _has_filter_signal,
+    _has_group_ranking_signal,
     _AIRPORT_ENTITIES,
     
 )
@@ -228,6 +229,7 @@ def route(question: str) -> dict:
     if (university_entity
             and not _has_count_signal(question)
             and not _has_filter_signal(question)
+            and not _has_group_ranking_signal(question)
             and not any(sig in question.lower() for sig in _SUPERLATIVE_COUNT_SIGNALS)):
         return {
             "query_type": "single_kg3",

@@ -124,6 +124,23 @@ Classify the question into exactly one of these query types and extract its para
     Note: comparing exactly two NAMED flights on a property is handled
     deterministically before this classifier ever runs — you should not
     need to return "compare_two_flights".
+
+18. ranking_kg3 — EITHER departments ranked by a headcount of one entity
+    type ("top 3 departments by graduate student population"), OR people
+    ranked WITHIN one already-named department by a relation count
+    ("which professor in Department0 teaches the most courses").
+    params: group_by ("department" or "person"), entity_type, hop_property
+            (memberOf/worksFor/teacherOf/takesCourse), order, limit
+
+19. compare_two_departments — compare exactly two named departments by
+    how many people of one type work for or belong to each.
+    params: entity_type, hop_property (worksFor or memberOf)
+    (department names are extracted deterministically, not by you)
+
+20. filter_numeric_kg3 — departments filtered by TOTAL headcount
+    (students + staff) against a threshold or range.
+    params: operator, threshold, and optionally operator2/threshold2 for
+            a "between X and Y" range    
 ── PROPERTY MAPPING RULES ────────────────────────────────────────────────────
 
 Airport numeric properties:

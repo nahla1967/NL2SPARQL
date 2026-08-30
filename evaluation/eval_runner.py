@@ -103,7 +103,7 @@ BROKEN_IDS = {
     "single_kg3_009",
     "ranking_kg3_001",
     "filter_numeric_kg3_002",
-    "filter_numeric_kg3_003",
+    
     "single_kg3_010",
     "single_kg3_011",
     "single_kg3_012",

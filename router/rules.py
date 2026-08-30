@@ -82,6 +82,10 @@ _ASC_SIGNALS = [
     "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
     "أقصر", "أدنى", "أضيق"
 ]
+_GROUP_RANKING_SIGNALS = [
+    "the most", "the fewest", "le plus de", "le moins de",
+    "أكبر عدد", "أقل عدد",
+]
 _SUPERLATIVE_COUNT_SIGNALS = [
     "the most", "the least", "le plus de", "le moins de",
     "أكبر عدد", "أقل عدد",

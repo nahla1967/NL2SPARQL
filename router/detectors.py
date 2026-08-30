@@ -19,6 +19,7 @@ from .rules import (
     _COMPARE_SIGNALS,
     _COMPARE_PROPERTY_KEYWORDS,
     _COMPARE_PROPERTY_KEYWORDS_KG1,
+    _GROUP_RANKING_SIGNALS,
     _normalise,
     _normalise_for_signal_match,
     _strip_arabic_al,
@@ -205,7 +206,9 @@ def _detect_two_flight_numbers(q: str) -> list[str] | None:
         if num not in numbers:
             numbers.append(num)
     return numbers if len(numbers) == 2 else None
-
+def _has_group_ranking_signal(q: str) -> bool:
+    q_lower = q.lower()
+    return any(sig in q_lower for sig in _GROUP_RANKING_SIGNALS)
 
 def _detect_compare_property_kg1(q: str) -> str | None:
     q_lower = q.lower()
