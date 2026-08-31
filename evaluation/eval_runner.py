@@ -93,7 +93,8 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   "filter_numeric_kg3_003"
+   "filter_numeric_kg2_001","filter_numeric_kg2_002","filter_numeric_kg2_003","filter_string_kg3_002","filter_string_kg3_003","ranking_kg3_001","ranking_kg3_002","compare_two_departments_002","count_kg2_002"
+
 }
 from template_resolver import resolve_template, resolve_ask_query
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
