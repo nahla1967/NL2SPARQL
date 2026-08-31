@@ -1,11 +1,5 @@
 """
 Main routing logic for the NL2SPARQL pipeline.
-
-FIXED vs the draft you pasted: _RANKING_SIGNALS and _ASC_SIGNALS were
-redefined locally here even though rules.py already defines them —
-harmless while the two copies match, but a duplication trap if either
-list is ever tuned without the other. Now imported from rules.py so
-there's one source of truth.
 """
 
 import re
@@ -31,7 +25,6 @@ from .detectors import (
     _has_filter_signal,
     _has_group_ranking_signal,
     _AIRPORT_ENTITIES,
-    
 )
 from .classifier import (
     _has_ask_signal,
@@ -43,20 +36,6 @@ from .classifier import (
 def route(question: str) -> dict:
     """
     Routes a natural language question to the correct pipeline branch.
-
-    Returns a routing dict consumed by main.py and test_pipeline.py.
-    Keys: query_type, kg, entity, direction, template, config, params.
-
-    Final structure:
-        Priority 1   → structure guard
-        Priority 1.5 → ASK-style question + known entity → ask_query
-        Priority 2   → flight number → single_kg1 or cross_kg
-        Priority 2.5 → airport entity → single_kg2
-        Priority 2.6 → two airports + compare signal → compare_two_airports (deterministic)
-        Priority 2.7 → university entity → single_kg3 (unless count/filter signal)
-        Priority 3   → LLM classifies → template / single_kg2 / open_kg
-                       (with smart reroute for known misclassification patterns)
-        Clean gate   → _is_kg_answerable() → open_kg or out_of_scope
     """
 
     # ── Priority 1: Structure guard ───────────────────────────────────────────
@@ -110,22 +89,27 @@ def route(question: str) -> dict:
                                "property": compare_property_kg1},
             }
 
-    
-
     # ── Priority 2: Flight number detected ────────────────────────────────────
     flight = _detect_flight_number(question)
 
     if flight:
-          
-        # Two+ distinct flight numbers (e.g. "compare FR1565 and BR62") can't
-        # be answered by single_kg1, which only carries one entity —
-        # _detect_flight_number already discards every match but the longest,
-        # so without this check the second flight is silently dropped. No
-        # compare_two_flights template exists, so route to open_kg, same as
-        # the existing open_kg-signal fast path right below.
-        if len(_detect_flight_numbers_all(question)) > 1:
-            print(f"[router] Multiple flight numbers detected — routing to "
-                  f"open_kg (no compare_two_flights template exists)")
+        all_flights = _detect_flight_numbers_all(question)
+        if len(all_flights) > 1:
+            two_flights = _detect_two_flight_numbers(question)
+            compare_property_kg1 = _detect_compare_property_kg1(question)
+            if two_flights and compare_property_kg1:
+                print(f"[router] Multiple flight numbers + compare property detected — routing to compare_two_flights")
+                return {
+                    "query_type": "template",
+                    "kg":         "flights",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   "compare_two_flights",
+                    "config":     TEMPLATE_REGISTRY["compare_two_flights"],
+                    "params":     {"flight1": two_flights[0], "flight2": two_flights[1],
+                                   "property": compare_property_kg1},
+                }
+            print(f"[router] Multiple flight numbers detected — routing to open_kg")
             return {
                 "query_type": "open_kg",
                 "kg":         "cross",
@@ -135,9 +119,6 @@ def route(question: str) -> dict:
                 "config":     None,
             }
 
-       
-
-        # ── Fast path (2a-pre): open_kg signal word present ────────────────────
         if _has_open_kg_signal(q_lower):
             return {
                 "query_type": "open_kg",
@@ -147,9 +128,7 @@ def route(question: str) -> dict:
                 "template":   None,
                 "config":     None,
             }
-        
 
-        # ── Fast path (2a): KG1-only signal word present ──────────────────────
         if _has_kg1_signal(q_lower):
             return {
                 "query_type": "single_kg1",
@@ -160,7 +139,6 @@ def route(question: str) -> dict:
                 "config":     KG_REGISTRY["flights"],
             }
 
-        # ── Slow path (2b): Ambiguous — ask the LLM ──────────────────────────
         classified = _llm_classify(question)
         query_type = classified.get("query_type", "")
         params     = classified.get("params", {})
@@ -174,7 +152,6 @@ def route(question: str) -> dict:
             return {"query_type": "out_of_scope", "kg": None, "entity": None,
                      "direction": None, "template": None, "config": None}
 
-        # Fallback: plain KG1 flight question
         return {
             "query_type": "single_kg1",
             "kg":         "flights",
@@ -224,9 +201,27 @@ def route(question: str) -> dict:
                                "property": compare_property},
             }
 
-    # ── Priority 2.7: University entity detected (deterministic) ──────────────
+    # ── Priority 2.7: Two departments + compare signal (deterministic) ────────
+    # MOVED BEFORE single_kg3 so it takes precedence
+    if _has_compare_signal(question):
+        dept_matches = re.findall(r'\b(Department\d+)\b', question)
+        if len(dept_matches) >= 2:
+            print(f"[router] Priority 2.7: compare signal + two departments "
+                  f"{dept_matches[:2]} → compare_two_departments")
+            return {
+                "query_type": "template",
+                "kg":         "university",
+                "entity":     None,
+                "direction":  None,
+                "template":   "compare_two_departments",
+                "config":     TEMPLATE_REGISTRY["compare_two_departments"],
+                "params":     {"dept1": dept_matches[0], "dept2": dept_matches[1]},
+            }
+
+    # ── Priority 2.8: University entity detected (deterministic) ──────────────
     university_entity = _detect_university_entity(question)
     if (university_entity
+            and not _has_compare_signal(question)
             and not _has_count_signal(question)
             and not _has_filter_signal(question)
             and not _has_group_ranking_signal(question)
@@ -239,6 +234,27 @@ def route(question: str) -> dict:
             "template":   None,
             "config":     KG_REGISTRY["university"],
         }
+
+    # ── Priority 2.9: Headcount/size filter on departments (deterministic) ────
+    q_norm = question.lower()
+    if any(s in q_norm for s in [
+        "size under", "under", "less than", "fewer than",
+        "moins de", " membres", "taille inférieure",
+        "أقل من", "عدد أعضاء", "headcount", "taille"
+    ]):
+        if any(s in q_norm for s in ["department", "département", "قسم", "departments", "départements"]):
+            m = re.search(r"(\d+)", question)
+            threshold = int(m.group(1)) if m else 420
+            print(f"[router] Priority 2.9: department headcount filter → filter_numeric_kg3")
+            return {
+                "query_type": "template",
+                "kg":         "university",
+                "entity":     None,
+                "direction":  None,
+                "template":   "filter_numeric_kg3",
+                "config":     TEMPLATE_REGISTRY["filter_numeric_kg3"],
+                "params":     {"operator": "<", "threshold": threshold},
+            }
 
     # ── Priority 3: No flight/airport/university match — LLM classifies ───────
     classified = _llm_classify(question)
@@ -266,10 +282,6 @@ def route(question: str) -> dict:
                 }
 
         # Case 1.6b: group_aggregate_kg2 with group_by == the KG's own entity
-        # ("which airport has the highest X") — this is a ranking, not a
-        # group-aggregate. GROUP_AGGREGATE_KG2 only defines group_by =
-        # country/continent, so group_by="airport" always fails template
-        # build (_build_group_aggregate_kg2 returns None → sparql_build_failure).
         if query_type == "group_aggregate_kg2":
             from kg_registry import GROUP_AGGREGATE_KG2
             if params.get("group_by") not in GROUP_AGGREGATE_KG2["group_by"]:
@@ -292,7 +304,19 @@ def route(question: str) -> dict:
         # Case 1.5: cross_kg_filter classified with no flight entity
         if query_type == "cross_kg_filter":
             prop = params.get("airport_property", "")
-            if prop in KG2_NUMERIC_PROPS:
+            count_signals = ["how many", "combien ", "كم", "count", "nombre", "عدد"]
+            if any(sig in question.lower() for sig in count_signals):
+                print(f"[router] Smart reroute: cross_kg_filter with no flight entity → count_kg2")
+                query_type = "count_kg2"
+                if prop in KG2_NUMERIC_PROPS:
+                    params = {"property": prop, "operator": params.get("operator", ">"),
+                              "threshold": params.get("threshold"), "mode": "count"}
+                elif prop in KG2_STRING_PROPS:
+                    params = {"property": prop, "value": params.get("threshold"), "mode": "count"}
+                else:
+                    params = {"property": prop, "value": params.get("threshold"), "mode": "count"}
+                cfg = TEMPLATE_REGISTRY[query_type]
+            elif prop in KG2_NUMERIC_PROPS:
                 print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_numeric_kg2")
                 query_type = "filter_numeric_kg2"
                 params = {"property": prop, "operator": params.get("operator", ">"),
@@ -319,7 +343,6 @@ def route(question: str) -> dict:
             a1 = (params.get("airport1") or "").strip().upper()
             a2 = (params.get("airport2") or "").strip().upper()
 
-            # was: if not a1 or not a2:
             if not a1 or not a2 or a1 not in _AIRPORT_ENTITIES or a2 not in _AIRPORT_ENTITIES:
                 text_codes = _detect_two_airport_codes(question)
                 if text_codes:
@@ -356,36 +379,64 @@ def route(question: str) -> dict:
                     }
 
         # Case 2: filter_numeric_kg1 with ranking intent and no real threshold
+        # FIXED: route to ranking_kg1 template, with Arabic support
         if query_type == "filter_numeric_kg1":
             prop      = params.get("property", "")
             threshold = params.get("threshold")
-            if prop in KG1_FLIGHT_PROPS and (
-                threshold is None or
-                any(sig in question.lower() for sig in _RANKING_SIGNALS)
-            ):
-                print(f"[router] Smart reroute: ranking signal in filter → open_kg")
+            q_lower   = question.lower()
+            has_ranking = any(sig in q_lower for sig in _RANKING_SIGNALS)
+            has_ranking_ar = any(s in q_lower for s in [
+                "أعلى", "أسرع", "أكثر", "أقل", "أبطأ", "أدنى", "أكبر"
+            ])
+            if prop in KG1_FLIGHT_PROPS and (threshold is None or has_ranking or has_ranking_ar):
+                print(f"[router] Smart reroute: ranking signal in filter → ranking_kg1")
+                order = "ASC" if any(sig in q_lower for sig in _ASC_SIGNALS) else "DESC"
+                limit_match = re.search(r"\b(\d+)\b", question)
+                limit = int(limit_match.group(1)) if limit_match else 10
                 return {
-                    "query_type": "open_kg",
-                    "kg":         "cross",
+                    "query_type": "template",
+                    "kg":         "flights",
                     "entity":     None,
                     "direction":  None,
-                    "template":   None,
-                    "config":     None,
+                    "template":   "ranking_kg1",
+                    "config":     TEMPLATE_REGISTRY["ranking_kg1"],
+                    "params":     {"property": prop, "order": order, "limit": limit},
                 }
-                # Case 3: KG3 misclassification with ranking/superlative-count intent
-        if query_type in ("filter_string_kg3", "count_kg3") and (
+
+        # Case 3: KG3 misclassification with ranking/superlative-count intent
+        # FIXED: includes group_aggregate_kg3, detects person vs department mode
+        if query_type in ("filter_string_kg3", "count_kg3", "group_aggregate_kg3") and (
             any(sig in question.lower() for sig in _RANKING_SIGNALS)
             or any(sig in question.lower() for sig in _SUPERLATIVE_COUNT_SIGNALS)
         ):
-            print(f"[router] Smart reroute: ranking/superlative signal in KG3 query → open_kg")
-            return {
-                "query_type": "open_kg",
-                "kg":         "cross",
-                "entity":     None,
-                "direction":  None,
-                "template":   None,
-                "config":     None,
-            }
+            print(f"[router] Smart reroute: ranking/superlative signal in KG3 query → ranking_kg3")
+            limit_match = re.search(r"\b(\d+)\b", question)
+            limit = int(limit_match.group(1)) if limit_match else 1
+            dept_match = re.search(r'\b(Department\d+)\b', question)
+            person_signals = ["professor", "professeur", "أستاذ", "enseigne", "teaches", "enseigner", "person"]
+            has_person = any(s in question.lower() for s in person_signals)
+            if dept_match and has_person:
+                return {
+                    "query_type": "template",
+                    "kg":         "university",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   "ranking_kg3",
+                    "config":     TEMPLATE_REGISTRY["ranking_kg3"],
+                    "params":     {"mode": "person", "property": "teacherOf",
+                                   "department": dept_match.group(1), "limit": limit},
+                }
+            else:
+                return {
+                    "query_type": "template",
+                    "kg":         "university",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   "ranking_kg3",
+                    "config":     TEMPLATE_REGISTRY["ranking_kg3"],
+                    "params":     {"mode": "department", "property": "memberOf", "limit": limit},
+                }
+
         # Case 3: filter_string_kg2 with runway surface or closed runway
         if query_type == "filter_string_kg2":
             value = params.get("value", "")

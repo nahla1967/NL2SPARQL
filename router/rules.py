@@ -36,7 +36,7 @@ _OPEN_KG_SIGNALS = {
 
 # ── COUNT / FILTER / COMPARE SIGNALS ─────────────────────────────
 _COUNT_SIGNALS = [
-    "how many", "combien de", "كم", "list all", "count"
+    "how many", "combien", "كم", "list all", "count"
 ]
 _FILTER_SIGNALS = [
     "which professors", "which students", "who works for",

@@ -93,29 +93,7 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    # Bug 2 fix — group_aggregate_kg2 → ranking_kg2 reroute
-    "count_kg2_001", "compare_two_flights_001",
-    # Bug 3 + Bug 4 fixes — malformed COUNT SPARQL + hallucination misroute
-
-    # Remaining ids from the last 20 questions — bug category not specified, please confirm
-   
-    "ranking_kg1_001",
-    "single_kg3_009",
-    "ranking_kg3_001",
-    "filter_numeric_kg3_002",
-    
-    "single_kg3_010",
-    "single_kg3_011",
-    "single_kg3_012",
-    "single_kg3_013",
-    "group_aggregate_kg1_001",
-    "group_aggregate_kg3_001",
-    "ranking_kg1_002",
-    "ranking_kg3_002",
-    "count_kg2_002",
-    "count_kg2_003",
-    "compare_two_flights_002",
-    "compare_two_departments_002",
+   "filter_numeric_kg3_003"
 }
 from template_resolver import resolve_template, resolve_ask_query
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
