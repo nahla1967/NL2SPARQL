@@ -93,7 +93,7 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   "filter_string_kg3_002","filter_string_kg3_003","open_kg_007","property_ambiguity_004","cross_kg_013"
+   "group_aggregate_kg1_001","group_aggregate_kg3_001","group_agg_kg2_001","ranking_kg3_001","ranking_kg2_004"
 
 }
 from template_resolver import resolve_template, resolve_ask_query
