@@ -604,6 +604,14 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
                     print(f"[generator] SELECT variable ?{var} never bound in WHERE — discarding query")
                     sparql = ""
                     break
+
+        if not sparql:
+            # Discarded above, or arrived empty. Don't fall through to
+            # namespace-based endpoint detection on an empty string — that
+            # has no namespace to detect, and previously defaulted to KG2
+            # regardless of which KG the question actually targeted.
+            return "", None
+
         sparql = fix_unknown_predicate(sparql)
 
         # ── Endpoint detection from namespace markers ──────────────────────────
@@ -626,8 +634,8 @@ Return ONLY the SPARQL query. No explanation. No markdown."""
             endpoint = KG2_ENDPOINT
             print(f"[generator] open_kg → KG2 (airports endpoint)")
         else:
-            endpoint = KG2_ENDPOINT
-            print(f"[generator] open_kg → no namespace detected, defaulting to KG2")
+            print("[generator] open_kg → no recognized namespace in generated SPARQL; discarding")
+            return "", None
 
         return sparql, endpoint
 

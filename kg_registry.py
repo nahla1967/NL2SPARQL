@@ -188,6 +188,14 @@ TEMPLATE_REGISTRY = {
         "base_uri":    KG_REGISTRY["airports"]["base_uri"],
         "description": "Compare two airports on a property",
     },
+        "count_kg2": {
+        "kg":          "airports",
+        "endpoint":    KG_REGISTRY["airports"]["endpoint"],
+        "base_uri":    KG_REGISTRY["airports"]["base_uri"],
+        "description": "Count airports matching a numeric or categorical condition",
+    },
+
+ 
 
     "count_kg1": {
         "kg":          "flights",
@@ -231,6 +239,20 @@ TEMPLATE_REGISTRY = {
         "description": "Aggregate a numeric flight property grouped by airline",
     },
 
+    "ranking_kg1": {
+        "kg":          "flights",
+        "endpoint":    KG_REGISTRY["flights"]["endpoint"],
+        "base_uri":    KG_REGISTRY["flights"]["base_uri"],
+        "description": "Rank flights by a numeric property (deduped by flight number)",
+    },
+
+    "compare_two_flights": {
+        "kg":          "flights",
+        "endpoint":    KG_REGISTRY["flights"]["endpoint"],
+        "base_uri":    KG_REGISTRY["flights"]["base_uri"],
+        "description": "Compare two flight numbers on a numeric property (deduped by flight number)",
+    },
+
     "group_aggregate_kg2": {
         "kg":          "airports",
         "endpoint":    KG_REGISTRY["airports"]["endpoint"],
@@ -238,12 +260,35 @@ TEMPLATE_REGISTRY = {
         "description": "Aggregate a numeric airport property grouped by country or continent",
     },
 
-    "group_aggregate_kg3": {
+        "group_aggregate_kg3": {
         "kg":          "university",
         "endpoint":    KG_REGISTRY["university"]["endpoint"],
         "base_uri":    KG_REGISTRY["university"]["base_uri"],
         "description": "Aggregate a count (courses/students) grouped by department",
     },
+
+    "ranking_kg3": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Rank departments by an entity-type count, or people within one named department by a relation count",
+    },
+
+    "compare_two_departments": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Compare two named departments by an entity-type count",
+    },
+
+    "filter_numeric_kg3": {
+        "kg":          "university",
+        "endpoint":    KG_REGISTRY["university"]["endpoint"],
+        "base_uri":    KG_REGISTRY["university"]["base_uri"],
+        "description": "Filter departments by total headcount (memberOf + worksFor) against a threshold",
+    },
+
+
 }
 
 # ── KG2 PROPERTY HOP TABLE ────────────────────────────────────────────────────

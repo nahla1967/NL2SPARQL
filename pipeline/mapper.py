@@ -143,14 +143,26 @@ def map_property_fuzzy(property_text: str, lexicon: dict) -> str | None:
     phrases      = _get_phrases(lexicon)
     norm_in      = _normalise(property_text)
     norm_phrases = [_normalise(p) for p in phrases]
-    result = process.extractOne(norm_in, norm_phrases, scorer=fuzz.WRatio)
-    if result is None:
+
+    matches = process.extract(norm_in, norm_phrases, scorer=fuzz.WRatio, limit=None)
+    if not matches:
         return None
-    matched_phrase, score, index = result
+
+    top_score = matches[0][1]
+    if top_score < FUZZY_THRESHOLD:
+        return None
+
+    # WRatio has no notion of specificity, so ties/near-ties between a
+    # generic phrase and a longer phrase that contains it are common and
+    # not language- or word-specific. Among everything within a small
+    # margin of the top score, prefer the longest phrase (most tokens) —
+    # it captured more of the input's actual wording.
+    NEAR_TIE_MARGIN = 2.0
+    contenders = [m for m in matches if top_score - m[1] <= NEAR_TIE_MARGIN]
+    matched_phrase, score, index = max(contenders, key=lambda m: len(m[0].split()))
+
     print(f"[fuzzy] input='{property_text}' → match='{phrases[index]}' score={score}")
-    if score >= FUZZY_THRESHOLD:
-        return lexicon["properties"][phrases[index]]
-    return None
+    return lexicon["properties"][phrases[index]]
 
 
 # ── TIER 3: SEMANTIC ──────────────────────────────────────────────────────────

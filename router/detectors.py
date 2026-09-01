@@ -18,6 +18,8 @@ from .rules import (
     _FILTER_SIGNALS,
     _COMPARE_SIGNALS,
     _COMPARE_PROPERTY_KEYWORDS,
+    _COMPARE_PROPERTY_KEYWORDS_KG1,
+    _GROUP_RANKING_SIGNALS,
     _normalise,
     _normalise_for_signal_match,
     _strip_arabic_al,
@@ -38,7 +40,12 @@ def _detect_flight_number(q: str):
     """Returns the LONGEST flight-number match."""
     m = _FLIGHT_RE.findall(q.upper())
     return max(m, key=len) if m else None
-
+def _detect_flight_numbers_all(q: str) -> list:
+    """Returns all distinct flight-number matches — used to catch multi-flight
+    (comparison) questions that _detect_flight_number would silently collapse
+    to a single entity."""
+    m = _FLIGHT_RE.findall(q.upper())
+    return sorted(set(m))
 
 def _detect_flight_number_first(q: str):
     """ASK-specific variant: returns the FIRST match."""
@@ -190,3 +197,22 @@ def _detect_two_airport_codes(q: str) -> list[str] | None:
         if code in _AIRPORT_ENTITIES and code not in codes:
             codes.append(_AIRPORT_ENTITIES[code])
     return codes if len(codes) == 2 else None
+
+def _detect_two_flight_numbers(q: str) -> list[str] | None:
+    """Finds every flight-number match. Returns exactly two distinct
+    flight numbers, or None."""
+    numbers = []
+    for num in _FLIGHT_RE.findall(q.upper()):
+        if num not in numbers:
+            numbers.append(num)
+    return numbers if len(numbers) == 2 else None
+def _has_group_ranking_signal(q: str) -> bool:
+    q_lower = q.lower()
+    return any(sig in q_lower for sig in _GROUP_RANKING_SIGNALS)
+
+def _detect_compare_property_kg1(q: str) -> str | None:
+    q_lower = q.lower()
+    for keywords, prop in _COMPARE_PROPERTY_KEYWORDS_KG1:
+        if any(k.lower() in q_lower for k in keywords):
+            return prop
+    return None

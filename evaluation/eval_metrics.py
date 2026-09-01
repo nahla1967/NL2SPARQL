@@ -49,12 +49,16 @@ LANGUAGES  = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 CATEGORIES = [
     "single_kg1", "single_kg2", "single_kg3", "cross_kg", "open_kg",
-    "count_kg1", "count_kg3", "filter_numeric_kg1", "filter_numeric_kg2",
-    "filter_string_kg2", "filter_string_kg3", "ranking_kg2", "compare_two_airports",
+    "count_kg1", "count_kg2", "count_kg3",
+    "filter_numeric_kg1", "filter_numeric_kg2", "filter_numeric_kg3",
+    "filter_string_kg2", "filter_string_kg3",
+    "ranking_kg1", "ranking_kg2", "ranking_kg3",
+    "compare_two_airports", "compare_two_flights", "compare_two_departments",
+    "group_aggregate_kg1", "group_aggregate_kg2", "group_aggregate_kg3",
     "out_of_scope", "ask_query", "typo_fuzzy",
     "multilingual_edge", "property_ambiguity",
+    "ghost_property", "multi_value_ambiguity",
 ]
-
 
 def load_records():
     records = []

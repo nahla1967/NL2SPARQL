@@ -21,7 +21,7 @@ _KG1_ONLY_SIGNALS = {
     "بوابة", "مبنى", "صالة", "إشارة النداء", "الإشارة",
     "سرعة أرضية", "سرعة عمودية", "شركة الطيران",
     "تشغل الرحلة", "تشغل رحلة",
-    "depart from", "flying to", "vole vers", "تغادر",
+    
     "departure city", "origin city", "destination city",
     "ville de départ", "ville de destination", "ville d'origine",
     "مدينة مغادرة", "مدينة انطلاق", "مدينة وصول",
@@ -36,7 +36,7 @@ _OPEN_KG_SIGNALS = {
 
 # ── COUNT / FILTER / COMPARE SIGNALS ─────────────────────────────
 _COUNT_SIGNALS = [
-    "how many", "combien de", "كم", "list all", "count"
+    "how many", "combien", "كم", "list all", "count"
 ]
 _FILTER_SIGNALS = [
     "which professors", "which students", "who works for",
@@ -44,7 +44,7 @@ _FILTER_SIGNALS = [
     "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب",
     "من هم", "اذكر", "listez",
 ]
-_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن"]
+_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن", "مقارنة"]
 
 # ── COMPARE PROPERTY KEYWORDS ─────────────────────────────────────
 _COMPARE_PROPERTY_KEYWORDS = [
@@ -53,7 +53,10 @@ _COMPARE_PROPERTY_KEYWORDS = [
     (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق", "عرض"], "widthFt"),
     (["airport type", "type", "kind", "نوع"], "airportType"),
 ]
-
+_COMPARE_PROPERTY_KEYWORDS_KG1 = [
+    (["vertical speed", "vitesse verticale", "vspeed", "السرعة العمودية"], "vspeed"),
+    (["ground speed", "vitesse sol", "vitesse au sol", "gspeed", "السرعة الأرضية"], "gspeed"),
+]
 # ── UNIVERSITY ENTITY REGEX ─────────────────────────────────────
 _UNIVERSITY_ENTITY_RE = re.compile(
     r'\b((?:[A-Z][a-zA-Z]*)?(?:Professor|Student|Course|Department|Group|'
@@ -69,14 +72,23 @@ _WH_WORDS = (
 
 # ── RANKING / ASC SIGNALS (used by smart reroutes) ───────────────
 _RANKING_SIGNALS = [
-    "highest", "lowest", "fastest", "slowest",
+     "highest", "lowest", "fastest", "slowest",
     "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
+    "la plus élevée", "la plus grande",
     "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
 ]
 _ASC_SIGNALS = [
     "shortest", "lowest", "smallest", "narrowest",
     "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
     "أقصر", "أدنى", "أضيق"
+]
+_GROUP_RANKING_SIGNALS = [
+    "the most", "the fewest", "le plus de", "le moins de",
+    "أكبر عدد", "أقل عدد",
+]
+_SUPERLATIVE_COUNT_SIGNALS = [
+    "the most", "the least", "le plus de", "le moins de",
+    "أكبر عدد", "أقل عدد",
 ]
 
 
