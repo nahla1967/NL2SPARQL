@@ -16,9 +16,59 @@ WHY NOT A SEPARATE extractor_airports.py:
     required no structural modification.
 """
 
+import concurrent.futures
 import json
 import re
+import time
+
 import ollama
+
+# ── SHARED OLLAMA TIMEOUT/RETRY HELPER (fix) ──────────────────────────────
+# Every extractor below called ollama.chat(...) directly, with no timeout and
+# no retry — unlike mapper.py's Fuseki calls, which are wrapped in
+# _query_fuseki_with_retry(timeout=15, max_retries=2). If Ollama stalls
+# mid-batch (model swapped out under memory pressure, GPU contention, a cold
+# reload), there was nothing to catch it: the call just blocks until Ollama
+# itself eventually returns. That's the exact shape of cross_kg_013 (en,
+# zero-shot) in the eval log — 2348.54s on that one run vs 12-22s for the
+# identical query on every other strategy/language. This wraps every
+# extractor's ollama.chat() call in the same bounded pattern mapper.py
+# already uses for HTTP calls, so a stalled model call degrades to an
+# extraction_failure in a few seconds instead of hanging the whole batch.
+_OLLAMA_TIMEOUT_SECONDS = 30
+_OLLAMA_MAX_RETRIES = 1
+_OLLAMA_BACKOFF_SECONDS = 1.5
+_ollama_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+
+def _ollama_chat_with_timeout(model: str, messages: list, options: dict,
+                               caller: str = "ollama") -> dict | None:
+    """
+    Runs ollama.chat(...) with a hard wall-clock timeout and one bounded
+    retry. Returns the raw response dict on success, or None if every
+    attempt timed out / errored — callers already handle a None/exception
+    path via their existing try/except, so this slots in as a drop-in
+    replacement for the bare ollama.chat(...) call.
+    """
+    for attempt in range(_OLLAMA_MAX_RETRIES + 1):
+        future = _ollama_executor.submit(
+            ollama.chat, model=model, messages=messages, options=options
+        )
+        try:
+            return future.result(timeout=_OLLAMA_TIMEOUT_SECONDS)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            if attempt < _OLLAMA_MAX_RETRIES:
+                print(f"[{caller}] ollama call timed out after "
+                      f"{_OLLAMA_TIMEOUT_SECONDS}s (attempt {attempt + 1}), retrying...")
+                time.sleep(_OLLAMA_BACKOFF_SECONDS)
+            else:
+                print(f"[{caller}] ollama call timed out after "
+                      f"{_OLLAMA_MAX_RETRIES + 1} attempts — giving up")
+        except Exception as e:
+            print(f"[{caller}] ollama call failed: {e}")
+            return None
+    return None
 
 # ── UNCHANGED FROM v1 ─────────────────────────────────────────────────────────
 
@@ -82,11 +132,14 @@ Return ONLY a JSON object with key "property". No explanation. No extra text.
 Question: {question}
 """
     try:
-        response = ollama.chat(
+        response = _ollama_chat_with_timeout(
             model="llama3",
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0}
+            options={"temperature": 0},
+            caller="extract_entities",
         )
+        if response is None:
+            return {"entity": flight, "property": "", "reason": "ollama_timeout"}
         raw    = response["message"]["content"]
         prop   = ""
         parsed = safe_json_parse(raw)
@@ -170,11 +223,14 @@ Return ONLY a JSON object with key "property". No explanation. No extra text.
 Question: {question}
 """
     try:
-        response = ollama.chat(
+        response = _ollama_chat_with_timeout(
             model="llama3",
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0}
+            options={"temperature": 0},
+            caller="extract_airport_entities",
         )
+        if response is None:
+            return {"entity": iata_from_router, "property": "", "reason": "ollama_timeout"}
         raw    = response["message"]["content"]
         prop   = ""
         parsed = safe_json_parse(raw)
@@ -246,11 +302,14 @@ Return ONLY a JSON object with key "property". No explanation. No extra text.
 Question: {question}
 """
     try:
-        response = ollama.chat(
+        response = _ollama_chat_with_timeout(
             model="llama3",
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0}
+            options={"temperature": 0},
+            caller="extract_university_entities",
         )
+        if response is None:
+            return {"entity": entity_from_router, "property": "", "reason": "ollama_timeout"}
         raw    = response["message"]["content"]
         prop   = ""
         parsed = safe_json_parse(raw)
@@ -328,11 +387,17 @@ Return ONLY a JSON object with keys "property" and "value". No explanation.
 Question: {question}
 """
     try:
-        response = ollama.chat(
+        response = _ollama_chat_with_timeout(
             model="llama3",
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0}
+            options={"temperature": 0},
+            caller="extract_ask_entities",
         )
+        if response is None:
+            return {
+                "entity": entity_from_router, "property": "", "value": "",
+                "reason": "ollama_timeout",
+            }
         raw    = response["message"]["content"]
         parsed = safe_json_parse(raw)
         prop  = (parsed.get("property", "") if parsed else "").strip().lower()

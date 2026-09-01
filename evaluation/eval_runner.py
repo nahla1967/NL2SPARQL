@@ -93,7 +93,7 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   "filter_numeric_kg2_001","filter_numeric_kg2_002","filter_numeric_kg2_003","filter_string_kg3_002","filter_string_kg3_003","ranking_kg3_001","ranking_kg3_002","compare_two_departments_002","count_kg2_002"
+   "filter_string_kg3_002","filter_string_kg3_003","open_kg_007","property_ambiguity_004","cross_kg_013"
 
 }
 from template_resolver import resolve_template, resolve_ask_query
@@ -497,11 +497,19 @@ def _run_single_kg3(question, routing, strategy, lang, stages=_DEFAULT_STAGES):
 
     FACULTY_TYPES = {"FullProfessor", "AssociateProfessor", "AssistantProfessor", "Lecturer"}
 
-    if entity_uri and property_uri in ("memberOf", "subOrganizationOf"):
+    # NOTE (fix): this guard used to only fire when the cascade's first guess
+    # was "memberOf" or "subOrganizationOf". "worksFor" is exactly as
+    # ambiguous between a person and a department as the other two (it's a
+    # person -> department property, same domain as memberOf), so when the
+    # cascade landed directly on "worksFor" for a Department entity it slid
+    # straight past this whole block uncorrected, got applied to the wrong
+    # entity kind, and returned no results. See property_ambiguity_004 (fr)
+    # in the eval log.
+    if entity_uri and property_uri in ("memberOf", "subOrganizationOf", "worksFor"):
         entity_type = get_university_entity_type(entity_uri)
-        if entity_type == "Department" and property_uri == "memberOf":
+        if entity_type == "Department" and property_uri in ("memberOf", "worksFor"):
+            print(f"[disambiguation] Department entity — corrected {property_uri} → subOrganizationOf")
             property_uri = "subOrganizationOf"
-            print(f"[disambiguation] Department entity — corrected memberOf → subOrganizationOf")
         elif entity_type != "Department" and property_uri == "subOrganizationOf":
             property_uri = "memberOf"
             print(f"[disambiguation] Non-department entity — corrected subOrganizationOf → memberOf")
@@ -597,9 +605,14 @@ def _run_template(question, routing, lang):
         "sparql": tr.get("sparql"), "sparql_valid": tr.get("success", False),
         "raw_answer": tr.get("raw_data"), "final_answer": tr.get("final_answer"),
         "failure_type": tr.get("failure_type"),
+        "template": routing.get("template"),
     }
     if not tr.get("success"):
-        out["error_detail"] = f"params={tr.get('params')!r}"
+        # resolve_template may already carry the real cause (e.g. an actual
+        # SPARQL/HTTP error string on execution_failure) — unconditionally
+        # overwriting it with the params dump destroyed that signal for
+        # every failure type, making all failures look identical in the logs.
+        out["error_detail"] = tr.get("error_detail") or f"params={tr.get('params')!r}"
     return out
 
 
@@ -730,7 +743,18 @@ def main():
                               "failure_type": "exception", "error_detail": str(e)}
 
                 expected_type = row["expected_type"]
-                routing_ok = (expected_type == "VARIES") or (result["query_type"] == expected_type)
+                # Two conventions coexist in the gold dataset: older tier-2
+                # rows set expected_type="template" (the generic dispatch
+                # bucket), newer rows set it to the specific template name
+                # (e.g. "ranking_kg3"). Checking only the specific name broke
+                # the older rows; checking only the bucket broke the newer
+                # ones. Accept either so both conventions score correctly.
+                routed_label = result.get("template")
+                routing_ok = (
+                    expected_type == "VARIES"
+                    or result["query_type"] == expected_type
+                    or routed_label == expected_type
+                )
 
                 # Fix #1: score the raw extracted value, not the natural-
                 # language sentence — comparing "The departure city of
@@ -743,7 +767,7 @@ def main():
                 # is the unformatted SPARQL row dump, not a scoring target.
                 # ask_query is scored separately below on its own boolean
                 # raw_answer, bypassing this branch entirely.
-                if row["category"] == "compare_two_airports":
+                if row["category"] in ("compare_two_airports", "compare_two_departments"):
                     scored_value = result.get("final_answer")
                 else:
                     scored_value = result.get("raw_answer")

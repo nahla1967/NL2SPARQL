@@ -100,6 +100,18 @@ Classify the question into exactly one of these query types and extract its para
     - "Which airports have a grass runway?" → open_kg
     - "What is the registration number of the aircraft on flight BR62?" → open_kg
     - "Quel vol a la vitesse verticale la plus basse?" → open_kg
+    # NOTE (fix): the "no condition -> open_kg" rule above only had an
+    # English exemplar. Without a French/Arabic equivalent, the model kept
+    # trying to force SOME filter/property out of a bare "how many X total"
+    # question in those languages — in French it extracted the entity type
+    # itself ("airport") as if it were a filterable property (which then
+    # broke downstream template building), and in Arabic it hallucinated a
+    # filter value ("Germany") that was never in the question at all. See
+    # open_kg_007 (fr, ar) in the eval log.
+    - "Combien d'aéroports y a-t-il au total ?" (aucune condition) → open_kg
+    - "Combien y a-t-il d'aéroports dans le jeu de données ?" (aucune condition) → open_kg
+    - "كم عدد المطارات الموجودة؟" (بدون شرط) → open_kg
+    - "كم عدد المطارات في مجموعة البيانات؟" (بدون شرط) → open_kg
 
 14. count_kg3 — count or list university entities linked to a specific
     named entity (professor, student, department). Only applies when the
@@ -286,11 +298,56 @@ COUNT_KG3: Use when the question names a specific university entity AND
 Q: "Which airports have an elevation above 1000 feet?"
 A: {"query_type": "filter_numeric_kg2", "params": {"property": "elevationFt", "operator": ">", "threshold": 1000}}
 
+Q: "Quels aéroports ont une piste de plus de 10000 pieds de long?"
+A: {"query_type": "filter_numeric_kg2", "params": {"property": "lengthFt", "operator": ">", "threshold": 10000}}
+
+Q: "ما هي المطارات التي ارتفاعها أقل من 50 قدماً؟"
+A: {"query_type": "filter_numeric_kg2", "params": {"property": "elevationFt", "operator": "<", "threshold": 50}}
+
+  IMPORTANT: distinguish filter_numeric_kg2 from ranking_kg2 — a threshold
+  question ("above/below/more than/less than X feet", "plus de X pieds",
+  "أقل من X قدماً") is always filter_numeric_kg2, even in French or Arabic,
+  even without any English words in the question. Only use ranking_kg2 when
+  the question asks for the single highest/lowest or a top-N list with no
+  numeric threshold given.
+
 Q: "Show all large airports."
 A: {"query_type": "filter_string_kg2", "params": {"property": "airportType", "value": "large_airport"}}
 
 Q: "Which airports are located in Germany?"
 A: {"query_type": "filter_string_kg2", "params": {"property": "countryName", "value": "Germany"}}
+
+Q: "How many small airports are there?"
+A: {"query_type": "count_kg2", "params": {"property": "airportType", "value": "small_airport"}}
+
+Q: "كم عدد المطارات الصغيرة الموجودة؟"
+A: {"query_type": "count_kg2", "params": {"property": "airportType", "value": "small_airport"}}
+
+Q: "Combien d'aéroports ont une élévation supérieure à 1000 pieds?"
+A: {"query_type": "count_kg2", "params": {"property": "elevationFt", "operator": ">", "threshold": 1000}}
+
+  NOTE (fix): every count_kg2 exemplar above has an explicit condition
+  (property + threshold/value). Without an unconditional counterpart in
+  French and Arabic, the model had no example telling it that "how many X
+  total, no filter" maps to open_kg with empty params — it would either
+  extract the entity type itself as a fake property (French) or invent a
+  filter value that isn't in the question (Arabic). See open_kg_007 (fr, ar)
+  in the eval log.
+
+Q: "How many airports are there in total?"
+A: {"query_type": "open_kg", "params": {}}
+
+Q: "Combien d'aéroports y a-t-il au total ?"
+A: {"query_type": "open_kg", "params": {}}
+
+Q: "كم عدد المطارات الموجودة؟"
+A: {"query_type": "open_kg", "params": {}}
+
+  IMPORTANT: distinguish count_kg2 from filter_string_kg2/filter_numeric_kg2
+  — "how many"/"combien de"/"كم عدد" asks for a COUNT (count_kg2), while a
+  plain "which/list" question asks for the matching rows themselves
+  (filter_string_kg2 or filter_numeric_kg2). The condition-matching logic
+  is otherwise identical; only the mode differs.
 
 Q: "What are the top 5 airports with the highest elevation?"
 A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 5}}
@@ -312,6 +369,29 @@ A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "AS
 
 Q: "أي مطار لديه أطول مدرج؟"
 A: {"query_type": "ranking_kg2", "params": {"property": "lengthFt", "order": "DESC", "limit": 1}}
+
+Q: "What are the top 3 departments by graduate student population?"
+A: {"query_type": "ranking_kg3", "params": {"group_by": "department", "entity_type": "GraduateStudent", "hop_property": "memberOf", "order": "DESC", "limit": 3}}
+
+Q: "Which professor in Department0 teaches the most courses?"
+A: {"query_type": "ranking_kg3", "params": {"group_by": "person", "hop_property": "teacherOf", "order": "DESC", "limit": 1}}
+
+  IMPORTANT: distinguish ranking_kg3 from group_aggregate_kg3 — ranking_kg3
+  wants a params shape of group_by/entity_type/hop_property/order/limit,
+  never property/function. Do not copy group_aggregate_kg3's param keys
+  onto a ranking_kg3 answer even though both templates operate on
+  departments; they take different parameters.
+
+Q: "Does Department0 or Department9 have more full professors?"
+A: {"query_type": "compare_two_departments", "params": {"entity_type": "FullProfessor", "hop_property": "worksFor"}}
+
+Q: "Compare Department1 and Department4 by number of graduate students."
+A: {"query_type": "compare_two_departments", "params": {"entity_type": "GraduateStudent", "hop_property": "memberOf"}}
+
+  IMPORTANT: for compare_two_departments, never return department names or
+  URIs in params — those two are always detected and resolved separately.
+  Only return entity_type and hop_property.
+
 Q: "Considering every airport on record, which single one has the greatest elevation of them all?"
 A: {"query_type": "ranking_kg2", "params": {"property": "elevationFt", "order": "DESC", "limit": 1}}
 
@@ -415,6 +495,27 @@ A: {"query_type": "filter_string_kg3", "params": {"property": "worksFor", "value
 
 Q: "List students who are members of Department1."
 A: {"query_type": "filter_string_kg3", "params": {"property": "memberOf", "value": "Department1", "limit": 10}}
+
+Q: "Quels professeurs travaillent pour le Department2?"
+A: {"query_type": "filter_string_kg3", "params": {"property": "worksFor", "value": "Department2", "limit": 10}}
+
+Q: "Which departments have fewer than 5 students?"
+A: {"query_type": "filter_numeric_kg3", "params": {"operator": "<", "threshold": 5}}
+
+Q: "Quels départements comptent moins de 5 étudiants?"
+A: {"query_type": "filter_numeric_kg3", "params": {"operator": "<", "threshold": 5}}
+
+Q: "ما هي الأقسام التي يقل عدد أعضائها عن 5؟"
+A: {"query_type": "filter_numeric_kg3", "params": {"operator": "<", "threshold": 5}}
+
+  IMPORTANT: distinguish filter_string_kg3 from filter_numeric_kg3 —
+  filter_string_kg3 asks WHO belongs to one NAMED department ("which
+  professors work for Department2", "list students in Department1").
+  filter_numeric_kg3 asks WHICH DEPARTMENTS qualify by a headcount
+  threshold, with no department named ("departments with fewer than 5
+  students", "moins de 5 étudiants", "يقل عن 5"). A number in the question
+  is the signal for filter_numeric_kg3, not a reason to pick filter_string_kg3
+  just because "students" or "professors" is also mentioned.
 
 Q: "What is the average ground speed per airline?"
 A: {"query_type": "group_aggregate_kg1", "params": {"group_by": "airline", "property": "gspeed", "function": "AVG"}}}

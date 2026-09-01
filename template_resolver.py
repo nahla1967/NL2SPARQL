@@ -184,6 +184,12 @@ def _detect_two_university_entities_for_template(q: str) -> list[str] | None:
 # ── SPARQL HELPER ─────────────────────────────────────────────────────────────
 
 def _run_sparql(endpoint: str, query: str, multiple: bool = True):
+    """Returns (result, error). `error` is None on a successful HTTP round
+    trip regardless of whether any rows came back — an empty `result` with
+    error=None means the query executed correctly and legitimately found
+    nothing, which callers must NOT treat the same as an execution_failure.
+    `error` is set (as a string) only when the request/parse itself raised,
+    so real Jena/HTTP failures stay distinguishable from empty results."""
     data = urllib.parse.urlencode({
         "query": query,
         "format": "application/sparql-results+json"
@@ -195,11 +201,12 @@ def _run_sparql(endpoint: str, query: str, multiple: bool = True):
             result   = json.loads(r.read())
             bindings = result.get("results", {}).get("bindings", [])
             if multiple:
-                return bindings
-            return bindings[0] if bindings else None
+                return bindings, None
+            return (bindings[0] if bindings else None), None
     except Exception as e:
         print(f"[template] SPARQL error: {e}")
-        return [] if multiple else None
+        err = str(e)
+        return ([], err) if multiple else (None, err)
 
 
 # ── LLM PARAMETER EXTRACTOR ───────────────────────────────────────────────────
@@ -1404,6 +1411,37 @@ def _format_answer(question: str, raw_data: str, lang: str, total_count: int = N
 
 # ── MAIN RESOLVER (templates) ─────────────────────────────────────────────────
 
+# Expected param keys per template, drawn from each builder's own
+# params.get(...) calls plus the deterministic keys resolve_template injects
+# (department1_uri, entity_name, etc.). Used only by the schema-bleed guard
+# below to flag suspicious cross-template key leakage — not for validation
+# or filtering, so an incomplete entry here can only under-warn, never break
+# a template that was working before.
+_TEMPLATE_PARAM_KEYS = {
+    "filter_numeric_kg2":       {"property", "operator", "threshold"},
+    "filter_string_kg2":        {"property", "value"},
+    "count_kg2":                {"property", "operator", "threshold", "value"},
+    "ranking_kg2":              {"property", "order", "limit"},
+    "compare_two_airports":     {"airport1", "airport2", "property"},
+    "count_kg1":                {"filter_property", "filter_value", "mode"},
+    "filter_numeric_kg1":       {"property", "operator", "threshold"},
+    "cross_kg_filter":          {"direction", "airport_property", "operator", "threshold", "limit"},
+    "count_kg3":                {"property", "direction", "mode", "entity_name"},
+    "filter_string_kg3":        {"property", "value", "limit"},
+    "group_aggregate_kg1":      {"group_by", "property", "function"},
+    "ranking_kg1":              {"property", "order", "limit"},
+    "compare_two_flights":      {"flight1", "flight2", "property"},
+    "group_aggregate_kg2":      {"group_by", "property", "function"},
+    "group_aggregate_kg3":      {"group_by", "property", "function"},
+    "filter_numeric_kg3":       {"operator", "threshold", "operator2", "threshold2"},
+    "ranking_kg3":              {"group_by", "entity_type", "hop_property", "order",
+                                  "limit", "department_name"},
+    "compare_two_departments":  {"entity_type", "hop_property", "dept1", "dept2",
+                                  "department1_uri", "department2_uri",
+                                  "department1_name", "department2_name"},
+}
+
+
 def resolve_template(question: str, template_name: str, lang: str, router_params: dict = None) -> dict:
     result = {
         "success":      False,
@@ -1416,8 +1454,18 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     }
 
     if router_params:
-        params = router_params
-        print(f"[template] Reusing router params (skipping re-extraction): {params}")
+        # router_params only ever carries what the router extracted
+        # deterministically (e.g. named entities/URIs). Some templates also
+        # need LLM-classified fields (e.g. compare_two_departments' own
+        # entity_type/hop_property) that the router never sets — replacing
+        # params outright instead of merging silently dropped those keys,
+        # so the builder always failed for any template mixing both kinds
+        # of params. Still call _extract_params, then let router_params
+        # (trustworthy/deterministic) win on any overlapping key.
+        llm_params = _extract_params(question, template_name, lang)
+        params = {**llm_params, **router_params}
+        print(f"[template] Merged router params {router_params} over "
+              f"LLM params {llm_params} -> {params}")
     else:
         params = _extract_params(question, template_name, lang)
     params = _sanitize_params(params)
@@ -1517,6 +1565,20 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         result["failure_type"] = "unknown_template"
         return result
 
+    # Schema-bleed guard: the classifier answers ~20 heterogeneous template
+    # schemas from one monolithic prompt, and occasionally blends two of
+    # them (e.g. ranking_kg3 params showing up with group_aggregate_kg3's
+    # "property"/"function" keys instead of its own "entity_type"/
+    # "hop_property"). That currently just fails the builder silently as a
+    # generic sparql_build_failure with no clue why. This doesn't fix the
+    # extraction — it only makes the failure diagnosable — so it only warns,
+    # it never blocks or drops params on its own.
+    _foreign_keys = set(params) - _TEMPLATE_PARAM_KEYS.get(template_name, set(params))
+    if _foreign_keys:
+        print(f"[template] WARNING: params for '{template_name}' contain keys "
+              f"from another template's schema: {_foreign_keys} — likely "
+              f"classifier schema bleed. Full params: {params}")
+
     builder_fn, endpoint, columns = builders[template_name]
     build_result = builder_fn(params)
 
@@ -1533,9 +1595,13 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         kg1_query, airport_prop, operator, threshold, direction, limit = sparql
         result["sparql"] = kg1_query
 
-        rows_kg1 = _run_sparql(KG1_EP, kg1_query)
-        if not rows_kg1:
+        rows_kg1, sparql_error = _run_sparql(KG1_EP, kg1_query)
+        if sparql_error:
             result["failure_type"] = "execution_failure"
+            result["error_detail"] = sparql_error
+            return result
+        if not rows_kg1:
+            result["failure_type"] = "no_results"
             return result
 
         matched_flights = []
@@ -1570,7 +1636,7 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
   ?ap <{prop_uri}> ?val .
 }} LIMIT 1"""
 
-                kg2_rows = _run_sparql(KG2_EP, kg2_q)
+                kg2_rows, _kg2_error = _run_sparql(KG2_EP, kg2_q)
                 val_raw  = kg2_rows[0].get("val", {}).get("value", "") if kg2_rows else ""
                 seen_iatas[iata] = val_raw
 
@@ -1603,10 +1669,14 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
 
     else:
         result["sparql"] = sparql
-        rows = _run_sparql(endpoint, sparql)
+        rows, sparql_error = _run_sparql(endpoint, sparql)
 
-        if not rows:
+        if sparql_error:
             result["failure_type"] = "execution_failure"
+            result["error_detail"] = sparql_error
+            return result
+        if not rows:
+            result["failure_type"] = "no_results"
             return result
 
         if template_name in ("count_kg1", "count_kg2", "count_kg3") and params.get("mode", "count") == "count":

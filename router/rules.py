@@ -44,7 +44,7 @@ _FILTER_SIGNALS = [
     "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب",
     "من هم", "اذكر", "listez",
 ]
-_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن"]
+_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن", "مقارنة"]
 
 # ── COMPARE PROPERTY KEYWORDS ─────────────────────────────────────
 _COMPARE_PROPERTY_KEYWORDS = [

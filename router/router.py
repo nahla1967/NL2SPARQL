@@ -236,25 +236,71 @@ def route(question: str) -> dict:
         }
 
     # ── Priority 2.9: Headcount/size filter on departments (deterministic) ────
+    # NOTE (fix): " membres" used to be in this trigger list on its own. That's
+    # French for "members", and it fires on ANY department-membership question
+    # ("Qui sont les membres du Department3 ?"), not just genuine headcount/
+    # threshold questions ("moins de 5 membres"). A bare membership-listing
+    # question would get hijacked into this numeric branch, and the digit
+    # regex below would then grab the "3" out of "Department3" and treat it
+    # as the threshold — see filter_string_kg3_002/003 (fr) in the eval log.
+    # Only fire on "membres" when it's actually paired with a threshold cue
+    # (a number, or an explicit comparison word) elsewhere in the sentence.
     q_norm = question.lower()
-    if any(s in q_norm for s in [
+    _threshold_cue_words = [
         "size under", "under", "less than", "fewer than",
-        "moins de", " membres", "taille inférieure",
+        "moins de", "taille inférieure",
         "أقل من", "عدد أعضاء", "headcount", "taille"
-    ]):
+    ]
+    _threshold_cue_hit = any(s in q_norm for s in _threshold_cue_words)
+    # NOTE (fix): " membres" used to be a trigger on its own, with no cue word
+    # required. That's French for "members", and it fires on ANY department-
+    # membership question ("Qui sont les membres du Department3 ?"), not just
+    # genuine headcount/threshold questions ("moins de 5 membres"). A bare
+    # membership-listing question would get hijacked into this numeric branch,
+    # and the old `re.search(r"(\d+)", question)` would then grab the "3" out
+    # of "Department3" and treat it as the threshold — see
+    # filter_string_kg3_002/003 (fr) in the eval log. Track it separately so
+    # it can never invent a default threshold the way a real cue word can.
+    _bare_membres_hit = " membres" in q_norm
+    if _threshold_cue_hit or _bare_membres_hit:
         if any(s in q_norm for s in ["department", "département", "قسم", "departments", "départements"]):
-            m = re.search(r"(\d+)", question)
-            threshold = int(m.group(1)) if m else 420
-            print(f"[router] Priority 2.9: department headcount filter → filter_numeric_kg3")
-            return {
-                "query_type": "template",
-                "kg":         "university",
-                "entity":     None,
-                "direction":  None,
-                "template":   "filter_numeric_kg3",
-                "config":     TEMPLATE_REGISTRY["filter_numeric_kg3"],
-                "params":     {"operator": "<", "threshold": threshold},
-            }
+            # NOTE (fix): only accept a digit that's actually adjacent to a
+            # threshold cue word, not the first digit anywhere in the question
+            # (which is very often the department's own ID number).
+            m = re.search(
+                r"(?:under|less than|fewer than|moins de|taille inférieure(?:\s+à)?|"
+                r"أقل من|عدد أعضاء|headcount|taille)\D{0,10}(\d+)",
+                question, flags=re.IGNORECASE,
+            )
+            if not m:
+                m = re.search(r"(\d+)\D{0,10}(?:members|membres|أعضاء)", question, flags=re.IGNORECASE)
+            if m:
+                threshold = int(m.group(1))
+            elif _threshold_cue_hit:
+                # Genuine threshold cue word present ("moins de", "headcount",
+                # etc.) but no explicit number anywhere — this is an
+                # intentionally vague threshold question, keep the existing
+                # default.
+                threshold = 420
+            else:
+                # Only the bare "membres" phrase matched, with no real cue
+                # word and no cue-adjacent digit — this is a plain membership-
+                # listing question, not a headcount filter. Fall through to
+                # normal LLM classification instead of inventing a threshold.
+                threshold = None
+            if threshold is not None:
+                print(f"[router] Priority 2.9: department headcount filter → filter_numeric_kg3")
+                return {
+                    "query_type": "template",
+                    "kg":         "university",
+                    "entity":     None,
+                    "direction":  None,
+                    "template":   "filter_numeric_kg3",
+                    "config":     TEMPLATE_REGISTRY["filter_numeric_kg3"],
+                    "params":     {"operator": "<", "threshold": threshold},
+                }
+            print(f"[router] Priority 2.9: membership phrase without a real "
+                  f"threshold cue — not a headcount filter, falling through")
 
     # ── Priority 3: No flight/airport/university match — LLM classifies ───────
     classified = _llm_classify(question)
