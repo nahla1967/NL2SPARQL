@@ -93,7 +93,7 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   "group_aggregate_kg1_001","group_aggregate_kg3_001","group_agg_kg2_001","ranking_kg3_001","ranking_kg2_004"
+   "group_aggregate_kg1_001","group_aggregate_kg3_001","group_agg_kg2_001"
 
 }
 from template_resolver import resolve_template, resolve_ask_query
@@ -795,6 +795,10 @@ def main():
                     scored_value_for_match = _canonicalize_airport_names(scored_value)
                     scored_value_for_match = _strip_value_suffix_if_gold_is_bare(
                         scored_value_for_match, row.get("expected_answer")
+                    )
+                elif row["category"] in ("group_aggregate_kg1", "group_aggregate_kg2", "group_aggregate_kg3"):
+                    scored_value_for_match = _strip_value_suffix_if_gold_is_bare(
+                        scored_value, row.get("expected_answer")
                     )
                 else:
                     scored_value_for_match = scored_value
