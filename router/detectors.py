@@ -149,7 +149,7 @@ def _has_filter_signal(q: str) -> bool:
 
 def _has_count_signal(q: str) -> bool:
     q_lower = q.lower()
-    if re.search(r"كم\s+(يبلغ|تبلغ)", q_lower):
+    if re.search(r"كم\s+(يبلغ|تبلغ)(?!\s+عدد)", q_lower):
         return False
     # "combien de" elides to "combien d'" before a vowel — combien d'étudiants,
     # combien d'aéroports — so a plain substring check for "combien de" misses

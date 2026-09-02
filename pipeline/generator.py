@@ -520,7 +520,7 @@ SELECT ?name WHERE {{
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#airportName> ?name .
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
   ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
-  FILTER(CONTAINS(LCASE(?surface), "gr"))
+  FILTER(LCASE(?surface) IN ("grs", "grass"))
 }} LIMIT 10
 
 Q: "How many airports are in the dataset?"
@@ -570,7 +570,7 @@ SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
   ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
   ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
-  FILTER(CONTAINS(LCASE(?surface), "asp"))
+  FILTER(LCASE(?surface) IN ("asp", "asph", "pem", "asphalt"))
 }}
 
 Q: "How many runways in the dataset are lighted?"
@@ -578,8 +578,19 @@ SELECT (COUNT(?runway) AS ?count) WHERE {{
   ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .
   ?runway <http://www.semanticweb.org/ontologies/airport_ontology#lighted> true .
 }}
+Q: "Combien d'aéroports du jeu de données ont un mdrج en herbe ?"
+SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
+  FILTER(LCASE(?surface) IN ("grs", "grass"))
+}}
 
-Return ONLY the SPARQL query. No explanation. No markdown."""
+Return ONLY the SPARQL query. No explanation. No markdown.
+- When filtering on runway surface, NEVER use CONTAINS with a substring
+  shorter than the full code or word ("gr", "con", "asp") — short
+  substrings match unrelated surface codes and airport names. Always
+  match the complete known code/word using IN (...).    """
 
     try:
         response = ollama.chat(

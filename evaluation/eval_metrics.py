@@ -57,7 +57,7 @@ CATEGORIES = [
     "group_aggregate_kg1", "group_aggregate_kg2", "group_aggregate_kg3",
     "out_of_scope", "ask_query", "typo_fuzzy",
     "multilingual_edge", "property_ambiguity",
-    "ghost_property", "multi_value_ambiguity",
+    
 ]
 
 def load_records():

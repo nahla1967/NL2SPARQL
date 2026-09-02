@@ -33,6 +33,28 @@ from .classifier import (
 )
 
 
+_SPELLED_NUMBERS = {
+    "two": 2, "three": 3, "four": 4, "five": 5,
+    "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
+    "اثنان": 2, "ثلاثة": 3, "أربعة": 4, "خمسة": 5,
+}
+
+
+def _extract_limit(question: str, default: int = 1) -> int:
+    """Shared limit-extraction helper: digit numbers first, then spelled-out
+    small numbers (en/fr/ar), falling back to `default` if neither is found.
+    Centralised here so the four call sites that used to duplicate this
+    logic inline can't drift out of sync or get corrupted by a bad paste."""
+    limit_match = re.search(r"\b(\d+)\b", question)
+    if limit_match:
+        return int(limit_match.group(1))
+    q_lower = question.lower()
+    for word, n in _SPELLED_NUMBERS.items():
+        if word in q_lower:
+            return n
+    return default
+
+
 def route(question: str) -> dict:
     """
     Routes a natural language question to the correct pipeline branch.
@@ -52,7 +74,14 @@ def route(question: str) -> dict:
     q_lower = question.lower()
 
     # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
-    if _has_ask_signal(question):
+    # NOTE (fix): a question naming TWO flight numbers is a comparison,
+    # never a genuine single-entity ASK — regardless of phrasing. Arabic
+    # comparative wording ("أيهما", "which one of the two") was tripping
+    # _has_ask_signal's LLM check to True before Priority 1.9 (the
+    # deterministic two-flight compare check) ever got a chance to run,
+    # producing a nonsense ASK query out of a comparison question. See
+    # compare_two_flights_002 (ar) in the eval log.
+    if len(_detect_flight_numbers_all(question)) < 2 and _has_ask_signal(question):
         flight_entity      = _detect_flight_number_first(question)
         airport_entity     = _detect_airport_entity(question)
         university_entity  = _detect_university_entity(question)
@@ -252,6 +281,30 @@ def route(question: str) -> dict:
         "أقل من", "عدد أعضاء", "headcount", "taille"
     ]
     _threshold_cue_hit = any(s in q_norm for s in _threshold_cue_words)
+
+    # Direction detection: which comparison operator the question implies.
+    # The resulting _operator is what actually gets used in the returned
+    # params below — this replaces the previous hardcoded "<" that ignored
+    # "more than"/"plus de"/"أكثر من" entirely.
+    _more_than_words = ["more than", "over", "plus de", "أكثر من"]
+    _less_than_words = ["under", "less than", "fewer than", "moins de",
+                        "taille inférieure", "أقل من"]
+    _has_more = any(s in q_norm for s in _more_than_words)
+    _has_less = any(s in q_norm for s in _less_than_words)
+    _operator = ">" if _has_more else "<"  # default "<" preserved when neither cue present
+
+    # NOTE (fix): range questions ("between X and Y", "entre X et Y",
+    # "بين X و Y") were being caught by this branch too — but this branch
+    # only ever extracts ONE number and returns a single operator/threshold,
+    # silently dropping one of the two bounds. Range extraction needs the
+    # dedicated filter_numeric_kg3 LLM prompt (which understands
+    # operator2/threshold2), not this single-bound deterministic path — so
+    # skip this branch entirely for range questions and let them fall
+    # through to Priority 3's LLM classification instead. See
+    # filter_numeric_kg3_005 in the eval log.
+    _range_signal_words = ["between", "entre", "بين"]
+    _is_range_question = any(s in q_norm for s in _range_signal_words)
+
     # NOTE (fix): " membres" used to be a trigger on its own, with no cue word
     # required. That's French for "members", and it fires on ANY department-
     # membership question ("Qui sont les membres du Department3 ?"), not just
@@ -262,7 +315,7 @@ def route(question: str) -> dict:
     # filter_string_kg3_002/003 (fr) in the eval log. Track it separately so
     # it can never invent a default threshold the way a real cue word can.
     _bare_membres_hit = " membres" in q_norm
-    if _threshold_cue_hit or _bare_membres_hit:
+    if (_threshold_cue_hit or _bare_membres_hit) and not _is_range_question:
         if any(s in q_norm for s in ["department", "département", "قسم", "departments", "départements"]):
             # NOTE (fix): only accept a digit that's actually adjacent to a
             # threshold cue word, not the first digit anywhere in the question
@@ -297,7 +350,7 @@ def route(question: str) -> dict:
                     "direction":  None,
                     "template":   "filter_numeric_kg3",
                     "config":     TEMPLATE_REGISTRY["filter_numeric_kg3"],
-                    "params":     {"operator": "<", "threshold": threshold},
+                    "params":     {"operator": _operator, "threshold": threshold},
                 }
             print(f"[router] Priority 2.9: membership phrase without a real "
                   f"threshold cue — not a headcount filter, falling through")
@@ -351,17 +404,35 @@ def route(question: str) -> dict:
         if query_type == "cross_kg_filter":
             prop = params.get("airport_property", "")
             count_signals = ["how many", "combien ", "كم", "count", "nombre", "عدد"]
+            KG1_CITY_PROPS = {"cityname", "city", "orig_city", "dest_city"}
             if any(sig in question.lower() for sig in count_signals):
-                print(f"[router] Smart reroute: cross_kg_filter with no flight entity → count_kg2")
-                query_type = "count_kg2"
-                if prop in KG2_NUMERIC_PROPS:
+                if prop.lower() in KG1_CITY_PROPS:
+                    print(f"[router] Smart reroute: cross_kg_filter city property, "
+                          f"no cross-KG hop needed → count_kg1")
+                    query_type = "count_kg1"
+                    direction = params.get("direction", "destination")
+                    filter_prop = "hasOriginCity" if direction == "origin" else "hasDestinationCity"
+                    params = {"filter_property": filter_prop,
+                              "filter_value": params.get("threshold"), "mode": "count"}
+                    cfg = TEMPLATE_REGISTRY[query_type]
+                elif prop in KG2_NUMERIC_PROPS:
+                    print(f"[router] Smart reroute: cross_kg_filter with no flight entity → count_kg2")
+                    query_type = "count_kg2"
                     params = {"property": prop, "operator": params.get("operator", ">"),
                               "threshold": params.get("threshold"), "mode": "count"}
+                    cfg = TEMPLATE_REGISTRY[query_type]
                 elif prop in KG2_STRING_PROPS:
+                    print(f"[router] Smart reroute: cross_kg_filter with no flight entity → count_kg2")
+                    query_type = "count_kg2"
                     params = {"property": prop, "value": params.get("threshold"), "mode": "count"}
+                    cfg = TEMPLATE_REGISTRY[query_type]
                 else:
-                    params = {"property": prop, "value": params.get("threshold"), "mode": "count"}
-                cfg = TEMPLATE_REGISTRY[query_type]
+                    print(f"[router] Smart reroute: cross_kg_filter with no flight entity, "
+                          f"unrecognised property '{prop}' → open_kg")
+                    return {
+                        "query_type": "open_kg", "kg": "cross", "entity": None,
+                        "direction": None, "template": None, "config": None,
+                    }
             elif prop in KG2_NUMERIC_PROPS:
                 print(f"[router] Smart reroute: cross_kg_filter with no flight entity → filter_numeric_kg2")
                 query_type = "filter_numeric_kg2"
@@ -407,8 +478,7 @@ def route(question: str) -> dict:
                 prop = (params.get("property") or "").strip()
                 if prop in KG2_NUMERIC_PROPS:
                     order = "ASC" if any(sig in question.lower() for sig in _ASC_SIGNALS) else "DESC"
-                    limit_match = re.search(r"\b(\d+)\b", question)
-                    limit = int(limit_match.group(1)) if limit_match else 1
+                    limit = _extract_limit(question, default=1)
                     print(f"[router] Smart reroute: compare_two_airports missing airport code(s) → ranking_kg2")
                     query_type = "ranking_kg2"
                     params = {"property": prop, "order": order, "limit": limit}
@@ -423,9 +493,19 @@ def route(question: str) -> dict:
                         "template":   None,
                         "config":     None,
                     }
+        # Case 1.7: count_kg2 classified with an unrecognised/placeholder property
+        if query_type == "count_kg2":
+            prop = params.get("property", "")
+            has_value_or_threshold = params.get("value") is not None or params.get("threshold") is not None
+            if prop not in KG2_NUMERIC_PROPS and prop not in KG2_STRING_PROPS:
+                print(f"[router] Smart reroute: count_kg2 with unrecognised property "
+                    f"'{prop}' → open_kg")
+                return {
+                    "query_type": "open_kg", "kg": "cross", "entity": None,
+                    "direction": None, "template": None, "config": None,
+                }        
 
         # Case 2: filter_numeric_kg1 with ranking intent and no real threshold
-        # FIXED: route to ranking_kg1 template, with Arabic support
         if query_type == "filter_numeric_kg1":
             prop      = params.get("property", "")
             threshold = params.get("threshold")
@@ -437,8 +517,7 @@ def route(question: str) -> dict:
             if prop in KG1_FLIGHT_PROPS and (threshold is None or has_ranking or has_ranking_ar):
                 print(f"[router] Smart reroute: ranking signal in filter → ranking_kg1")
                 order = "ASC" if any(sig in q_lower for sig in _ASC_SIGNALS) else "DESC"
-                limit_match = re.search(r"\b(\d+)\b", question)
-                limit = int(limit_match.group(1)) if limit_match else 10
+                limit = _extract_limit(question, default=10)
                 return {
                     "query_type": "template",
                     "kg":         "flights",
@@ -448,16 +527,29 @@ def route(question: str) -> dict:
                     "config":     TEMPLATE_REGISTRY["ranking_kg1"],
                     "params":     {"property": prop, "order": order, "limit": limit},
                 }
-
+        # Case 2b: filter_numeric_kg2 with ranking intent and no real threshold
+        if query_type == "filter_numeric_kg2":
+            prop      = params.get("property", "")
+            threshold = params.get("threshold")
+            q_lower_l = question.lower()
+            has_ranking = any(sig in q_lower_l for sig in _RANKING_SIGNALS)
+            if prop in KG2_NUMERIC_PROPS and (threshold is None or has_ranking):
+                print(f"[router] Smart reroute: ranking signal in KG2 filter → ranking_kg2")
+                order = "ASC" if any(sig in q_lower_l for sig in _ASC_SIGNALS) else "DESC"
+                limit = _extract_limit(question, default=5)
+                return {
+                    "query_type": "template", "kg": "airports", "entity": None,
+                    "direction": None, "template": "ranking_kg2",
+                    "config": TEMPLATE_REGISTRY["ranking_kg2"],
+                    "params": {"property": prop, "order": order, "limit": limit},
+                }
         # Case 3: KG3 misclassification with ranking/superlative-count intent
-        # FIXED: includes group_aggregate_kg3, detects person vs department mode
         if query_type in ("filter_string_kg3", "count_kg3", "group_aggregate_kg3") and (
             any(sig in question.lower() for sig in _RANKING_SIGNALS)
             or any(sig in question.lower() for sig in _SUPERLATIVE_COUNT_SIGNALS)
         ):
             print(f"[router] Smart reroute: ranking/superlative signal in KG3 query → ranking_kg3")
-            limit_match = re.search(r"\b(\d+)\b", question)
-            limit = int(limit_match.group(1)) if limit_match else 1
+            limit = _extract_limit(question, default=1)
             dept_match = re.search(r'\b(Department\d+)\b', question)
             person_signals = ["professor", "professeur", "أستاذ", "enseigne", "teaches", "enseigner", "person"]
             has_person = any(s in question.lower() for s in person_signals)
@@ -469,8 +561,9 @@ def route(question: str) -> dict:
                     "direction":  None,
                     "template":   "ranking_kg3",
                     "config":     TEMPLATE_REGISTRY["ranking_kg3"],
-                    "params":     {"mode": "person", "property": "teacherOf",
-                                   "department": dept_match.group(1), "limit": limit},
+                    "params":     {"group_by": "person", "hop_property": "teacherOf",
+                                   "department_name": dept_match.group(1),
+                                   "order": "DESC", "limit": limit},
                 }
             else:
                 return {
@@ -480,7 +573,8 @@ def route(question: str) -> dict:
                     "direction":  None,
                     "template":   "ranking_kg3",
                     "config":     TEMPLATE_REGISTRY["ranking_kg3"],
-                    "params":     {"mode": "department", "property": "memberOf", "limit": limit},
+                    "params":     {"group_by": "department", "hop_property": "memberOf",
+                                   "order": "DESC", "limit": limit},
                 }
 
         # Case 3: filter_string_kg2 with runway surface or closed runway

@@ -410,9 +410,6 @@
     "vitesse sol":                     ["hasFlightEvent", "gspeed"],
     "vitesse au sol":                  ["hasFlightEvent", "gspeed"],
     "السرعة العمودية":                 ["hasFlightEvent", "vspeed"],
-    "السرعة الأرضية":                  ["hasFlightEvent", "gspeed"],
-    "ground speed": ["hasFlightEvent", "gspeed"],
-"vitesse sol": ["hasFlightEvent", "gspeed"],
 "السرعة الأرضية": ["hasFlightEvent", "gspeed"]
  
  

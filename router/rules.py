@@ -44,8 +44,8 @@ _FILTER_SIGNALS = [
     "quels professeurs", "quels étudiants", "أي أستاذ", "أي طالب",
     "من هم", "اذكر", "listez",
 ]
-_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus", "قارن", "مقارنة"]
-
+_COMPARE_SIGNALS = ["compare", "comparer", "comparez", "vs", "versus",
+                     "قارن", "مقارنة", "أيهما", "أيها", "أيّ منهما"]
 # ── COMPARE PROPERTY KEYWORDS ─────────────────────────────────────
 _COMPARE_PROPERTY_KEYWORDS = [
     (["elevation", "altitude", "height", "élévation", "ارتفاع", "أعلى", "أدنى"], "elevationFt"),
@@ -53,9 +53,20 @@ _COMPARE_PROPERTY_KEYWORDS = [
     (["runway width", "width", "wider", "widest", "largeur", "أعرض", "أضيق", "عرض"], "widthFt"),
     (["airport type", "type", "kind", "نوع"], "airportType"),
 ]
+# AFTER
+# NOTE (fix): the gold Arabic questions phrase these properties WITHOUT
+# the definite article ("سرعة عمودية" / "سرعة أرضية"), not with it
+# ("السرعة العمودية" / "السرعة الأرضية"). A plain substring match against
+# only the definite form fails, so compare_property_kg1 came back None
+# and Priority 1.9's `two_flights and compare_property_kg1` guard failed
+# silently, falling through to open_kg. See compare_two_flights_001/002
+# (ar) in the eval log. Adding the indefinite forms alongside the
+# existing definite ones — additive only, can't affect any current match.
 _COMPARE_PROPERTY_KEYWORDS_KG1 = [
-    (["vertical speed", "vitesse verticale", "vspeed", "السرعة العمودية"], "vspeed"),
-    (["ground speed", "vitesse sol", "vitesse au sol", "gspeed", "السرعة الأرضية"], "gspeed"),
+    (["vertical speed", "vitesse verticale", "vspeed",
+      "السرعة العمودية", "سرعة عمودية"], "vspeed"),
+    (["ground speed", "vitesse sol", "vitesse au sol", "gspeed",
+      "السرعة الأرضية", "سرعة أرضية"], "gspeed"),
 ]
 # ── UNIVERSITY ENTITY REGEX ─────────────────────────────────────
 _UNIVERSITY_ENTITY_RE = re.compile(
@@ -71,11 +82,22 @@ _WH_WORDS = (
 )
 
 # ── RANKING / ASC SIGNALS (used by smart reroutes) ───────────────
+# ENHANCED _RANKING_SIGNALS with context-aware expansion
 _RANKING_SIGNALS = [
-     "highest", "lowest", "fastest", "slowest",
-    "la plus haute", "la plus basse", "le plus rapide", "le plus lent",
-    "la plus élevée", "la plus grande",
-    "الأعلى", "الأدنى", "الأسرع", "الأبطأ"
+  
+    # English
+    "highest", "lowest", "most", "least", "top", "bottom",
+    "largest", "biggest", "greatest", "smallest",
+    "fastest", "slowest", "fastest descent", "highest descent",
+    "steepest", "fastest climb", "most rapid",
+    # French
+    "plus haut", "plus bas", "plus", "moins",
+    "plus rapide", "plus lent", "plus élevé", "plus bas",
+    "plus raide", "descente la plus rapide",
+    # Arabic
+    "أعلى", "أدنى", "أكثر", "أقل",
+    "أسرع", "أبطأ", "الأسرع", "الأبطأ",
+    "أكثر انحدارا", "أكثر ارتفاعا"
 ]
 _ASC_SIGNALS = [
     "shortest", "lowest", "smallest", "narrowest",

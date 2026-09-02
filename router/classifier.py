@@ -44,13 +44,24 @@ Classify the question into exactly one of these query types and extract its para
 
 ── QUERY TYPES AND THEIR PARAMETERS ──────────────────────────────────────────
 
-1. filter_numeric_kg2 — airports filtered by a numeric property
+
+
+1. count_kg2 — COUNT of airports matching ONE condition (numeric or categorical)
+   Query contains: "how many", "combien", "كم" + a filter condition
+   params: property, operator, threshold (numeric) OR property, value (categorical)
+   Example EN: "How many airports in Germany?" → count_kg2, property=countryName, value=Germany
+   Example FR: "Combien d'aéroports avec une piste de plus de 3000m?" → count_kg2, property=lengthFt, operator=>, threshold=3000
+   Example AR: "كم عدد المطارات في بولندا؟" → count_kg2, property=countryName, value=Poland
+
+2. filter_numeric_kg2 — airports filtered by a numeric property (NOT counting)
+   Query asks for AIRPORTS or NAMES, not a COUNT
    params: property, operator, threshold
 
-2. filter_string_kg2 — airports filtered by a text/categorical property
+3. filter_string_kg2 — airports filtered by a text/categorical property (NOT counting)
+   Query asks for AIRPORTS or NAMES, not a COUNT
    params: property, value
 
-3. ranking_kg2 — airports ranked by a numeric property (top/bottom N)
+3.5 . ranking_kg2 — airports ranked by a numeric property (top/bottom N)
    params: property, order (ASC or DESC), limit (default 5)
 
 4. compare_two_airports — compare exactly two airports on one property
@@ -585,35 +596,28 @@ def _has_ask_signal(question: str) -> bool:
         print(f"[router] _has_ask_signal('{question[:40]}...') → False (fast-path: WH-word opener)")
         return False
 
-    # FIX: only check the first 3 tokens for WH-words, not the entire question.
-    # This prevents Arabic questions like "أريد التأكد — هل..." from being
-    # misclassified because "ما" appears later in the sentence.
     _all_tokens = re.findall(r"\w+", q_stripped)
     if any(t in _WH_WORDS for t in _all_tokens):
         return False
 
-    prompt = f'''Does this question ask to CONFIRM whether a specific
-property already has a specific value (a yes/no question)? Or does it
-ASK for information (what/which/how much)?
+    prompt = f'''Determine if this question asks about a PROPERTY of a KNOWN ENTITY.
 
-Examples:
-Q: "Is BR62's callsign EVA062?" → YES
-Q: "La porte du vol OS830 est-elle A17?" → YES
-Q: "هل مطار فيينا يقع في النمسا؟" → YES
-Q: "What is the callsign of BR62?" → NO
-Q: "Quelle est la porte du vol OS830?" → NO
-Q: "ما هو مطار الوصول؟" → NO
-Q: "هل يقع مطار زيورخ في سويسرا؟" → YES
-Q: "Is BLQ located in France?" → YES
-Q: "هل يقع مطار بولونيا في فرنسا؟" → YES
-Q: "CDG est-il situé en Belgique?" → YES
-Q: "في أي دولة يقع مطار أثينا؟" → NO
-Q: "ما هي إشارة النداء للرحلة TK500؟" → NO
+ASK questions (YES):
+- "Is flight OS295 an international flight?" → YES (entity: OS295, property: international)
+- "Does flight TK100 operate on Tuesday?" → YES (entity: TK100, property: operates_on_day)
+- "Was flight BR888 delayed?" → YES (entity: BR888, property: delayed)
+- "Is runway surface at FRA made of ASP?" → YES (entity: FRA airport, property: runway_surface)
+- "Is Department3 part of University5?" → YES (entity: Department3, property: parent_university)
+- "Est-ce que l'aéroport CDG est situé en France?" → YES (entity: CDG, property: country)
+- "هل تحتوي FRA على مدرج من الإسفلت؟" → YES (entity: FRA, property: runway_surface)
 
-Answer only YES or NO.
+NOT ASK questions (NO):
+- "Which flights are delayed?" → NO (no specific entity named)
+- "Are there any flights to Paris?" → NO (generic entity)
+- "What is the elevation of JFK?" → NO (asks for a VALUE, not yes/no)
 
 Question: "{question}"
-'''
+Answer only YES or NO. Focus on: is there a SPECIFIC entity named? Does it ask about a PROPERTY yes/no, not a value?'''
     try:
         result = _llm_yes_no_majority(prompt)
         print(f"[router] _has_ask_signal('{question[:40]}...') → {result}")
@@ -653,7 +657,8 @@ Q: "هل يمكنني اصطحاب حيوان أليف؟"                  → N
 Q: "What is the elevation of ZRH?"                → YES (elevation is in KG)
 Q: "Is ZRH located in Switzerland?"               → YES (country is in KG)
 Q: "هل يقع مطار زيورخ في سويسرا؟"                  → YES
-Q: "في أي دولة يقع مطار أثينا؟"                    → NO
+
+Q: "في أي دولة يقع مطار أثينا؟"                    → YES (country is in KG)
 Q: "How many students are in Department0?"                → YES (department membership is in KG)
 Q: "Who is GraduateStudent3's academic advisor?"           → YES (advisor is in KG)
 

@@ -114,9 +114,15 @@ TASK: Read the question and extract ONLY the words that describe
 what property of the flight is being asked about.
 
 RULES:
+RULES:
 - Extract the phrase AS IT APPEARS in the question (do not translate)
-- Return ONLY the extracted phrase : no labels, no canonical forms
+- Return ONLY the extracted phrase — no labels, no canonical forms
 - Strip common question framing (e.g. "What is the", "of flight TK1887")
+- CRITICAL: the output must be in a SINGLE language, matching the
+  language of the input question. NEVER mix English words into an
+  Arabic or French phrase, and never mix Arabic/French words into an
+  English phrase. If the question is in Arabic, every word you return
+  must be Arabic.
 
 EXAMPLES:
 "What is the gate of flight OS529?"              → "gate"

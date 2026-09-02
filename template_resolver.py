@@ -133,19 +133,24 @@ _UNIVERSITY_ENTITY_RE = re.compile(
 )
 
 _SINGULAR_SUPERLATIVE_RE = re.compile(
-    r"\b(shortest|longest|highest|lowest|smallest|widest|narrowest)\b"
+    r"\b(shortest|longest|highest|lowest|smallest|widest|narrowest|"
+    r"most|least|fastest|slowest)\b"
     r"|(le plus court|la plus courte|le plus long|la plus longue|"
     r"le plus haut|le plus élevé|la plus haute|la plus élevée|"
     r"le plus bas|la plus basse|le plus large|le plus étroit|"
-    r"la plus large|la plus étroite)"
-    r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق)",
+    r"la plus large|la plus étroite|le plus de|le moins de|"
+    r"le plus rapide|le plus lent)"
+    r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق|أكثر|أسرع|أبطأ)",
     re.IGNORECASE
 )
 
 _PLURAL_INTENT_RE = re.compile(
     r"\d+"
+    r"|\b(two|three|four|five|six|seven|eight|nine|ten)\b"
     r"|\b(list|show all|enumerate)\b"
+    r"|(deux|trois|quatre|cinq|six|sept|huit|neuf|dix)"
     r"|(listez|montrez tous|montrer tous)"
+    r"|(اثنان|ثلاثة|أربعة|خمسة|ستة|سبعة|ثمانية|تسعة|عشرة)"
     r"|(اذكر|أظهر جميع|قائمة)",
     re.IGNORECASE
 )
@@ -405,13 +410,19 @@ This question asks to filter DEPARTMENTS by their total headcount
 (students who are members + professors/lecturers who work for the
 department, counted together as one population).
 
-Return ONLY a JSON object with these keys:
+If the question gives ONE bound (e.g. "more than 550", "fewer than 420"):
+Return ONLY:
 - "operator": one of [>, <, >=, <=]
 - "threshold": numeric value (integer)
-- "operator2": optional, only if the question gives a second bound (a range)
-- "threshold2": optional, paired with operator2
 Example: {{"operator": "<", "threshold": 420}}
-Example (range): {{"operator": ">", "threshold": 300, "operator2": "<", "threshold2": 420}}
+
+If the question gives a RANGE ("between X and Y", "entre X et Y", "بين X و Y"):
+Return ONLY the two raw numbers, in the order they appear in the question —
+do NOT decide which operator each number gets, that is handled separately:
+- "range_low": the first number mentioned
+- "range_high": the second number mentioned
+Example (question: "between 500 and 570"): {{"range_low": 500, "range_high": 570}}
+
 Return ONLY the JSON. No explanation.""",
 
 "group_aggregate_kg1": f"""Extract parameters from this flight aggregation question.
@@ -474,12 +485,12 @@ hop_property mapping:
 entity_type (OPTIONAL — omit the key entirely if no specific rank/type
 is named in the question, e.g. "which professor" without specifying
 full/associate/assistant):
-- "graduate student(s)" → "GraduateStudent"
-- "undergraduate student(s)" → "UndergraduateStudent"
-- "full professor(s)" → "FullProfessor"
-- "associate professor(s)" → "AssociateProfessor"
-- "assistant professor(s)" → "AssistantProfessor"
-- "lecturer(s)" → "Lecturer"
+- "graduate student(s)" / "étudiant(s) diplômé(s)" / "طلاب الدراسات العليا" → "GraduateStudent"
+- "undergraduate student(s)" / "étudiant(s) de licence" / "طلاب البكالوريوس" → "UndergraduateStudent"
+- "full professor(s)" / "professeur(s) titulaire(s)" / "أستاذ (أساتذة) كامل" → "FullProfessor"
+- "associate professor(s)" / "professeur(s) associé(s)" / "أستاذ مشارك" → "AssociateProfessor"
+- "assistant professor(s)" / "professeur(s) assistant(s)" / "أستاذ مساعد" → "AssistantProfessor"
+- "lecturer(s)" / "maître(s) de conférences" / "محاضر" → "Lecturer"
 
 Return ONLY a JSON object with these keys:
 - "group_by": "department" or "person"
@@ -696,13 +707,16 @@ def _build_group_aggregate_kg1(params: dict) -> tuple[str, str] | None:
 
     group_info = cfg["group_by"]["airline"]
 
+    limit = params.get("limit")
+    limit_clause = f" LIMIT {int(limit)}" if limit else ""
+
     sparql = f"""SELECT ?groupName (ROUND({function}(?value) * 100) / 100 AS ?agg) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}{group_info['hop_property']}> ?groupNode .
   ?groupNode <{KG1}{group_info['name_property']}> ?groupName .
   ?flight <{KG1}{prop_info['hop']}> ?event .
   ?event <{KG1}{prop}> ?value .
-}} GROUP BY ?groupName ORDER BY DESC(?agg)"""
+}} GROUP BY ?groupName ORDER BY DESC(?agg){limit_clause}"""
 
     label = f"{function} of {prop} grouped by airline"
     return sparql, label
@@ -763,13 +777,16 @@ def _build_group_aggregate_kg3(params: dict) -> tuple[str, str] | None:
 
     group_info = cfg["group_by"]["department"]
 
+    limit = params.get("limit")
+    limit_clause = f" LIMIT {int(limit)}" if limit else ""
+
     sparql = f"""SELECT ?deptName (ROUND({function}(?cnt) * 100) / 100 AS ?agg) WHERE {{
   SELECT ?person ?dept ?deptName (COUNT(?obj) AS ?cnt) WHERE {{
     ?person <{KG3}{group_info['hop_property']}> ?dept .
     ?dept <{KG3}{group_info['name_property']}> ?deptName .
     ?person <{KG3}{prop}> ?obj .
   }} GROUP BY ?person ?dept ?deptName
-}} GROUP BY ?deptName ORDER BY DESC(?agg)"""
+}} GROUP BY ?deptName ORDER BY DESC(?agg){limit_clause}"""
 
     label = f"{function} of {prop_info['label']} per person, grouped by department"
     return sparql, label
@@ -848,15 +865,21 @@ def _resolve_airline_value(filter_value: str) -> str:
 
 
 def _build_count_kg1(params: dict) -> tuple[str, str] | None:
-    filter_prop  = params.get("filter_property", "hasDestinationCity")
-    filter_value = params.get("filter_value", "")
+    # Schema-bleed fallback: the classifier occasionally emits count_kg2's
+    # key shape (property/value) instead of count_kg1's own (filter_property/
+    # filter_value), worse in fr/ar — see eval log count_kg1_002/003.
+    filter_prop  = params.get("filter_property") or params.get("property", "hasDestinationCity")
+    filter_value = params.get("filter_value") or params.get("value", "")
     mode         = params.get("mode", "count")
 
     FILTER_PROPERTY_SYNONYMS = {
-        "hasOperator": "hasAirline",
-        "airlineName": "hasAirline",
-        "operatedBy":  "hasAirline",
-        "airline":     "hasAirline",
+        "hasOperator":      "hasAirline",
+        "airlineName":      "hasAirline",
+        "operatedBy":       "hasAirline",
+        "airline":          "hasAirline",
+        "hasDepartureCity": "hasOriginCity",
+        "departureCity":    "hasOriginCity",
+        "cityName":         "hasDestinationCity",  # bare 'city' hallucination defaults to destination
     }
     filter_prop = FILTER_PROPERTY_SYNONYMS.get(filter_prop, filter_prop)
 
@@ -917,6 +940,14 @@ def _build_count_kg3(params: dict) -> tuple[str, str] | None:
     direction   = params.get("direction", "outgoing")
     mode        = params.get("mode", "count")
 
+    PROPERTY_SHORT_SYNONYMS = {
+        "teachesCourse": "teacherOf",
+        "teaches":       "teacherOf",
+        "takingCourse":  "takesCourse",
+        "enrolledIn":    "takesCourse",
+    }
+    property_short = PROPERTY_SHORT_SYNONYMS.get(property_short, property_short)
+
     VALID_PROPS = {"teacherOf", "takesCourse", "memberOf", "worksFor", "subOrganizationOf"}
     if not entity_name or property_short not in VALID_PROPS:
         return None
@@ -972,6 +1003,23 @@ def _build_filter_string_kg3(params: dict) -> tuple[str, str] | None:
 
 
 def _build_filter_numeric_kg3(params: dict) -> tuple[str, str] | None:
+    # NOTE (fix): the LLM was unreliable at assigning >/< to each bound of
+    # a range ("between X and Y" sometimes came back as operator='<',
+    # threshold=X, operator2='>', threshold2=Y — an impossible range).
+    # If the extractor gave us raw range_low/range_high instead, compute
+    # the correct operators here deterministically: low bound always gets
+    # '>', high bound always gets '<'. This removes the LLM's judgment
+    # call for ranges entirely — see filter_numeric_kg3_005 (en) in the
+    # eval log.
+    if "range_low" in params and "range_high" in params:
+        try:
+            lo = min(float(params["range_low"]), float(params["range_high"]))
+            hi = max(float(params["range_low"]), float(params["range_high"]))
+            params = {**params, "operator": ">", "threshold": lo,
+                      "operator2": "<", "threshold2": hi}
+        except (TypeError, ValueError):
+            pass  # fall through to normal operator/threshold handling below
+
     operator   = params.get("operator") or ""
     threshold  = params.get("threshold")
     operator2  = params.get("operator2")
@@ -1428,11 +1476,11 @@ _TEMPLATE_PARAM_KEYS = {
     "cross_kg_filter":          {"direction", "airport_property", "operator", "threshold", "limit"},
     "count_kg3":                {"property", "direction", "mode", "entity_name"},
     "filter_string_kg3":        {"property", "value", "limit"},
-    "group_aggregate_kg1":      {"group_by", "property", "function"},
+    "group_aggregate_kg1":      {"group_by", "property", "function", "limit"},
     "ranking_kg1":              {"property", "order", "limit"},
     "compare_two_flights":      {"flight1", "flight2", "property"},
-    "group_aggregate_kg2":      {"group_by", "property", "function"},
-    "group_aggregate_kg3":      {"group_by", "property", "function"},
+    "group_aggregate_kg2":      {"group_by", "property", "function", "limit"},
+    "group_aggregate_kg3":      {"group_by", "property", "function", "limit"},
     "filter_numeric_kg3":       {"operator", "threshold", "operator2", "threshold2"},
     "ranking_kg3":              {"group_by", "entity_type", "hop_property", "order",
                                   "limit", "department_name"},
@@ -1463,9 +1511,30 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         # of params. Still call _extract_params, then let router_params
         # (trustworthy/deterministic) win on any overlapping key.
         llm_params = _extract_params(question, template_name, lang)
-        params = {**llm_params, **router_params}
-        print(f"[template] Merged router params {router_params} over "
-              f"LLM params {llm_params} -> {params}")
+
+        # NOTE (fix): filter_numeric_kg3 is a special case. router_params
+        # here comes from the router's coarse classifier prompt, which has
+        # no concept of ranges ("between X and Y") — it only ever emits a
+        # single operator/threshold. When the question is actually a range,
+        # _extract_params's OWN dedicated filter_numeric_kg3 prompt (which
+        # DOES understand operator2/threshold2) produces the more complete
+        # extraction. Letting router_params win in that case (the normal
+        # merge order below) silently overwrites a correct two-bound
+        # extraction with an incomplete one-bound guess — see
+        # filter_numeric_kg3_005 in the eval log. Trust the dedicated
+        # extraction instead whenever it found a range and the router
+        # didn't.
+        if (template_name == "filter_numeric_kg3"
+                and "operator2" in llm_params
+                and "operator2" not in router_params):
+            params = llm_params
+            print(f"[template] filter_numeric_kg3 range detected — using "
+                  f"dedicated extraction {llm_params} over router params "
+                  f"{router_params}")
+        else:
+            params = {**llm_params, **router_params}
+            print(f"[template] Merged router params {router_params} over "
+                  f"LLM params {llm_params} -> {params}")
     else:
         params = _extract_params(question, template_name, lang)
     params = _sanitize_params(params)
@@ -1503,11 +1572,6 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             return result
         params["entity_name"] = entity_name
 
-    # ranking_kg3's person branch needs the named department, detected
-    # deterministically — same reasoning as count_kg3 above: entity-name
-    # extraction is unreliable when left to the LLM, and this is a
-    # structural fact (which department the question names), not a
-    # judgement call.
     if template_name == "ranking_kg3" and params.get("group_by") == "person":
         dept_name = _detect_university_entity_for_template(question)
         if not dept_name:
@@ -1515,9 +1579,6 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             return result
         params["department_name"] = dept_name
 
-    # compare_two_departments never gets department names from the LLM
-    # (classifier.py's own documented contract for this template) — both
-    # names are detected deterministically and resolved to URIs here.
     if template_name == "compare_two_departments":
         two_depts = _detect_two_university_entities_for_template(question)
         if not two_depts:
@@ -1533,26 +1594,13 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         params["department1_name"] = two_depts[0]
         params["department2_name"] = two_depts[1]
 
-    # Same singular-superlative -> limit=1 override already used for
-    # ranking_kg2/group_aggregate_kg2, extended to ranking_kg3. This is
-    # what triggers _build_ranking_kg3's tie-safe subquery path instead
-    # of a plain LIMIT that would silently drop tied rows.
     if template_name == "ranking_kg3" and _detect_singular_superlative(question):
         if params.get("limit") != 1:
             print(f"[template] Singular-superlative override: limit "
                   f"{params.get('limit')!r} -> 1")
         params["limit"] = 1
 
-    if template_name == "ranking_kg2" and _detect_singular_superlative(question):
-        if params.get("limit") != 1:
-            print(f"[template] Singular-superlative override: limit "
-                  f"{params.get('limit')!r} -> 1")
-        else:
-            print(f"[template] Singular-superlative detected — limit already 1, "
-                  f"override redundant this run")
-        params["limit"] = 1
-
-    if template_name == "group_aggregate_kg2" and _SINGULAR_SUPERLATIVE_RE.search(question):
+    if "limit" in _TEMPLATE_PARAM_KEYS.get(template_name, set()) and _detect_singular_superlative(question):
         if params.get("limit") != 1:
             print(f"[template] Singular-superlative override: limit "
                   f"{params.get('limit')!r} -> 1")
@@ -1565,19 +1613,18 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
         result["failure_type"] = "unknown_template"
         return result
 
-    # Schema-bleed guard: the classifier answers ~20 heterogeneous template
-    # schemas from one monolithic prompt, and occasionally blends two of
-    # them (e.g. ranking_kg3 params showing up with group_aggregate_kg3's
-    # "property"/"function" keys instead of its own "entity_type"/
-    # "hop_property"). That currently just fails the builder silently as a
-    # generic sparql_build_failure with no clue why. This doesn't fix the
-    # extraction — it only makes the failure diagnosable — so it only warns,
-    # it never blocks or drops params on its own.
     _foreign_keys = set(params) - _TEMPLATE_PARAM_KEYS.get(template_name, set(params))
     if _foreign_keys:
         print(f"[template] WARNING: params for '{template_name}' contain keys "
               f"from another template's schema: {_foreign_keys} — likely "
               f"classifier schema bleed. Full params: {params}")
+
+        if template_name == "ranking_kg3" and "property" in params and "hop_property" not in params:
+            print(f"[template] Auto-correcting schema bleed: 'property' -> 'hop_property'")
+            params["hop_property"] = params.pop("property")
+            params.pop("function", None)
+            params.setdefault("group_by", "department")
+            params.setdefault("order", "DESC")
 
     builder_fn, endpoint, columns = builders[template_name]
     build_result = builder_fn(params)

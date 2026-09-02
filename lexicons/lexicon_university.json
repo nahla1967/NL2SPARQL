@@ -77,7 +77,7 @@
     "جزء من":                        "memberOf",
     "أي منظمة":                      "memberOf",
       "member": "memberOf",
-  "member": "memberOf",
+ 
   "عضو": "memberOf",
 
     "suborganization of":            "subOrganizationOf",
@@ -185,6 +185,8 @@
     "المقررات التي يقدمها":           "listedCourse",
 
     "advisor":                        "advisor",
+    "directeur de recherche": "advisor",
+    "directrice de recherche": "advisor",
     "advised by":                     "advisor",
     "thesis advisor":                 "advisor",
     "supervisor":                     "advisor",

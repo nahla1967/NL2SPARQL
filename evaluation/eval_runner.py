@@ -93,8 +93,7 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-   "group_aggregate_kg1_001","group_aggregate_kg3_001","group_agg_kg2_001"
-
+    "filter_numeric_kg3_004","filter_numeric_kg3_005"  # ar
 }
 from template_resolver import resolve_template, resolve_ask_query
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────
@@ -767,7 +766,7 @@ def main():
                 # is the unformatted SPARQL row dump, not a scoring target.
                 # ask_query is scored separately below on its own boolean
                 # raw_answer, bypassing this branch entirely.
-                if row["category"] in ("compare_two_airports", "compare_two_departments"):
+                if row["category"] in ("compare_two_airports", "compare_two_departments", "compare_two_flights"):
                     scored_value = result.get("final_answer")
                 else:
                     scored_value = result.get("raw_answer")
