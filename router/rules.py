@@ -102,7 +102,11 @@ _RANKING_SIGNALS = [
 _ASC_SIGNALS = [
     "shortest", "lowest", "smallest", "narrowest",
     "la plus courte", "la plus basse", "la plus petite", "la plus étroite",
-    "أقصر", "أدنى", "أضيق"
+    "أقصر", "أدنى", "أضيق",
+    "négativ",   # substring — catches négatif/négative/négatives, any position
+        "سلبي",
+    "most negative", "plus négatif", "la plus négative", "valeur la plus négative",
+    "الأكثر سلبية", "أكثر سلبية",
 ]
 _GROUP_RANKING_SIGNALS = [
     "the most", "the fewest", "le plus de", "le moins de",

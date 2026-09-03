@@ -134,13 +134,16 @@ _UNIVERSITY_ENTITY_RE = re.compile(
 
 _SINGULAR_SUPERLATIVE_RE = re.compile(
     r"\b(shortest|longest|highest|lowest|smallest|widest|narrowest|"
-    r"most|least|fastest|slowest)\b"
+    r"most(?!\s+(negative|positive))|least(?!\s+(negative|positive))|"
+    r"fastest|slowest)\b"
     r"|(le plus court|la plus courte|le plus long|la plus longue|"
     r"le plus haut|le plus élevé|la plus haute|la plus élevée|"
     r"le plus bas|la plus basse|le plus large|le plus étroit|"
-    r"la plus large|la plus étroite|le plus de|le moins de|"
-    r"le plus rapide|le plus lent)"
-    r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق|أكثر|أسرع|أبطأ)",
+    r"la plus large|la plus étroite|"
+    r"le plus de(?!\s+(négatif|positif))|le moins de(?!\s+(négatif|positif))|"
+    r"le plus rapide|le plus lent|négativ)"
+    r"|(أقصر|أطول|أعلى|أدنى|أقل|أعرض|أضيق|"
+    r"أكثر(?!\s+سلبية)|أسرع|أبطأ|سلبي)",
     re.IGNORECASE
 )
 
@@ -1072,6 +1075,8 @@ def _build_ranking_kg1(params: dict) -> tuple[str, str] | None:
     prop  = params.get("property", "gspeed")
     order = params.get("order", "DESC")
     limit = int(params.get("limit", 5))
+    tie_safe = limit == 1
+    tie_agg  = "MAX" if order == "DESC" else "MIN"
 
     prop_info = KG1_NUMERIC_PROPS.get(prop)
     if not prop_info:
@@ -1079,7 +1084,29 @@ def _build_ranking_kg1(params: dict) -> tuple[str, str] | None:
 
     prop_uri = prop_info["uri"]
 
-    sparql = f"""SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
+    if tie_safe:
+        sparql = f"""SELECT ?number ?value WHERE {{
+  {{
+    SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
+      ?flight a <{KG1}Flight> .
+      ?flight <{KG1}flightNumber> ?number .
+      ?flight <{KG1}hasFlightEvent> ?event .
+      ?event <{prop_uri}> ?rawValue .
+    }} GROUP BY ?flight ?number
+  }}
+  {{
+    SELECT ({tie_agg}(?v) AS ?extreme) WHERE {{
+      SELECT ?f2 (MAX(?rv) AS ?v) WHERE {{
+        ?f2 a <{KG1}Flight> .
+        ?f2 <{KG1}hasFlightEvent> ?ev2 .
+        ?ev2 <{prop_uri}> ?rv .
+      }} GROUP BY ?f2
+    }}
+  }}
+  FILTER(?value = ?extreme)
+}} ORDER BY {order}(?value)"""
+    else:
+        sparql = f"""SELECT ?flight ?number (MAX(?rawValue) AS ?value) WHERE {{
   ?flight a <{KG1}Flight> .
   ?flight <{KG1}flightNumber> ?number .
   ?flight <{KG1}hasFlightEvent> ?event .
@@ -1089,8 +1116,6 @@ def _build_ranking_kg1(params: dict) -> tuple[str, str] | None:
     direction_word = "highest" if order == "DESC" else "lowest"
     label = f"top {limit} flights by {prop_info['label']} ({direction_word})"
     return sparql, label
-
-
 def _build_compare_two_flights(params: dict) -> tuple[str, str] | None:
     f1   = params.get("flight1", "").strip().upper()
     f2   = params.get("flight2", "").strip().upper()
@@ -1726,9 +1751,19 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
             result["failure_type"] = "no_results"
             return result
 
-        if template_name in ("count_kg1", "count_kg2", "count_kg3") and params.get("mode", "count") == "count":
-            count_val = rows[0].get("count", {}).get("value", "0") if rows else "0"
-            raw_data  = count_val
+        # NOTE (fix): previously gated on `template_name in ("count_kg1",
+        # "count_kg2", "count_kg3") and params.get("mode") == "count"`.
+        # That misses any OTHER template whose builder ends up wrapping its
+        # query in SELECT (COUNT(*) AS ?count) — e.g. filter_string_kg2 /
+        # filter_numeric_kg2 when "mode":"count" leaks into their params via
+        # classifier schema bleed (see count_kg2_002 fr in the eval log: the
+        # SPARQL was a correct COUNT(*) query, but the template-name check
+        # sent it to _format_rows looking for a "name" column that doesn't
+        # exist, producing "?"). Checking the actual result shape instead of
+        # the template name self-corrects for any template that happens to
+        # produce a count binding, not just the three hardcoded ones.
+        if rows and "count" in rows[0]:
+            raw_data = rows[0]["count"]["value"]
         else:
             raw_data = _format_rows(rows, columns)
             result["total_rows"] = len(rows)
@@ -1756,7 +1791,6 @@ def resolve_template(question: str, template_name: str, lang: str, router_params
     result["failure_type"] = "success"
 
     return result
-
 
 # ── ASK RESOLVER ───────────────────────────────────────────────────────────────
 

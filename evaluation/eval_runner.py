@@ -93,7 +93,8 @@ OUTPUT_PATH = os.path.join(
 LANGUAGES = ["en", "fr", "ar"]
 STRATEGIES = ["zero-shot", "few-shot", "cot"]
 BROKEN_IDS = {
-    "filter_numeric_kg3_004","filter_numeric_kg3_005"  # ar
+    "ranking_kg1_002": ["en", "fr", "ar"],  # ASC/negative-magnitude signal + singular-superlative override fix
+           # regression check: same reroute family, confirm still passing
 }
 from template_resolver import resolve_template, resolve_ask_query
 # ── PIPELINE IMPORTS (same as test_pipeline.py) ────────────────────────────

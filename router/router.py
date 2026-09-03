@@ -74,14 +74,20 @@ def route(question: str) -> dict:
     q_lower = question.lower()
 
     # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
+        # ── Priority 1.5: ASK-style question + known entity (any KG) ──────────────
     # NOTE (fix): a question naming TWO flight numbers is a comparison,
-    # never a genuine single-entity ASK — regardless of phrasing. Arabic
-    # comparative wording ("أيهما", "which one of the two") was tripping
-    # _has_ask_signal's LLM check to True before Priority 1.9 (the
-    # deterministic two-flight compare check) ever got a chance to run,
-    # producing a nonsense ASK query out of a comparison question. See
-    # compare_two_flights_002 (ar) in the eval log.
-    if len(_detect_flight_numbers_all(question)) < 2 and _has_ask_signal(question):
+    # never a genuine single-entity ASK — regardless of phrasing. ...
+    # NOTE (fix 2): same problem for departments — "Does Department0 or
+    # Department9 have more full professors?" was matching _has_ask_signal's
+    # LLM check before Priority 2.7 (the deterministic two-department
+    # compare check) ever got a chance to run, misrouting EN/FR
+    # compare_two_departments questions to ask_query with only the first
+    # department as entity. See compare_two_departments_002 (en, fr) in the
+    # eval log.
+    _has_two_depts = len(re.findall(r'\bDepartment\d+\b', question)) >= 2
+    if (len(_detect_flight_numbers_all(question)) < 2
+            and not (_has_two_depts and _has_compare_signal(question))
+            and _has_ask_signal(question)):
         flight_entity      = _detect_flight_number_first(question)
         airport_entity     = _detect_airport_entity(question)
         university_entity  = _detect_university_entity(question)
@@ -101,7 +107,7 @@ def route(question: str) -> dict:
                 "query_type": "ask_query", "kg": "university",
                 "entity": university_entity, "direction": None, "template": "ask_query",
             }
-
+    
     # ── Priority 1.9: Two flights + compare signal (deterministic) ────────────
     if _has_compare_signal(question):
         two_flights = _detect_two_flight_numbers(question)
@@ -354,7 +360,17 @@ def route(question: str) -> dict:
                 }
             print(f"[router] Priority 2.9: membership phrase without a real "
                   f"threshold cue — not a headcount filter, falling through")
+    _UNCONDITIONAL_COUNT_RE = re.compile(
+        r"how many \w+ (are there|in total|exist)\s*\??\s*$", re.IGNORECASE
+    )
 
+    # ── Priority 2.95: deterministic "how many X (total/exist)" guard ─────────
+    if _UNCONDITIONAL_COUNT_RE.search(question):
+        print(f"[router] Priority 2.95: unconditional count shape detected → open_kg")
+        return {
+            "query_type": "open_kg", "kg": "cross", "entity": None,
+            "direction": None, "template": None, "config": None,
+        }
     # ── Priority 3: No flight/airport/university match — LLM classifies ───────
     classified = _llm_classify(question)
     query_type = classified.get("query_type", "")
@@ -365,7 +381,16 @@ def route(question: str) -> dict:
         cfg = TEMPLATE_REGISTRY[query_type]
 
         KG1_FLIGHT_PROPS = {"gspeed", "vspeed", "alt", "groundSpeed", "speed"}
-
+        # Case 0: any KG2 filter template classified without count intent — reroute
+        # to count_kg2 if the question has an explicit count signal in any language.
+        _KG2_COUNT_SIGNALS = ["how many", "combien ", "كم", "count", "nombre", "عدد"]
+        if query_type in ("filter_string_kg2", "filter_numeric_kg2") and any(
+            s in question.lower() for s in _KG2_COUNT_SIGNALS
+        ):
+            print(f"[router] Smart reroute: count signal detected in {query_type} → count_kg2")
+            query_type = "count_kg2"
+            params = {**params, "mode": "count"}
+            cfg = TEMPLATE_REGISTRY[query_type]
         # Case 1: KG2 template received a KG1 flight property
         if query_type in ("ranking_kg2", "filter_numeric_kg2"):
             prop = params.get("property", "")
@@ -577,20 +602,17 @@ def route(question: str) -> dict:
                                    "order": "DESC", "limit": limit},
                 }
 
-        # Case 3: filter_string_kg2 with runway surface or closed runway
-        if query_type == "filter_string_kg2":
+        # Case 3: filter_string_kg2 / count_kg2 with runway surface or closed runway
+        if query_type in ("filter_string_kg2", "count_kg2"):
             value = params.get("value", "")
-            if any(v in str(value).lower() for v in
-                   ["grass", "closed", "grs", "closed_runway", "fermée", "مغلق",
-                   "asphalt", "asp", "concrete", "con", "إسفلت", "إسفلتي"]):
+            prop  = params.get("property", "")
+            if prop == "surface" or any(v in str(value).lower() for v in
+                ["grass", "closed", "grs", "closed_runway", "fermée", "مغلق",
+                "asphalt", "asp", "concrete", "con", "إسفلت", "إسفلتي"]):
                 print(f"[router] Smart reroute: runway property → open_kg")
                 return {
-                    "query_type": "open_kg",
-                    "kg":         "cross",
-                    "entity":     None,
-                    "direction":  None,
-                    "template":   None,
-                    "config":     None,
+                    "query_type": "open_kg", "kg": "cross", "entity": None,
+                    "direction": None, "template": None, "config": None,
                 }
 
         # Case 4: ranking_kg2 received a categorical (non-numeric) property

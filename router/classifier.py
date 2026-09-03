@@ -590,6 +590,7 @@ def _has_ask_signal(question: str) -> bool:
     if question.strip().startswith("هل"):
         print(f"[router] _has_ask_signal('{question[:40]}...') → True (fast-path: 'هل' prefix)")
         return True
+    
 
     q_stripped = question.strip().lower()
     if any(q_stripped.startswith(w) for w in _WH_WORDS):

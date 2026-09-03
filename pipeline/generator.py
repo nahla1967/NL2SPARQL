@@ -149,7 +149,30 @@ def fix_aggregate_in_filter(sparql: str) -> str:
 
     return pattern.sub(fix, sparql)
 
+def fix_aggregate_after_group_by(sparql: str) -> str:
+    """
+    Detects an aggregate appended after a GROUP BY clause instead of the
+    SELECT clause — observed on open_kg_003 (fr):
+        SELECT ?count WHERE { ... } GROUP BY ?runway COUNT(?runway) AS ?count  ← WRONG
+    instead of:
+        SELECT (COUNT(?runway) AS ?count) WHERE { ... }                        ← CORRECT
+    GROUP BY is dropped: these are single-value count questions, so a
+    GROUP BY the model invented on its own has no legitimate grouping key.
+    """
+    pattern = re.compile(
+        r'SELECT\s+\?\w+\s+WHERE\s*\{\s*(.*?)\s*\}\s*'
+        r'GROUP\s+BY\s+\?\w+\s+'
+        r'(COUNT|SUM|MAX|MIN|AVG)\s*\(\s*(DISTINCT\s+)?\?(\w+)\s*\)\s+AS\s+\?(\w+)',
+        re.IGNORECASE | re.DOTALL
+    )
 
+    def fix(m):
+        body, func, distinct, agg_target, out_var = m.groups()
+        distinct = distinct or ""
+        print(f"[generator] Aggregate-after-GROUP-BY detected — auto-correcting")
+        return f"SELECT ({func.upper()}({distinct}?{agg_target}) AS ?{out_var}) WHERE {{ {body} }}"
+
+    return pattern.sub(fix, sparql)
 # ── UNKNOWN PREDICATE VALIDATOR (open_kg branch only) ─────────────────────────
 
 def fix_unknown_predicate(sparql: str) -> str:
@@ -249,6 +272,7 @@ def extract_sparql(text: str) -> str:
         query = fix_misplaced_aggregate(query)
         query = fix_aggregate_inside_braces(query)
         query = fix_aggregate_in_filter(query)
+        query = fix_aggregate_after_group_by(query)
         return query
 
     return text.strip()
@@ -505,19 +529,30 @@ STRICT RULES:
   WRONG:     <uri> ?value <property> .
 - Do not invent properties that are not listed above.
 - Only include the triple patterns strictly needed to answer the question — do not add extra properties the question didn't ask about
-- If multiple results are possible, add LIMIT 10.
+- Only add a LIMIT if the question explicitly asks for a specific number
+  of results ("top 5", "first 3", "one example"). If the question asks
+  to list or count all matching entities with no requested number, do
+  not add a LIMIT at all.
 - An aggregate like COUNT(...)/AVG(...)/MAX(...) belongs ONLY inside the
   SELECT clause, wrapped as "(COUNT(?x) AS ?count)". It is never a
   standalone line inside WHERE{{}} — WHERE only contains triple patterns
   (subject predicate object), never an aggregate expression by itself.
 - Never repeat the same triple pattern twice in one query.
+- Only add a FILTER on ?surface if the question explicitly asks about
+  runway surface, pavement, material, grass, or asphalt. Do not add a
+  surface filter to a question that only asks for a count or list of
+  airports/runways in general.
+- When the question specifies a concrete value (a surface type, country,
+  airline, code, etc.), use exactly that value as stated in the question.
+  Never reuse a value that appears in these examples unless the question
+  itself mentions it.
 
 EXAMPLES of correct queries:
 
 Q: "Which airports have a grass runway?"
-SELECT ?name WHERE {{
+SELECT DISTINCT ?iata WHERE {{
   ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
-  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#airportName> ?name .
+  ?airport <http://www.semanticweb.org/ontologies/airport_ontology#iataCode> ?iata .
   ?airport <http://www.semanticweb.org/ontologies/airport_ontology#hasRunway> ?runway .
   ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
   FILTER(LCASE(?surface) IN ("grs", "grass"))
@@ -549,6 +584,14 @@ SELECT ?number ?value WHERE {{
   ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasFlightEvent> ?event .
   ?event <http://www.semanticweb.org/ontologies/flight_ontology#gspeed> ?value .
 }} ORDER BY DESC(?value) LIMIT 1
+Q: "ما هي الرحلة ذات أعلى سرعة أرضية؟"
+SELECT ?number ?value WHERE {{
+  ?flight a <http://www.semanticweb.org/ontologies/flight_ontology#Flight> .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#flightNumber> ?number .
+  ?flight <http://www.semanticweb.org/ontologies/flight_ontology#hasFlightEvent> ?event .
+  ?event <http://www.semanticweb.org/ontologies/flight_ontology#gspeed> ?value .
+}} ORDER BY DESC(?value) LIMIT 1
+
 Q: "What is the registration number of flight OS235?"
 SELECT ?value WHERE {{
   ?flight a <http://www.semanticweb.org/ontologies/flight_ontology#Flight> .
@@ -572,7 +615,16 @@ SELECT (COUNT(DISTINCT ?airport) AS ?count) WHERE {{
   ?runway <http://www.semanticweb.org/ontologies/airport_ontology#surface> ?surface .
   FILTER(LCASE(?surface) IN ("asp", "asph", "pem", "asphalt"))
 }}
+Q: "كم عدد المطارات الموجودة في مجموعة البيانات؟"
+SELECT (COUNT(?airport) AS ?count) WHERE {{
+  ?airport a <http://www.semanticweb.org/ontologies/airport_ontology#Airport> .
+}}
 
+Q: "كم عدد المدرجات المغلقة في مجموعة البيانات؟"
+SELECT (COUNT(?runway) AS ?count) WHERE {{
+  ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .
+  ?runway <http://www.semanticweb.org/ontologies/airport_ontology#closed> true .
+}}
 Q: "How many runways in the dataset are lighted?"
 SELECT (COUNT(?runway) AS ?count) WHERE {{
   ?runway a <http://www.semanticweb.org/ontologies/airport_ontology#Runway> .

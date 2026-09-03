@@ -3,8 +3,7 @@ import json, pandas as pd
 df = pd.read_excel(r"C:\Users\fersi\Desktop\NL2SPARQL\evaluation\results\NL2SPARQL_Evaluation_Dataset.xlsx", sheet_name="Questions")
 expected = dict(zip(df["id"], df["expected_answer"]))
 
-target_categories = {"group_aggregate_kg2", "group_aggregate_kg3", "filter_numeric_kg3"}
-
+target_categories = {"ranking_kg1"}
 with open("evaluation/results/eval_results.jsonl", encoding="utf-8") as f:
     for line in f:
         r = json.loads(line)
